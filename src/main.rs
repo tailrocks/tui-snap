@@ -1,27 +1,53 @@
-//! `tuisnap`: visual-regression toolkit for Ratatui TUIs.
+//! `tuisnap`: capture, inspect, sessions, render, diff, review/report.
 //!
 //! ```text
-//! # offline: canonical JSON -> artifacts
-//! tuisnap render --input shot.frame.json --format png --format svg --out shot
-//! # gate one frame against the approved store
-//! tuisnap check --store tests/visual --name home --input actual.frame.json
-//! # explicit local acceptance (never automatic, never in CI)
-//! tuisnap accept --store tests/visual --name home
-//! # black-box capture of the real binary (feature `pty`)
-//! tuisnap run --cols 120 --rows 40 --send enter --wait-for Ready \
-//!   --format png --out shots/home -- ./my-tui
+//! tuisnap init --dir .                  # scaffold tui-snap.toml + nextest config + example
+//! tuisnap doctor                         # toolchain / fonts / profile / env report
+//! tuisnap schema                         # print the op-protocol JSON schema
+//! tuisnap capture --out shots/home -- ./my-tui --flag
+//! tuisnap inspect --dir shots/home      # offline view; never executes
+//! tuisnap render --input shot.frame.json --format png --out shot
+//! tuisnap diff --expected a.png --actual b.png
+//! tuisnap review --dir verdicts          # list verdicts; fails on any fail
+//! tuisnap report --dir verdicts --out report.html
+//! tuisnap import --dir frozen           # read-only frozen-tree import
+//! tuisnap session start --name demo -- ./my-tui
+//! tuisnap record --out trace.jsonl -- ./my-tui
+//! tuisnap trace --input trace.jsonl
+//! tuisnap --machine < ops.jsonl         # typed op protocol over stdio
 //! ```
+//!
+//! Exit statuses: 0 ok; 2 CLI usage error; 3 op error
+//! ([`tuisnap::proto::EXIT_OP_ERROR`]); 4 verification disagreement
+//! ([`tuisnap::proto::EXIT_VERIFY_FAIL`]). `capture`/`record` preserve the
+//! child's exit code instead.
 
-use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
-use std::time::Duration;
+use std::io::BufRead;
+use std::path::{Path, PathBuf};
+use tuisnap::proto::{EXIT_OP_ERROR, EXIT_VERIFY_FAIL};
 
+/// Config responsibilities (kept in sync with `proto::CONFIG_DOCS`).
+const INIT_HELP: &str = "\
+Scaffold tui-snap.toml, nextest config, and an example test.
+
+Config responsibilities:
+  tui-snap.toml        Capture + assertion policy (viewport, terminal and
+                       render profiles, gates, evidence dir). Owned by
+                       tui-snap; read by tests via the Rust API.
+  .config/nextest.toml Scheduling only (profiles, retries, threads, groups).
+                       Owned by cargo-nextest; tui-snap never parses it.
+  insta config         Snapshot review behaviour. Owned by Insta; tui-snap
+                       honours it and never auto-accepts in CI.";
+
+// NOTE: no global flags. `--machine` is pre-scanned out of argv before clap
+// sees it, so normal usage/error text stays exactly `Usage: tuisnap <COMMAND>`
+// (pinned by tests/vertical_slice.rs).
 #[derive(Parser, Debug)]
 #[command(
     name = "tuisnap",
     version,
-    about = "TUI visual regression: frames, PNGs, HTML reports"
+    about = "TUI visual regression: capture, inspect, sessions, render, diff, review"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -30,406 +56,772 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
+    /// Scaffold tui-snap.toml, nextest config, and an example test.
+    #[command(long_about = INIT_HELP)]
+    Init {
+        #[arg(long, default_value = ".")]
+        dir: PathBuf,
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+    /// Report toolchain, fonts, profiles, and environment.
+    Doctor,
+    /// Print the typed op-protocol JSON schema.
+    Schema,
+    /// Run a command and collect artifacts (preserves child exit code).
+    Capture {
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value_t = 60_000)]
+        timeout_ms: u64,
+        #[arg(last = true)]
+        argv: Vec<String>,
+    },
+    /// View artifacts offline. Never executes anything in the directory.
+    Inspect {
+        #[arg(long)]
+        dir: PathBuf,
+    },
     /// Render a canonical frame.json to offline artifacts.
     Render {
         #[arg(long)]
         input: PathBuf,
-        #[arg(long = "format", default_values_t = Vec::<String>::new())]
+        #[arg(long = "format")]
         formats: Vec<String>,
         #[arg(long, default_value = "shot")]
         out: String,
         #[arg(long)]
         font_file: Option<PathBuf>,
     },
-    /// Check one frame against the approved store (writes actuals first).
-    Check {
+    /// Compare two PNGs by decoded pixels (exit 4 on mismatch).
+    Diff {
         #[arg(long)]
-        store: PathBuf,
+        expected: PathBuf,
         #[arg(long)]
-        name: String,
-        #[arg(long)]
-        input: PathBuf,
-        #[arg(long, default_value_t = 1.0)]
-        pixel_threshold: f64,
-        /// Grouped multi-artifact store (see docs/USAGE.md): --store is the
-        /// approved root holding <name>.{ansi,txt,png,html} only.
-        #[arg(long, default_value_t = false)]
-        grouped: bool,
-        /// Override the pinned profile font (hash recorded in the report).
-        #[arg(long)]
-        font_file: Option<PathBuf>,
+        actual: PathBuf,
     },
-    /// Explicitly approve actual snapshots (local review only).
-    Accept {
+    /// List offline verdicts (exit 4 when any verdict fails).
+    Review {
         #[arg(long)]
-        store: PathBuf,
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long, default_value_t = false)]
-        all: bool,
-        /// Grouped multi-artifact store: --all walks nested names
-        /// recursively (e.g. showcase/pages/overview_120x40_truecolor).
-        #[arg(long, default_value_t = false)]
-        grouped: bool,
+        dir: PathBuf,
     },
-    /// Re-verify every actual frame in the store and rewrite the report.
+    /// Write a standalone offline HTML report from verdicts.
     Report {
         #[arg(long)]
-        store: PathBuf,
+        dir: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
         #[arg(long, default_value = "tuisnap visual report")]
         title: String,
-        #[arg(long, default_value_t = 1.0)]
-        pixel_threshold: f64,
-        /// Grouped multi-artifact store: re-verifies nested actuals and
-        /// writes the report under the store's scratch area (not approved/).
-        #[arg(long, default_value_t = false)]
-        grouped: bool,
-        /// Grouped stores only: explicit report output path.
-        #[arg(long)]
-        report_path: Option<PathBuf>,
-        /// Override the pinned profile font (hash recorded in the report).
-        #[arg(long)]
-        font_file: Option<PathBuf>,
     },
-    /// Capture the real binary in a PTY, optionally gating into a store.
-    Run {
-        #[arg(long, default_value_t = 120)]
-        cols: u16,
-        #[arg(long, default_value_t = 40)]
-        rows: u16,
-        #[arg(long = "send")]
-        sends: Vec<String>,
+    /// Read-only import of a frozen four-artifact tree (writes nothing).
+    Import {
         #[arg(long)]
-        wait_for: Option<String>,
-        #[arg(long, default_value_t = 5000)]
-        timeout_ms: u64,
-        #[arg(long, default_value_t = 300)]
-        settle_ms: u64,
-        #[arg(long = "format", default_values_t = vec!["txt".to_string(), "png".to_string()])]
-        formats: Vec<String>,
-        #[arg(long, default_value = "shot")]
-        out: String,
+        dir: PathBuf,
+    },
+    /// Manage named sessions (versioned endpoints, owner-only runtime dir).
+    Session {
+        #[command(subcommand)]
+        cmd: SessionCmd,
+    },
+    /// Run a command with bounded event recording (preserves exit code).
+    Record {
         #[arg(long)]
-        store: Option<PathBuf>,
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long, default_value_t = 1.0)]
-        pixel_threshold: f64,
-        /// Override the pinned profile font (hash recorded in the report).
-        #[arg(long)]
-        font_file: Option<PathBuf>,
+        out: PathBuf,
+        #[arg(long, default_value_t = 10_000)]
+        max_events: u64,
+        #[arg(long, default_value_t = 10_000_000)]
+        max_bytes: u64,
         #[arg(last = true)]
         argv: Vec<String>,
     },
+    /// View a recorded journal offline.
+    Trace {
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        kind: Option<String>,
+    },
 }
 
-fn load_font_bytes(path: Option<&PathBuf>) -> Result<(OwnedFaces, tuisnap::Profile)> {
-    let profile = tuisnap::Profile::default_profile();
-    match path {
-        None => Ok((
-            OwnedFaces {
-                regular: tuisnap::VENDORED_FONT.to_vec(),
-                bold: tuisnap::VENDORED_FONT_BOLD.to_vec(),
-                italic: tuisnap::VENDORED_FONT_ITALIC.to_vec(),
-                bold_italic: tuisnap::VENDORED_FONT_BOLD_ITALIC.to_vec(),
-            },
-            profile,
-        )),
-        Some(p) => {
-            let bytes = std::fs::read(p).with_context(|| format!("read font {}", p.display()))?;
-            let profile = profile.with_font_file(format!("{}", p.display()), &bytes);
-            // Single-face override: faux bold/italic, as documented.
-            Ok((
-                OwnedFaces {
-                    regular: bytes.clone(),
-                    bold: bytes.clone(),
-                    italic: bytes.clone(),
-                    bold_italic: bytes,
-                },
-                profile,
-            ))
-        }
+#[derive(Subcommand, Debug)]
+enum SessionCmd {
+    /// Start a named session (detached child + endpoint file).
+    Start {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = false)]
+        force: bool,
+        #[arg(last = true)]
+        argv: Vec<String>,
+    },
+    /// Stop a named session and remove its endpoint.
+    Stop {
+        #[arg(long)]
+        name: String,
+    },
+    /// List named sessions with liveness.
+    List,
+    /// Remove endpoints whose process already exited.
+    Prune,
+}
+
+fn main() {
+    // Pre-scan `--machine` so clap's usage text never mentions it.
+    let mut argv: Vec<String> = std::env::args().collect();
+    let machine = extract_flag(&mut argv, "--machine");
+    if machine {
+        std::process::exit(machine_main());
     }
+    let cli = match Cli::try_parse_from(&argv) {
+        Ok(cli) => cli,
+        Err(e) => e.exit(), // clap usage error, exit 2
+    };
+    std::process::exit(run(cli));
 }
 
-/// Owned face bytes so `--font-file` overrides can outlive their read.
-struct OwnedFaces {
-    regular: Vec<u8>,
-    bold: Vec<u8>,
-    italic: Vec<u8>,
-    bold_italic: Vec<u8>,
+/// Remove all occurrences of `flag` from `argv`; return whether any was found.
+fn extract_flag(argv: &mut Vec<String>, flag: &str) -> bool {
+    let before = argv.len();
+    argv.retain(|a| a != flag);
+    argv.len() != before
 }
 
-impl OwnedFaces {
-    fn faces(&self) -> tuisnap::FontFaces<'_> {
-        tuisnap::FontFaces {
-            regular: &self.regular,
-            bold: &self.bold,
-            italic: &self.italic,
-            bold_italic: &self.bold_italic,
-        }
-    }
-}
-
-/// The cached [`tuisnap::render::Renderer`] shared across formats, so
-/// `--format png --format html` parses the faces once.
-fn renderer_cached<'a>(
-    slot: &'a mut Option<tuisnap::Renderer>,
-    profile: &tuisnap::Profile,
-    faces: &tuisnap::FontFaces<'_>,
-) -> Result<&'a mut tuisnap::Renderer> {
-    if slot.is_none() {
-        *slot = Some(tuisnap::Renderer::new(profile, faces).map_err(|e| anyhow::anyhow!("{e}"))?);
-    }
-    Ok(slot.as_mut().expect("constructed above"))
-}
-
-/// Render `frame` through [`renderer_cached`].
-fn render_cached(
-    slot: &mut Option<tuisnap::Renderer>,
-    frame: &tuisnap::Frame,
-    profile: &tuisnap::Profile,
-    faces: &tuisnap::FontFaces<'_>,
-) -> Result<tuisnap::render::Rendered> {
-    renderer_cached(slot, profile, faces)?
-        .render(frame)
-        .map_err(|e| anyhow::anyhow!("{e}"))
-}
-
-fn render_formats(
-    frame: &tuisnap::Frame,
-    profile: &tuisnap::Profile,
-    faces: &tuisnap::FontFaces<'_>,
-    formats: &[String],
-    out: &str,
-    name: &str,
-) -> Result<()> {
-    if formats.is_empty() {
-        anyhow::bail!("no --format given");
-    }
-    let mut renderer: Option<tuisnap::Renderer> = None;
-    for f in formats {
-        let path = format!("{out}.{f}");
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
+/// Machine mode: Op JSON per line on stdin, envelope JSON per line on stdout.
+/// Exit 0 when every op succeeded, else [`EXIT_OP_ERROR`].
+fn machine_main() -> i32 {
+    let stdin = std::io::stdin();
+    let mut all_ok = true;
+    for line in stdin.lock().lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("stdin: {e}");
+                return EXIT_OP_ERROR;
             }
+        };
+        if line.trim().is_empty() {
+            continue;
         }
-        match f.as_str() {
-            "txt" => std::fs::write(&path, frame.text())?,
-            "ansi" => std::fs::write(&path, tuisnap::render::ansi_dump(frame))?,
-            "json" => std::fs::write(&path, frame.to_json())?,
-            "svg" => std::fs::write(&path, tuisnap::render::render_svg(frame, profile))?,
-            "html" => {
-                // Standalone colored render, built by the library
-                // (`Renderer::render_html`): authoritative PNG primary
-                // visual, selectable SVG overlay, frame JSON embedded.
-                let html = renderer_cached(&mut renderer, profile, faces)?
-                    .render_html(frame, name)
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-                std::fs::write(&path, html)?;
-            }
-            "png" => {
-                let rendered = render_cached(&mut renderer, frame, profile, faces)?;
-                std::fs::write(&path, &rendered.png)?;
-                let sidecar = format!("{path}.fidelity.json");
-                std::fs::write(&sidecar, rendered.fidelity.to_json())?;
-                if rendered.fidelity.approximate {
-                    eprintln!(
-                        "note: {} uncovered glyph(s) (see {sidecar})",
-                        rendered.fidelity.missing.len()
-                    );
-                }
-            }
-            _ => anyhow::bail!("unknown format: {f} (txt|ansi|json|svg|html|png)"),
-        }
-        eprintln!("wrote {path}");
+        let (out, ok) = tuisnap::proto::run_machine_line(&line);
+        println!("{out}");
+        all_ok &= ok;
     }
-    Ok(())
+    if all_ok { 0 } else { EXIT_OP_ERROR }
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> i32 {
     match cli.cmd {
+        Cmd::Init { dir, force } => cmd_init(&dir, force),
+        Cmd::Doctor => cmd_doctor(),
+        Cmd::Schema => cmd_schema(),
+        Cmd::Capture { out, timeout_ms, argv } => cmd_capture(&out, timeout_ms, argv),
+        Cmd::Inspect { dir } => cmd_inspect(&dir),
         Cmd::Render {
             input,
             formats,
             out,
             font_file,
-        } => {
-            let (owned, profile) = load_font_bytes(font_file.as_ref())?;
-            let text = std::fs::read_to_string(&input)
-                .with_context(|| format!("read {}", input.display()))?;
-            let frame = tuisnap::Frame::from_json(&text).map_err(|e| anyhow::anyhow!("{e}"))?;
-            // Frame name for the HTML <title>: input stem minus `.frame`.
-            let name = input
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.strip_suffix(".frame").unwrap_or(s))
-                .unwrap_or("frame");
-            render_formats(&frame, &profile, &owned.faces(), &formats, &out, name)?;
-            println!("{}", frame.text());
-        }
-        Cmd::Check {
-            store,
-            name,
-            input,
-            pixel_threshold,
-            grouped,
-            font_file,
-        } => {
-            let (owned, profile) = load_font_bytes(font_file.as_ref())?;
-            let text = std::fs::read_to_string(&input)
-                .with_context(|| format!("read {}", input.display()))?;
-            let frame = tuisnap::Frame::from_json(&text).map_err(|e| anyhow::anyhow!("{e}"))?;
-            if grouped {
-                let st = tuisnap::grouped::GroupedStore::new(&store);
-                let outcome = st.check(&name, &frame, &profile, &owned.faces(), pixel_threshold)?;
-                let entry = tuisnap::snapshot::report_entry(&outcome.outcome, &profile)?;
-                let report = tuisnap::snapshot::write_report_at(
-                    &st.report_path(),
-                    "tuisnap visual report",
-                    &[entry],
-                )?;
-                eprintln!("report: {}", report.display());
-                outcome
-                    .ensure_matched()
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-            } else {
-                let st = tuisnap::snapshot::Store::new(&store);
-                let outcome = st.check(&name, &frame, &profile, &owned.faces(), pixel_threshold)?;
-                let entry = st.report_entry(&outcome, &profile)?;
-                let report =
-                    tuisnap::snapshot::write_report(&st, "tuisnap visual report", &[entry])?;
-                eprintln!("report: {}", report.display());
-                outcome
-                    .ensure_matched()
-                    .map_err(|e| anyhow::anyhow!("{e}"))?;
-            }
-            println!("matched: {name}");
-        }
-        Cmd::Accept {
-            store,
-            name,
-            all,
-            grouped,
-        } => {
-            if grouped {
-                let st = tuisnap::grouped::GroupedStore::new(&store);
-                if all {
-                    for n in st.accept_all()? {
-                        println!("accepted: {n}");
-                    }
-                } else if let Some(n) = name {
-                    st.accept(&n)?;
-                    println!("accepted: {n}");
-                } else {
-                    anyhow::bail!("pass --name or --all");
-                }
-            } else {
-                let st = tuisnap::snapshot::Store::new(&store);
-                if all {
-                    for n in st.actual_names()? {
-                        st.accept(&n)?;
-                        println!("accepted: {n}");
-                    }
-                } else if let Some(n) = name {
-                    st.accept(&n)?;
-                    println!("accepted: {n}");
-                } else {
-                    anyhow::bail!("pass --name or --all");
-                }
-            }
-        }
-        Cmd::Report {
-            store,
-            title,
-            pixel_threshold,
-            grouped,
-            report_path,
-            font_file,
-        } => {
-            let (owned, profile) = load_font_bytes(font_file.as_ref())?;
-            let (path, failed) = if grouped {
-                let mut st = tuisnap::grouped::GroupedStore::new(&store);
-                if let Some(p) = report_path {
-                    st = st.with_report_path(&p);
-                }
-                let report = st.report(&profile, &owned.faces(), pixel_threshold, &title)?;
-                let failed = report.failed() as u32;
-                (report.path, failed)
-            } else {
-                anyhow::ensure!(
-                    report_path.is_none(),
-                    "--report-path only applies to --grouped stores"
-                );
-                let st = tuisnap::snapshot::Store::new(&store);
-                let report = st.report(&profile, &owned.faces(), pixel_threshold, &title)?;
-                let failed = report.failed() as u32;
-                (report.path, failed)
-            };
-            println!("report: {} ({} failed)", path.display(), failed);
-            if failed > 0 {
-                anyhow::bail!("{failed} snapshot(s) require review");
-            }
-        }
-        Cmd::Run {
-            cols,
-            rows,
-            sends,
-            wait_for,
-            timeout_ms,
-            settle_ms,
-            formats,
+        } => cmd_render(&input, &formats, &out, font_file.as_deref()),
+        Cmd::Diff { expected, actual } => cmd_diff(&expected, &actual),
+        Cmd::Review { dir } => cmd_review(&dir),
+        Cmd::Report { dir, out, title } => cmd_report(&dir, &out, &title),
+        Cmd::Import { dir } => cmd_import(&dir),
+        Cmd::Session { cmd } => cmd_session(cmd),
+        Cmd::Record {
             out,
-            store,
-            name,
-            pixel_threshold,
-            font_file,
+            max_events,
+            max_bytes,
             argv,
-        } => {
-            let argv: Vec<String> = argv.into_iter().skip_while(|a| a == "--").collect();
-            anyhow::ensure!(!argv.is_empty(), "pass the command after `--`");
-            let opts = tuisnap::pty::PtyOptions {
-                cols,
-                rows,
-                timeout: Duration::from_millis(timeout_ms),
-                ..Default::default()
-            };
-            let mut steps = sends;
-            if let Some(w) = wait_for {
-                steps.push(format!("wait:{w}"));
+        } => cmd_record(&out, max_events, max_bytes, argv),
+        Cmd::Trace { input, kind } => cmd_trace(&input, kind.as_deref()),
+    }
+}
+
+fn op_error(e: &tuisnap::proto::OpError) -> i32 {
+    eprintln!("error: {e}");
+    EXIT_OP_ERROR
+}
+
+// ---------------------------------------------------------------------------
+// init
+// ---------------------------------------------------------------------------
+
+const SCAFFOLD_TOML: &str = r#"# tui-snap capture + assertion policy. Scheduling lives in
+# .config/nextest.toml; review behaviour is Insta's.
+[capture]
+cols = 120
+rows = 40
+timeout_ms = 10000
+
+[terminal]
+term = "xterm-256color"
+
+[render]
+profile = "tuisnap-default"
+
+[gates]
+pixel_policy = "exact-decoded-rgba"
+"#;
+
+const SCAFFOLD_NEXTEST: &str = r#"# cargo-nextest scheduling only. tui-snap never parses this file.
+[profile.default]
+test-threads = "num-cpus"
+"#;
+
+const SCAFFOLD_TEST: &str = r#"// Example tui-snap visual test. Run: cargo nextest run --profile default
+use tuisnap::runner::TestContext;
+
+#[test]
+fn example_view() {
+    let ctx = TestContext::current("example").expect("context");
+    let screen = tuisnap::Screen::blank(80, 24);
+    let _ = ctx.evidence_dir();
+    tuisnap::assert_snapshot!("example_view", &screen);
+}
+"#;
+
+fn cmd_init(dir: &Path, force: bool) -> i32 {
+    let files: &[(&str, &str)] = &[
+        ("tui-snap.toml", SCAFFOLD_TOML),
+        (".config/nextest.toml", SCAFFOLD_NEXTEST),
+        ("tests/visual.rs", SCAFFOLD_TEST),
+    ];
+    for (rel, _) in files {
+        let path = dir.join(rel);
+        if path.exists() && !force {
+            eprintln!("error: {} exists (pass --force to overwrite)", path.display());
+            return EXIT_OP_ERROR;
+        }
+    }
+    for (rel, body) in files {
+        let path = dir.join(rel);
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("error: mkdir {}: {e}", parent.display());
+                return EXIT_OP_ERROR;
             }
-            let frame =
-                tuisnap::pty::run_once(&argv, &opts, &steps, Duration::from_millis(settle_ms))?;
-            match (store, name) {
-                (Some(root), Some(n)) => {
-                    let (owned, profile) = load_font_bytes(font_file.as_ref())?;
-                    let st = tuisnap::snapshot::Store::new(&root);
-                    let outcome =
-                        st.check(&n, &frame, &profile, &owned.faces(), pixel_threshold)?;
-                    let entry = st.report_entry(&outcome, &profile)?;
-                    let report =
-                        tuisnap::snapshot::write_report(&st, "tuisnap visual report", &[entry])?;
-                    eprintln!("report: {}", report.display());
-                    outcome
-                        .ensure_matched()
-                        .map_err(|e| anyhow::anyhow!("{e}"))?;
-                    println!("matched: {n}");
-                }
-                _ => {
-                    let (owned, profile) = load_font_bytes(None)?;
-                    // Frame name for the HTML <title>: the --out basename.
-                    let name = std::path::Path::new(&out)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("frame");
-                    let name = name.to_string();
-                    render_formats(&frame, &profile, &owned.faces(), &formats, &out, &name)?;
-                    println!("{}", frame.text());
-                }
+        }
+        if let Err(e) = std::fs::write(&path, body) {
+            eprintln!("error: write {}: {e}", path.display());
+            return EXIT_OP_ERROR;
+        }
+        println!("wrote {}", path.display());
+    }
+    println!();
+    println!("{}", tuisnap::proto::CONFIG_DOCS);
+    0
+}
+
+// ---------------------------------------------------------------------------
+// doctor / schema
+// ---------------------------------------------------------------------------
+
+fn probe(program: &str, args: &[&str]) -> String {
+    let out = tuisnap::command::Command::new(program)
+        .args(args)
+        .timeout(std::time::Duration::from_secs(10))
+        .run();
+    if out.success() {
+        out.stdout_lossy().lines().next().unwrap_or("?").to_string()
+    } else {
+        "missing".to_string()
+    }
+}
+
+fn cmd_doctor() -> i32 {
+    let profile = tuisnap::Profile::default_profile();
+    let caps = tuisnap::proto::capabilities();
+    println!("tuisnap {}", env!("CARGO_PKG_VERSION"));
+    println!("protocol v{}", tuisnap::proto::PROTOCOL_VERSION);
+    println!();
+    println!("[toolchain]");
+    println!("  rustc: {}", probe("rustc", &["--version"]));
+    println!("  cargo: {}", probe("cargo", &["--version"]));
+    println!("  nextest: {}", probe("cargo", &["nextest", "--version"]));
+    println!();
+    println!("[fonts]");
+    println!(
+        "  regular sha256: {}",
+        tuisnap::profile::font_sha256(tuisnap::VENDORED_FONT)
+    );
+    println!(
+        "  fallback faces: {}",
+        tuisnap::VENDORED_FALLBACK_FACES.len()
+    );
+    println!();
+    println!("[profile]");
+    println!(
+        "  {}: cell {}x{} font_px {} scale {} pad {}",
+        profile.name, profile.cell_w, profile.cell_h, profile.font_px, profile.scale, profile.pad
+    );
+    println!();
+    println!("[platform]");
+    println!("  os: {}", caps.platform);
+    println!("  pty: {}", caps.pty);
+    println!();
+    println!("[env]");
+    for key in [
+        "TERM",
+        "CI",
+        "NEXTEST_PROFILE",
+        "TUISNAP_RUNTIME_DIR",
+        "TUISNAP_EVIDENCE_DIR",
+        "TUISNAP_SNAPSHOT_DIR",
+    ] {
+        match std::env::var(key) {
+            Ok(v) => println!("  {key}={v}"),
+            Err(_) => println!("  {key}=(unset)"),
+        }
+    }
+    0
+}
+
+fn cmd_schema() -> i32 {
+    println!("{}", tuisnap::proto::PROTOCOL_SCHEMA_JSON);
+    0
+}
+
+// ---------------------------------------------------------------------------
+// capture (exit-code preserving)
+// ---------------------------------------------------------------------------
+
+fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<String>) -> i32 {
+    let argv: Vec<String> = argv.into_iter().filter(|a| a != "--").collect();
+    if argv.is_empty() {
+        eprintln!("error: pass the command after `--`");
+        return EXIT_OP_ERROR;
+    }
+    if let Err(e) = std::fs::create_dir_all(out) {
+        eprintln!("error: mkdir {}: {e}", out.display());
+        return EXIT_OP_ERROR;
+    }
+    let result = tuisnap::command::Command::new(&argv[0])
+        .args(&argv[1..])
+        .timeout(std::time::Duration::from_millis(timeout_ms))
+        .run();
+    if let Err(e) = std::fs::write(out.join("stdout.bin"), &result.stdout) {
+        eprintln!("error: write stdout.bin: {e}");
+        return EXIT_OP_ERROR;
+    }
+    if let Err(e) = std::fs::write(out.join("stderr.bin"), &result.stderr) {
+        eprintln!("error: write stderr.bin: {e}");
+        return EXIT_OP_ERROR;
+    }
+    let manifest = serde_json::json!({
+        "argv": argv,
+        "termination": format!("{:?}", result.status),
+        "code": result.code(),
+        "signal": result.signal(),
+        "truncated": result.truncated,
+        "elapsed_ms": result.elapsed.as_millis() as u64,
+        "stdout_bytes": result.stdout.len(),
+        "stderr_bytes": result.stderr.len(),
+    });
+    if let Err(e) = std::fs::write(
+        out.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+    ) {
+        eprintln!("error: write manifest.json: {e}");
+        return EXIT_OP_ERROR;
+    }
+    println!("captured {:?} -> {}", result.status, out.display());
+    match result.status {
+        tuisnap::command::Termination::Exit(c) => c,
+        _ => EXIT_OP_ERROR,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// inspect (offline only: no Command, no spawn, no import execution)
+// ---------------------------------------------------------------------------
+
+fn cmd_inspect(dir: &Path) -> i32 {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: read {}: {e}", dir.display());
+            return EXIT_OP_ERROR;
+        }
+    };
+    let mut files: Vec<(String, u64)> = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("error: list {}: {e}", dir.display());
+                return EXIT_OP_ERROR;
+            }
+        };
+        let len = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        files.push((entry.file_name().to_string_lossy().into_owned(), len));
+    }
+    files.sort();
+    println!("artifacts in {} ({} files, offline view):", dir.display(), files.len());
+    for (name, len) in &files {
+        println!("  {name} ({len} bytes)");
+    }
+    let manifest_path = dir.join("manifest.json");
+    if manifest_path.is_file() {
+        match std::fs::read_to_string(&manifest_path) {
+            Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+                Ok(v) => println!(
+                    "manifest: {}",
+                    serde_json::to_string(&v).unwrap_or_else(|_| text.clone())
+                ),
+                Err(_) => println!("manifest: (not JSON, {} bytes)", text.len()),
+            },
+            Err(e) => {
+                eprintln!("error: read manifest.json: {e}");
+                return EXIT_OP_ERROR;
             }
         }
     }
-    Ok(())
+    let journal_path = dir.join("journal.jsonl");
+    if journal_path.is_file() {
+        match tuisnap::proto::read_journal(&journal_path) {
+            Ok(events) => println!("journal: {} events", events.len()),
+            Err(e) => return op_error(&e),
+        }
+    }
+    0
+}
+
+// ---------------------------------------------------------------------------
+// render (offline)
+// ---------------------------------------------------------------------------
+
+fn cmd_render(input: &Path, formats: &[String], out: &str, font_file: Option<&Path>) -> i32 {
+    if formats.is_empty() {
+        eprintln!("error: pass at least one --format (txt|ansi|json|svg|html|png)");
+        return EXIT_OP_ERROR;
+    }
+    let text = match std::fs::read_to_string(input) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: read {}: {e}", input.display());
+            return EXIT_OP_ERROR;
+        }
+    };
+    let frame = match tuisnap::Frame::from_json(&text) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: bad frame JSON: {e}");
+            return EXIT_OP_ERROR;
+        }
+    };
+    let mut profile = tuisnap::Profile::default_profile();
+    let owned;
+    let faces;
+    if let Some(path) = font_file {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: read font {}: {e}", path.display());
+                return EXIT_OP_ERROR;
+            }
+        };
+        profile = profile.with_font_file(path.display().to_string(), &bytes);
+        owned = [bytes.clone(), bytes.clone(), bytes.clone(), bytes];
+        faces = tuisnap::FontFaces {
+            regular: owned[0].as_slice(),
+            bold: owned[1].as_slice(),
+            italic: owned[2].as_slice(),
+            bold_italic: owned[3].as_slice(),
+        };
+    } else {
+        faces = tuisnap::FontFaces {
+            regular: tuisnap::VENDORED_FONT,
+            bold: tuisnap::VENDORED_FONT_BOLD,
+            italic: tuisnap::VENDORED_FONT_ITALIC,
+            bold_italic: tuisnap::VENDORED_FONT_BOLD_ITALIC,
+        };
+    }
+    let mut renderer: Option<tuisnap::Renderer> = None;
+    // Lazily constructed and reused across formats (faces parse once).
+    macro_rules! get_renderer {
+        () => {{
+            if renderer.is_none() {
+                renderer = Some(
+                    tuisnap::Renderer::new(&profile, &faces).map_err(|e| e.to_string())?,
+                );
+            }
+            renderer.as_mut().expect("constructed above")
+        }};
+    }
+    for f in formats {
+        let path = format!("{out}.{f}");
+        if let Some(parent) = Path::new(&path).parent() {
+            if !parent.as_os_str().is_empty() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    eprintln!("error: mkdir {}: {e}", parent.display());
+                    return EXIT_OP_ERROR;
+                }
+            }
+        }
+        let write_result = match f.as_str() {
+            "txt" => std::fs::write(&path, frame.text()).map_err(|e| e.to_string()),
+            "ansi" => std::fs::write(&path, tuisnap::render::ansi_dump(&frame)).map_err(|e| e.to_string()),
+            "json" => std::fs::write(&path, frame.to_json()).map_err(|e| e.to_string()),
+            "svg" => std::fs::write(&path, tuisnap::render::render_svg(&frame, &profile))
+                .map_err(|e| e.to_string()),
+            "html" => (|| -> Result<(), String> {
+                let html = get_renderer!().render_html(&frame, "frame").map_err(|e| e.to_string())?;
+                std::fs::write(&path, html).map_err(|e| e.to_string())
+            })(),
+            "png" => (|| -> Result<(), String> {
+                let rendered = get_renderer!().render(&frame).map_err(|e| e.to_string())?;
+                std::fs::write(&path, &rendered.png).map_err(|e| e.to_string())?;
+                std::fs::write(format!("{path}.fidelity.json"), rendered.fidelity.to_json())
+                    .map_err(|e| e.to_string())
+            })(),
+            other => {
+                eprintln!("error: unknown format {other:?} (txt|ansi|json|svg|html|png)");
+                return EXIT_OP_ERROR;
+            }
+        };
+        if let Err(e) = write_result {
+            eprintln!("error: render {f}: {e}");
+            return EXIT_OP_ERROR;
+        }
+        println!("wrote {path}");
+    }
+    0
+}
+
+// ---------------------------------------------------------------------------
+// diff / review / report / import (offline)
+// ---------------------------------------------------------------------------
+
+fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
+    let expected_bytes = match std::fs::read(expected) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: read {}: {e}", expected.display());
+            return EXIT_OP_ERROR;
+        }
+    };
+    let actual_bytes = match std::fs::read(actual) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: read {}: {e}", actual.display());
+            return EXIT_OP_ERROR;
+        }
+    };
+    match tuisnap::diff::compare_png(&expected_bytes, &actual_bytes) {
+        Ok(v) => {
+            println!(
+                "pixels_equal={} dims_equal={} score={}",
+                v.pixels_equal, v.dims_equal, v.score
+            );
+            if v.pixels_equal {
+                0
+            } else {
+                EXIT_VERIFY_FAIL
+            }
+        }
+        Err(e) => {
+            eprintln!("error: PNG compare failed: {e}");
+            EXIT_OP_ERROR
+        }
+    }
+}
+
+fn cmd_review(dir: &Path) -> i32 {
+    let verdicts = match tuisnap::proto::read_verdicts(dir) {
+        Ok(v) => v,
+        Err(e) => return op_error(&e),
+    };
+    if verdicts.is_empty() {
+        println!("no verdicts in {}", dir.display());
+        return 0;
+    }
+    let mut failed = 0u32;
+    for v in &verdicts {
+        if v.passed() {
+            println!("PASS {}", v.name);
+        } else {
+            failed += 1;
+            if v.detail.is_empty() {
+                println!("FAIL {}", v.name);
+            } else {
+                println!("FAIL {} ({})", v.name, v.detail);
+            }
+        }
+    }
+    println!("{} passed, {} failed", verdicts.len() - failed as usize, failed);
+    if failed > 0 {
+        EXIT_VERIFY_FAIL
+    } else {
+        0
+    }
+}
+
+fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {
+    let verdicts = match tuisnap::proto::read_verdicts(dir) {
+        Ok(v) => v,
+        Err(e) => return op_error(&e),
+    };
+    let html = tuisnap::proto::write_html_report(&verdicts, title);
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("error: mkdir {}: {e}", parent.display());
+                return EXIT_OP_ERROR;
+            }
+        }
+    }
+    if let Err(e) = std::fs::write(out, html) {
+        eprintln!("error: write {}: {e}", out.display());
+        return EXIT_OP_ERROR;
+    }
+    let failed = verdicts.iter().filter(|v| !v.passed()).count();
+    println!(
+        "report: {} ({} verdicts, {} failed)",
+        out.display(),
+        verdicts.len(),
+        failed
+    );
+    0
+}
+
+fn cmd_import(dir: &Path) -> i32 {
+    match tuisnap::assert::import_frozen_v1(dir) {
+        Ok(tree) => {
+            println!("scenarios: {}", tree.scenarios.len());
+            for s in &tree.scenarios {
+                println!("  {}", s.name);
+            }
+            println!("unsupported: {}", tree.unsupported.len());
+            for u in &tree.unsupported {
+                println!("  {u}");
+            }
+            0
+        }
+        Err(e) => {
+            eprintln!("error: import failed: {e}");
+            EXIT_OP_ERROR
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// sessions
+// ---------------------------------------------------------------------------
+
+fn cmd_session(cmd: SessionCmd) -> i32 {
+    match cmd {
+        SessionCmd::Start { name, force, argv } => {
+            let argv: Vec<String> = argv.into_iter().filter(|a| a != "--").collect();
+            match tuisnap::proto::session_start(&name, &argv, force) {
+                Ok(info) => {
+                    println!("started: {} (pid {})", info.name, info.pid);
+                    0
+                }
+                Err(e) => op_error(&e),
+            }
+        }
+        SessionCmd::Stop { name } => match tuisnap::proto::session_stop(&name) {
+            Ok(info) => {
+                println!("stopped: {} (was {:?})", info.name, info.status);
+                0
+            }
+            Err(e) => op_error(&e),
+        },
+        SessionCmd::List => match tuisnap::proto::session_list() {
+            Ok(sessions) => {
+                if sessions.is_empty() {
+                    println!("no sessions");
+                }
+                for s in sessions {
+                    println!(
+                        "{} pid={} {:?} started={} argv={:?}",
+                        s.name, s.pid, s.status, s.started_unix, s.argv
+                    );
+                }
+                0
+            }
+            Err(e) => op_error(&e),
+        },
+        SessionCmd::Prune => match tuisnap::proto::session_prune() {
+            Ok(pruned) => {
+                println!("pruned {} session(s)", pruned.len());
+                for name in pruned {
+                    println!("  {name}");
+                }
+                0
+            }
+            Err(e) => op_error(&e),
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// record / trace
+// ---------------------------------------------------------------------------
+
+fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<String>) -> i32 {
+    let argv: Vec<String> = argv.into_iter().filter(|a| a != "--").collect();
+    if argv.is_empty() {
+        eprintln!("error: pass the command after `--`");
+        return EXIT_OP_ERROR;
+    }
+    let mut rec = match tuisnap::proto::Recorder::create(out, max_events, max_bytes) {
+        Ok(r) => r,
+        Err(e) => return op_error(&e),
+    };
+    let fail = |e: tuisnap::proto::OpError| {
+        eprintln!("error: {e}");
+        EXIT_OP_ERROR
+    };
+    if let Err(e) = rec.record("start", &format!("argv={argv:?}")) {
+        return fail(e);
+    }
+    let result = tuisnap::command::Command::new(&argv[0]).args(&argv[1..]).run();
+    if let Err(e) = rec.record(
+        "output",
+        &format!(
+            "stdout={} stderr={} truncated={}",
+            result.stdout.len(),
+            result.stderr.len(),
+            result.truncated
+        ),
+    ) {
+        return fail(e);
+    }
+    if let Err(e) = rec.record(
+        "exit",
+        &format!(
+            "termination={:?} code={:?} signal={:?}",
+            result.status,
+            result.code(),
+            result.signal()
+        ),
+    ) {
+        return fail(e);
+    }
+    if let Err(e) = rec.record("complete", &format!("events={}", rec.events() + 1)) {
+        return fail(e);
+    }
+    println!("recorded {} events -> {}", rec.events(), out.display());
+    match result.status {
+        tuisnap::command::Termination::Exit(c) => c,
+        _ => EXIT_OP_ERROR,
+    }
+}
+
+fn cmd_trace(input: &Path, kind: Option<&str>) -> i32 {
+    let events = match tuisnap::proto::read_journal(input) {
+        Ok(e) => e,
+        Err(e) => return op_error(&e),
+    };
+    for ev in events {
+        if let Some(k) = kind {
+            if ev.kind != k {
+                continue;
+            }
+        }
+        println!("{} {} {}", ev.seq, ev.kind, ev.detail);
+    }
+    0
 }
