@@ -206,10 +206,19 @@ pub struct ObservationView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum OpResult {
-    Spawned { session: String, pid: Option<u32> },
-    InputAccepted { session: String },
-    Observation { observation: ObservationView },
-    Snapshot { screen: ScreenView },
+    Spawned {
+        session: String,
+        pid: Option<u32>,
+    },
+    InputAccepted {
+        session: String,
+    },
+    Observation {
+        observation: ObservationView,
+    },
+    Snapshot {
+        screen: ScreenView,
+    },
     Screenshot {
         screen: ScreenView,
         canonical: String,
@@ -466,11 +475,9 @@ pub fn execute(op: &Op) -> Result<OpResult, OpError> {
             expected_png_b64,
             actual_png_b64,
         } => execute_diff(expected_png_b64, actual_png_b64),
-        Op::SessionStart { name, argv, force } => {
-            Ok(OpResult::Session {
-                session: session_start(name, argv, *force)?,
-            })
-        }
+        Op::SessionStart { name, argv, force } => Ok(OpResult::Session {
+            session: session_start(name, argv, *force)?,
+        }),
         Op::SessionStop { name } => Ok(OpResult::Session {
             session: session_stop(name)?,
         }),
@@ -534,9 +541,8 @@ fn execute_assert(
     expected: &Option<String>,
 ) -> Result<OpResult, OpError> {
     fn need<'a>(v: &'a Option<String>, check: &str, what: &str) -> Result<&'a str, OpError> {
-        v.as_deref().ok_or_else(|| {
-            OpError::new("invalid-input", format!("assert {check} needs `{what}`"))
-        })
+        v.as_deref()
+            .ok_or_else(|| OpError::new("invalid-input", format!("assert {check} needs `{what}`")))
     }
     match check {
         assert_check::TEXT_CONTAINS => {
@@ -776,7 +782,10 @@ mod pty_registry {
         env: &HashMap<String, String>,
     ) -> Result<OpResult, OpError> {
         if argv.is_empty() {
-            return Err(OpError::new("invalid-input", "spawn needs a non-empty argv"));
+            return Err(OpError::new(
+                "invalid-input",
+                "spawn needs a non-empty argv",
+            ));
         }
         let id = id.unwrap_or_else(fresh_id);
         validate_session_id(&id)?;
@@ -799,8 +808,10 @@ mod pty_registry {
         let pid = session.pid();
         with_registry(|map| {
             if map.contains_key(&id) {
-                return Err(OpError::new("session-exists", format!("{id} already spawned"))
-                    .with_session(&id));
+                return Err(
+                    OpError::new("session-exists", format!("{id} already spawned"))
+                        .with_session(&id),
+                );
             }
             map.insert(id.clone(), session);
             Ok(OpResult::Spawned { session: id, pid })
@@ -825,9 +836,9 @@ mod pty_registry {
             .with_session(session));
         }
         with_registry(|map| {
-            let s = map
-                .get(session)
-                .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))?;
+            let s = map.get(session).ok_or_else(|| {
+                OpError::new("not-found", "unknown session").with_session(session)
+            })?;
             let r = if let Some(text) = text {
                 if text.is_empty() {
                     return Err(OpError::new("invalid-input", "text must not be empty")
@@ -858,10 +869,12 @@ mod pty_registry {
 
     pub fn observe(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
-            let s = map
-                .get(session)
-                .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))?;
-            let obs = s.observe_now().map_err(|e| tui_err(e).with_session(session))?;
+            let s = map.get(session).ok_or_else(|| {
+                OpError::new("not-found", "unknown session").with_session(session)
+            })?;
+            let obs = s
+                .observe_now()
+                .map_err(|e| tui_err(e).with_session(session))?;
             Ok(OpResult::Observation {
                 observation: observation_view(&obs),
             })
@@ -870,9 +883,9 @@ mod pty_registry {
 
     pub fn snapshot(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
-            let s = map
-                .get(session)
-                .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))?;
+            let s = map.get(session).ok_or_else(|| {
+                OpError::new("not-found", "unknown session").with_session(session)
+            })?;
             let screen = s.snapshot().map_err(|e| tui_err(e).with_session(session))?;
             Ok(OpResult::Snapshot {
                 screen: screen_view(&screen),
@@ -882,14 +895,17 @@ mod pty_registry {
 
     pub fn screenshot(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
-            let s = map
-                .get(session)
-                .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))?;
-            let obs = s.observe_now().map_err(|e| tui_err(e).with_session(session))?;
+            let s = map.get(session).ok_or_else(|| {
+                OpError::new("not-found", "unknown session").with_session(session)
+            })?;
+            let obs = s
+                .observe_now()
+                .map_err(|e| tui_err(e).with_session(session))?;
             let canonical = crate::insta_proto::insta_string(&obs.screen);
             let profile = crate::profile::Profile::default_profile();
-            let mut renderer = crate::render::Renderer::new(&profile, &crate::profile::VENDORED_FACES)
-                .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
+            let mut renderer =
+                crate::render::Renderer::new(&profile, &crate::profile::VENDORED_FACES)
+                    .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
             let rendered = renderer
                 .render_screen(&obs.screen)
                 .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
@@ -909,9 +925,9 @@ mod pty_registry {
         timeout_ms: u64,
     ) -> Result<OpResult, OpError> {
         with_registry(|map| {
-            let s = map
-                .get(session)
-                .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))?;
+            let s = map.get(session).ok_or_else(|| {
+                OpError::new("not-found", "unknown session").with_session(session)
+            })?;
             let deadline = Instant::now() + Duration::from_millis(timeout_ms);
             let cancel = crate::tui::CancelToken::new();
             match kind {
@@ -1004,7 +1020,10 @@ mod pty_registry {
 
     fn validate_session_id(id: &str) -> Result<(), OpError> {
         if id.is_empty() || id.len() > 128 {
-            return Err(OpError::new("invalid-input", "session id must be 1..=128 chars"));
+            return Err(OpError::new(
+                "invalid-input",
+                "session id must be 1..=128 chars",
+            ));
         }
         if !id
             .chars()
@@ -1090,9 +1109,8 @@ pub fn runtime_dir() -> Result<PathBuf, OpError> {
             .mode()
             & 0o777;
         if mode != 0o700 {
-            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).map_err(|e| {
-                OpError::new("io", format!("chmod 700 {}: {e}", dir.display()))
-            })?;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+                .map_err(|e| OpError::new("io", format!("chmod 700 {}: {e}", dir.display())))?;
         }
     }
     Ok(dir)
@@ -1112,7 +1130,10 @@ fn current_uid() -> u32 {
 
 fn validate_session_name(name: &str) -> Result<(), OpError> {
     if name.is_empty() || name.len() > 64 {
-        return Err(OpError::new("invalid-input", "session name must be 1..=64 chars"));
+        return Err(OpError::new(
+            "invalid-input",
+            "session name must be 1..=64 chars",
+        ));
     }
     if !name
         .chars()
@@ -1137,15 +1158,14 @@ fn read_endpoint(dir: &Path, name: &str) -> Result<Option<SessionEndpoint>, OpEr
     let bytes = match std::fs::read(&path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => {
-            return Err(OpError::new(
-                "io",
-                format!("read {}: {e}", path.display()),
-            ))
-        }
+        Err(e) => return Err(OpError::new("io", format!("read {}: {e}", path.display()))),
     };
-    let ep: SessionEndpoint = serde_json::from_slice(&bytes)
-        .map_err(|e| OpError::new("invalid-input", format!("{} is corrupt: {e}", path.display())))?;
+    let ep: SessionEndpoint = serde_json::from_slice(&bytes).map_err(|e| {
+        OpError::new(
+            "invalid-input",
+            format!("{} is corrupt: {e}", path.display()),
+        )
+    })?;
     if ep.version != SESSION_ENDPOINT_VERSION {
         return Err(OpError::new(
             "version-mismatch",
@@ -1261,9 +1281,8 @@ pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<Session
             }
             session_stop(name)?;
         } else {
-            std::fs::remove_file(endpoint_path(&dir, name)).map_err(|e| {
-                OpError::new("io", format!("remove stale {name}: {e}"))
-            })?;
+            std::fs::remove_file(endpoint_path(&dir, name))
+                .map_err(|e| OpError::new("io", format!("remove stale {name}: {e}")))?;
         }
     }
     let log_path = dir.join(format!("{name}.log"));
@@ -1272,7 +1291,10 @@ pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<Session
     let mut cmd = std::process::Command::new(&argv[0]);
     cmd.args(&argv[1..])
         .stdin(std::process::Stdio::null())
-        .stdout(log.try_clone().map_err(|e| OpError::new("io", e.to_string()))?)
+        .stdout(
+            log.try_clone()
+                .map_err(|e| OpError::new("io", e.to_string()))?,
+        )
         .stderr(log);
     #[cfg(all(unix, feature = "pty"))]
     {
@@ -1395,9 +1417,8 @@ pub fn session_prune() -> Result<Vec<String>, OpError> {
     let mut pruned = Vec::new();
     for info in session_list()? {
         if info.status == SessionStatus::Exited {
-            std::fs::remove_file(endpoint_path(&dir, &info.name)).map_err(|e| {
-                OpError::new("io", format!("prune {}: {e}", info.name))
-            })?;
+            std::fs::remove_file(endpoint_path(&dir, &info.name))
+                .map_err(|e| OpError::new("io", format!("prune {}: {e}", info.name)))?;
             pruned.push(info.name);
         }
     }
@@ -1429,7 +1450,10 @@ pub struct Recorder {
 impl Recorder {
     pub fn create(path: &Path, max_events: u64, max_bytes: u64) -> Result<Self, OpError> {
         if max_events == 0 || max_bytes == 0 {
-            return Err(OpError::new("invalid-input", "record bounds must be nonzero"));
+            return Err(OpError::new(
+                "invalid-input",
+                "record bounds must be nonzero",
+            ));
         }
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {

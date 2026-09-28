@@ -262,7 +262,11 @@ fn op_pty_lifecycle() {
     .expect("observe")
     {
         OpResult::Observation { observation } => {
-            assert!(observation.screen.text.contains("hi-pty"), "{}", observation.screen.text)
+            assert!(
+                observation.screen.text.contains("hi-pty"),
+                "{}",
+                observation.screen.text
+            )
         }
         r => panic!("wrong result: {r:?}"),
     }
@@ -504,8 +508,14 @@ fn cli_help_and_version() {
     let out = run_cli(&["init", "--help"], &[], None);
     assert_eq!(code(&out), 0);
     let h = stdout(&out);
-    assert!(h.contains("tui-snap.toml"), "init help documents config:\n{h}");
-    assert!(h.contains(".config/nextest.toml"), "init help documents nextest:\n{h}");
+    assert!(
+        h.contains("tui-snap.toml"),
+        "init help documents config:\n{h}"
+    );
+    assert!(
+        h.contains(".config/nextest.toml"),
+        "init help documents nextest:\n{h}"
+    );
     assert!(h.contains("insta"), "init help documents insta:\n{h}");
     assert!(proto::CONFIG_DOCS.contains("tui-snap.toml"));
 }
@@ -534,7 +544,12 @@ fn cli_init_scaffolds() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let root = tmp.path().to_string_lossy().into_owned();
     let out = run_cli(&["init", "--dir", &root], &[], None);
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(tmp.path().join("tui-snap.toml").is_file());
     assert!(tmp.path().join(".config/nextest.toml").is_file());
     assert!(tmp.path().join("tests/visual.rs").is_file());
@@ -556,18 +571,41 @@ fn cli_capture_passthrough() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let ok = tmp.path().join("ok");
     let out = run_cli(
-        &["capture", "--out", ok.to_str().unwrap(), "--", "echo", "cap-hi"],
+        &[
+            "capture",
+            "--out",
+            ok.to_str().unwrap(),
+            "--",
+            "echo",
+            "cap-hi",
+        ],
         &[],
         None,
     );
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(ok.join("manifest.json").is_file());
     assert!(ok.join("stdout.bin").is_file());
     let manifest = std::fs::read_to_string(ok.join("manifest.json")).expect("manifest");
-    assert!(manifest.contains("cap-hi") || manifest.contains("Exit"), "{manifest}");
+    assert!(
+        manifest.contains("cap-hi") || manifest.contains("Exit"),
+        "{manifest}"
+    );
     let fail = tmp.path().join("fail");
     let out = run_cli(
-        &["capture", "--out", fail.to_str().unwrap(), "--", "sh", "-c", "exit 7"],
+        &[
+            "capture",
+            "--out",
+            fail.to_str().unwrap(),
+            "--",
+            "sh",
+            "-c",
+            "exit 7",
+        ],
         &[],
         None,
     );
@@ -596,8 +634,17 @@ fn cli_inspect_never_executes() {
     }
     std::fs::write(dir.join("manifest.json"), r#"{"argv":["x"],"code":0}"#).expect("manifest");
     let out = run_cli(&["inspect", "--dir", dir.to_str().unwrap()], &[], None);
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
-    assert!(stdout(&out).contains("run-me.sh"), "lists files:\n{}", stdout(&out));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout(&out).contains("run-me.sh"),
+        "lists files:\n{}",
+        stdout(&out)
+    );
     assert!(!marker.is_file(), "inspect must never execute artifacts");
 }
 
@@ -628,7 +675,12 @@ fn cli_render_and_diff() {
         &[],
         None,
     );
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(tmp.path().join("a.txt").is_file());
     assert!(tmp.path().join("a.png").is_file());
     let b_out = tmp.path().join("b");
@@ -691,7 +743,11 @@ fn cli_review_and_report() {
         r#"{"name":"two","status":"fail","detail":"pixels differ"}"#,
     )
     .expect("v2");
-    let out = run_cli(&["review", "--dir", tmp.path().to_str().unwrap()], &[], None);
+    let out = run_cli(
+        &["review", "--dir", tmp.path().to_str().unwrap()],
+        &[],
+        None,
+    );
     assert_eq!(code(&out), EXIT_VERIFY_FAIL);
     assert!(stdout(&out).contains("two"), "{}", stdout(&out));
     let html = tmp.path().join("report.html");
@@ -706,7 +762,12 @@ fn cli_review_and_report() {
         &[],
         None,
     );
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let body = std::fs::read_to_string(&html).expect("report");
     assert!(body.contains("two") && body.contains("1 failed"), "{body}");
 }
@@ -718,8 +779,17 @@ fn cli_import_readonly() {
         .expect("read")
         .map(|e| e.expect("entry").path())
         .collect();
-    let out = run_cli(&["import", "--dir", tmp.path().to_str().unwrap()], &[], None);
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let out = run_cli(
+        &["import", "--dir", tmp.path().to_str().unwrap()],
+        &[],
+        None,
+    );
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(stdout(&out).contains("0"), "{}", stdout(&out));
     let after: Vec<PathBuf> = std::fs::read_dir(tmp.path())
         .expect("read")
@@ -740,15 +810,30 @@ fn cli_session_round_trip() {
     // stop-before-start is a clean op error, not a crash
     let out = run_cli(&["session", "stop", "--name", "ghost"], env, None);
     assert_eq!(code(&out), EXIT_OP_ERROR);
-    let out = run_cli(&["session", "start", "--name", "s1", "--", "sleep", "30"], env, None);
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let out = run_cli(
+        &["session", "start", "--name", "s1", "--", "sleep", "30"],
+        env,
+        None,
+    );
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let out = run_cli(&["session", "list"], env, None);
     assert_eq!(code(&out), 0);
     assert!(stdout(&out).contains("s1"), "{}", stdout(&out));
-    let out = run_cli(&["session", "start", "--name", "s1", "--", "sleep", "1"], env, None);
+    let out = run_cli(
+        &["session", "start", "--name", "s1", "--", "sleep", "1"],
+        env,
+        None,
+    );
     assert_eq!(code(&out), EXIT_OP_ERROR, "collision without --force");
     let out = run_cli(
-        &["session", "start", "--name", "s1", "--force", "--", "sleep", "30"],
+        &[
+            "session", "start", "--name", "s1", "--force", "--", "sleep", "30",
+        ],
         env,
         None,
     );
@@ -786,13 +871,24 @@ fn cli_record_and_trace() {
         &[],
         None,
     );
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let out = run_cli(&["trace", "--input", journal.to_str().unwrap()], &[], None);
     assert_eq!(code(&out), 0);
     let t = stdout(&out);
     assert!(t.contains("start") && t.contains("exit"), "{t}");
     let out = run_cli(
-        &["trace", "--input", journal.to_str().unwrap(), "--kind", "exit"],
+        &[
+            "trace",
+            "--input",
+            journal.to_str().unwrap(),
+            "--kind",
+            "exit",
+        ],
         &[],
         None,
     );
@@ -827,7 +923,12 @@ fn cli_record_and_trace() {
 fn cli_machine_mode() {
     let input = "{\"type\":\"version\"}\n{\"type\":\"assert\",\"check\":\"text-equals\",\"actual\":\"a\",\"expected\":\"a\"}\n";
     let out = run_cli(&["--machine"], &[], Some(input));
-    assert_eq!(code(&out), 0, "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 2);
@@ -835,7 +936,11 @@ fn cli_machine_mode() {
         let env: Envelope = serde_json::from_str(line).expect("envelope json");
         assert!(env.ok);
     }
-    let out = run_cli(&["--machine"], &[], Some("{\"type\":\"version\"}\ngarbage\n"));
+    let out = run_cli(
+        &["--machine"],
+        &[],
+        Some("{\"type\":\"version\"}\ngarbage\n"),
+    );
     assert_eq!(code(&out), EXIT_OP_ERROR);
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();

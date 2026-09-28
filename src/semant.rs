@@ -11,7 +11,7 @@
 //! - [`Harness`]: deterministic `update`/`render` + manual clock harness for
 //!   runtime tests (Q09). No live clock, threads, or services.
 
-use crate::ratatui::{EdgePolicy, render_screen};
+use crate::ratatui::{render_screen, EdgePolicy};
 use crate::screen::Screen;
 
 /// Widget role. Fixed set; providers needing more map them onto these or use
@@ -107,10 +107,7 @@ pub enum SemanticError {
     /// No enabled node matched.
     NotFound(String),
     /// More than one enabled node matched; disambiguate.
-    Ambiguous {
-        what: String,
-        count: usize,
-    },
+    Ambiguous { what: String, count: usize },
     /// The matched node is disabled: excluded from click targets.
     Disabled(String),
     /// Provider data is for another screen revision; re-capture first.
@@ -163,10 +160,7 @@ fn check_fresh(
 /// Disabled nodes are excluded from click targets: if every match is disabled
 /// the resolution fails with [`SemanticError::Disabled`]; disabled matches
 /// never win over enabled ones.
-fn pick(
-    what: String,
-    matches: Vec<&SemNode>,
-) -> Result<(u16, u16), SemanticError> {
+fn pick(what: String, matches: Vec<&SemNode>) -> Result<(u16, u16), SemanticError> {
     let enabled: Vec<&&SemNode> = matches.iter().filter(|n| !n.disabled).collect();
     match enabled.len() {
         0 if matches.is_empty() => Err(SemanticError::NotFound(what)),

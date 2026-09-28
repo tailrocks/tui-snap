@@ -2,8 +2,8 @@
 
 use tuisnap::ratatui as tr;
 use tuisnap::semant::{
-    HitRegion, Harness, HarnessEvent, RatatuiTestAdapter, Role, SemNode, SemanticError,
-    SemanticProvider, by_id, by_label, by_role,
+    by_id, by_label, by_role, Harness, HarnessEvent, HitRegion, RatatuiTestAdapter, Role, SemNode,
+    SemanticError, SemanticProvider,
 };
 
 fn hit(x: u16, y: u16, cols: u16, rows: u16) -> HitRegion {

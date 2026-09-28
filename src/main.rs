@@ -207,7 +207,11 @@ fn machine_main() -> i32 {
         println!("{out}");
         all_ok &= ok;
     }
-    if all_ok { 0 } else { EXIT_OP_ERROR }
+    if all_ok {
+        0
+    } else {
+        EXIT_OP_ERROR
+    }
 }
 
 fn run(cli: Cli) -> i32 {
@@ -215,7 +219,11 @@ fn run(cli: Cli) -> i32 {
         Cmd::Init { dir, force } => cmd_init(&dir, force),
         Cmd::Doctor => cmd_doctor(),
         Cmd::Schema => cmd_schema(),
-        Cmd::Capture { out, timeout_ms, argv } => cmd_capture(&out, timeout_ms, argv),
+        Cmd::Capture {
+            out,
+            timeout_ms,
+            argv,
+        } => cmd_capture(&out, timeout_ms, argv),
         Cmd::Inspect { dir } => cmd_inspect(&dir),
         Cmd::Render {
             input,
@@ -290,7 +298,10 @@ fn cmd_init(dir: &Path, force: bool) -> i32 {
     for (rel, _) in files {
         let path = dir.join(rel);
         if path.exists() && !force {
-            eprintln!("error: {} exists (pass --force to overwrite)", path.display());
+            eprintln!(
+                "error: {} exists (pass --force to overwrite)",
+                path.display()
+            );
             return EXIT_OP_ERROR;
         }
     }
@@ -457,7 +468,11 @@ fn cmd_inspect(dir: &Path) -> i32 {
         files.push((entry.file_name().to_string_lossy().into_owned(), len));
     }
     files.sort();
-    println!("artifacts in {} ({} files, offline view):", dir.display(), files.len());
+    println!(
+        "artifacts in {} ({} files, offline view):",
+        dir.display(),
+        files.len()
+    );
     for (name, len) in &files {
         println!("  {name} ({len} bytes)");
     }
@@ -542,9 +557,8 @@ fn cmd_render(input: &Path, formats: &[String], out: &str, font_file: Option<&Pa
     macro_rules! get_renderer {
         () => {{
             if renderer.is_none() {
-                renderer = Some(
-                    tuisnap::Renderer::new(&profile, &faces).map_err(|e| e.to_string())?,
-                );
+                renderer =
+                    Some(tuisnap::Renderer::new(&profile, &faces).map_err(|e| e.to_string())?);
             }
             renderer.as_mut().expect("constructed above")
         }};
@@ -561,12 +575,16 @@ fn cmd_render(input: &Path, formats: &[String], out: &str, font_file: Option<&Pa
         }
         let write_result = match f.as_str() {
             "txt" => std::fs::write(&path, frame.text()).map_err(|e| e.to_string()),
-            "ansi" => std::fs::write(&path, tuisnap::render::ansi_dump(&frame)).map_err(|e| e.to_string()),
+            "ansi" => {
+                std::fs::write(&path, tuisnap::render::ansi_dump(&frame)).map_err(|e| e.to_string())
+            }
             "json" => std::fs::write(&path, frame.to_json()).map_err(|e| e.to_string()),
             "svg" => std::fs::write(&path, tuisnap::render::render_svg(&frame, &profile))
                 .map_err(|e| e.to_string()),
             "html" => (|| -> Result<(), String> {
-                let html = get_renderer!().render_html(&frame, "frame").map_err(|e| e.to_string())?;
+                let html = get_renderer!()
+                    .render_html(&frame, "frame")
+                    .map_err(|e| e.to_string())?;
                 std::fs::write(&path, html).map_err(|e| e.to_string())
             })(),
             "png" => (|| -> Result<(), String> {
@@ -649,7 +667,11 @@ fn cmd_review(dir: &Path) -> i32 {
             }
         }
     }
-    println!("{} passed, {} failed", verdicts.len() - failed as usize, failed);
+    println!(
+        "{} passed, {} failed",
+        verdicts.len() - failed as usize,
+        failed
+    );
     if failed > 0 {
         EXIT_VERIFY_FAIL
     } else {
@@ -777,7 +799,9 @@ fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<String>) ->
     if let Err(e) = rec.record("start", &format!("argv={argv:?}")) {
         return fail(e);
     }
-    let result = tuisnap::command::Command::new(&argv[0]).args(&argv[1..]).run();
+    let result = tuisnap::command::Command::new(&argv[0])
+        .args(&argv[1..])
+        .run();
     if let Err(e) = rec.record(
         "output",
         &format!(

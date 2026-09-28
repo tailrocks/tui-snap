@@ -47,8 +47,7 @@ fn deadline(secs: u64) -> Instant {
 }
 
 fn menu_script() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/journey/menu.sh")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/journey/menu.sh")
 }
 
 #[test]
@@ -56,10 +55,16 @@ fn settings_navigation() {
     freeze_insta_updates();
     let ctx = TestContext::current("settings-journey").expect("test context");
     let mut journal = Journal::open(&ctx.journal_path()).expect("open journal");
-    journal.append("start", "settings-journey").expect("journal start");
+    journal
+        .append("start", "settings-journey")
+        .expect("journal start");
 
     let script = menu_script();
-    assert!(script.is_file(), "fixture menu script: {}", script.display());
+    assert!(
+        script.is_file(),
+        "fixture menu script: {}",
+        script.display()
+    );
 
     let session = Tui::new(["/bin/sh", &script.to_string_lossy()])
         .size(48, 12)

@@ -3,9 +3,7 @@
 use std::time::{Duration, Instant};
 use tuisnap::frame::{Cell, Color, Cursor};
 use tuisnap::locate::{Action, LocateError, Locator, Span, StyleQuery, TextMode};
-use tuisnap::screen::{
-    CaptureProvenance, CaptureReason, Observation, Screen, TermState,
-};
+use tuisnap::screen::{CaptureProvenance, CaptureReason, Observation, Screen, TermState};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,7 +110,10 @@ fn text_case_insensitive_folds_ascii() {
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0].text, "Hello");
     // Sensitive default does not match.
-    assert!(Locator::text("hello").resolve(&screen, 0).unwrap().is_empty());
+    assert!(Locator::text("hello")
+        .resolve(&screen, 0)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -160,7 +161,10 @@ fn text_empty_or_multiline_pattern_is_usage_error() {
 fn regex_dot_class_star_and_anchors() {
     // 15 cols: row 0 is not edge-full, so rows stay separate logical lines.
     let screen = screen_with(&["order 42 ships", "nothing here"], 15);
-    let num = Locator::regex("[0-9]+").unwrap().resolve(&screen, 0).unwrap();
+    let num = Locator::regex("[0-9]+")
+        .unwrap()
+        .resolve(&screen, 0)
+        .unwrap();
     assert_eq!(num.len(), 1);
     assert_eq!(num[0].text, "42");
     assert_eq!((num[0].x, num[0].end_x), (6, 8));
@@ -172,18 +176,27 @@ fn regex_dot_class_star_and_anchors() {
     assert_eq!(anchored.len(), 1);
     assert_eq!(anchored[0].text, "order 42 ships");
 
-    let dot = Locator::regex("n.thing").unwrap().resolve(&screen, 0).unwrap();
+    let dot = Locator::regex("n.thing")
+        .unwrap()
+        .resolve(&screen, 0)
+        .unwrap();
     assert_eq!(dot.len(), 1);
     assert_eq!((dot[0].x, dot[0].y), (0, 1));
 
-    let neg = Locator::regex("[^ ]+").unwrap().resolve(&screen, 0).unwrap();
+    let neg = Locator::regex("[^ ]+")
+        .unwrap()
+        .resolve(&screen, 0)
+        .unwrap();
     assert!(neg.iter().any(|s| s.text == "order"));
 }
 
 #[test]
 fn regex_unsupported_constructs_fail_at_build() {
     for bad in ["(a)", "a|b", "a{2}", "a[", "a\\", "*", "[z-a]"] {
-        assert!(matches!(Locator::regex(bad), Err(LocateError::Usage(_))), "{bad}");
+        assert!(
+            matches!(Locator::regex(bad), Err(LocateError::Usage(_))),
+            "{bad}"
+        );
     }
     assert!(Locator::regex("^a*?$").is_ok());
     assert!(Locator::regex("").is_err());
@@ -239,13 +252,9 @@ fn style_matches_colors_and_combines_constraints() {
     cells[1].mods.underline = true;
     cells[2].fg = Color::Indexed(3);
     let screen = finish(cells, 4, 1);
-    let spans = Locator::style(
-        StyleQuery::new()
-            .fg(Color::Indexed(3))
-            .underline(true),
-    )
-    .resolve(&screen, 0)
-    .unwrap();
+    let spans = Locator::style(StyleQuery::new().fg(Color::Indexed(3)).underline(true))
+        .resolve(&screen, 0)
+        .unwrap();
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0].text, "b");
 }
@@ -324,10 +333,7 @@ fn nth_first_last_select_in_order() {
     let q = || Locator::text("x");
     assert_eq!(Locator::first(q()).resolve(&screen, 0).unwrap()[0].x, 0);
     assert_eq!(Locator::last(q()).resolve(&screen, 0).unwrap()[0].x, 12);
-    assert_eq!(
-        Locator::nth(q(), 1).resolve(&screen, 0).unwrap()[0].x,
-        6
-    );
+    assert_eq!(Locator::nth(q(), 1).resolve(&screen, 0).unwrap()[0].x, 6);
     assert!(Locator::nth(q(), 3).resolve(&screen, 0).unwrap().is_empty());
 }
 
@@ -378,7 +384,9 @@ fn resolve_unique_ok_not_found_and_ambiguous() {
         Err(LocateError::NotFound { .. })
     ));
 
-    let err = Locator::text("pair").resolve_unique(&screen, 3).unwrap_err();
+    let err = Locator::text("pair")
+        .resolve_unique(&screen, 3)
+        .unwrap_err();
     match err {
         LocateError::Ambiguous { matches } => {
             assert_eq!(matches.len(), 2);
@@ -414,8 +422,7 @@ fn scrollback_target_is_never_clickable() {
         .resolve_unique_with_scrollback(&screen, 1, &scrollback)
         .unwrap();
     assert!(span.scrollback);
-    let err =
-        tuisnap::locate::PendingAction::from_span(Locator::text("hit"), span, 1).unwrap_err();
+    let err = tuisnap::locate::PendingAction::from_span(Locator::text("hit"), span, 1).unwrap_err();
     assert!(matches!(err, LocateError::ViewportOnly { .. }), "{err:?}");
 }
 
@@ -444,18 +451,19 @@ fn wrapped_rows_join_into_one_logical_span() {
 
     // Non-full rows do not join even by default.
     let screen = screen_with(&["abc", "def"], 5);
-    assert!(
-        Locator::text("cdef")
-            .resolve(&screen, 0)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(Locator::text("cdef")
+        .resolve(&screen, 0)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
 fn regex_matches_across_wrapped_rows() {
     let screen = screen_with(&["ab12", "34cd"], 4);
-    let spans = Locator::regex("[0-9]+").unwrap().resolve(&screen, 0).unwrap();
+    let spans = Locator::regex("[0-9]+")
+        .unwrap()
+        .resolve(&screen, 0)
+        .unwrap();
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0].text, "1234");
     assert_eq!((spans[0].y, spans[0].end_y), (0, 1));
@@ -663,9 +671,7 @@ fn stale_revision_never_delivers() {
     let pending = Locator::text("press").prepare_action(&o1).unwrap();
     let o2 = obs(screen_with(&["press"], 6), 6);
     let mut calls = 0;
-    let err = pending
-        .click(&o2, &mut |_| calls += 1)
-        .unwrap_err();
+    let err = pending.click(&o2, &mut |_| calls += 1).unwrap_err();
     assert!(
         matches!(
             err,
@@ -697,7 +703,11 @@ fn readiness_retries_never_touch_the_sink() {
     let pending = Locator::text("go")
         .prepare_action_retry(&mut observe, Duration::from_secs(2))
         .unwrap();
-    assert!(polls.get() >= 2, "expected retries, got {} polls", polls.get());
+    assert!(
+        polls.get() >= 2,
+        "expected retries, got {} polls",
+        polls.get()
+    );
     assert_eq!(pending.revision(), 2);
 
     // Only the explicit click delivers, exactly once.

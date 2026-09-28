@@ -396,7 +396,10 @@ enum ReToken {
     End,
     Dot,
     Lit(char),
-    Class { ranges: Vec<(char, char)>, negated: bool },
+    Class {
+        ranges: Vec<(char, char)>,
+        negated: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -696,19 +699,53 @@ pub struct Locator {
 
 #[derive(Debug, Clone)]
 enum LocatorKind {
-    Text { pattern: String, mode: TextMode },
-    Regex { source: String, re: MiniRegex },
-    Style { query: StyleQuery },
-    Region { x: u16, y: u16, cols: u16, rows: u16 },
-    Within { scope: Box<Locator>, inner: Box<Locator> },
-    Before { main: Box<Locator>, anchor: Box<Locator> },
-    After { main: Box<Locator>, anchor: Box<Locator> },
-    Nth { inner: Box<Locator>, index: usize },
+    Text {
+        pattern: String,
+        mode: TextMode,
+    },
+    Regex {
+        source: String,
+        re: MiniRegex,
+    },
+    Style {
+        query: StyleQuery,
+    },
+    Region {
+        x: u16,
+        y: u16,
+        cols: u16,
+        rows: u16,
+    },
+    Within {
+        scope: Box<Locator>,
+        inner: Box<Locator>,
+    },
+    Before {
+        main: Box<Locator>,
+        anchor: Box<Locator>,
+    },
+    After {
+        main: Box<Locator>,
+        anchor: Box<Locator>,
+    },
+    Nth {
+        inner: Box<Locator>,
+        index: usize,
+    },
     First(Box<Locator>),
     Last(Box<Locator>),
-    And { a: Box<Locator>, b: Box<Locator> },
-    Or { a: Box<Locator>, b: Box<Locator> },
-    Filter { inner: Box<Locator>, pred: fn(&Span) -> bool },
+    And {
+        a: Box<Locator>,
+        b: Box<Locator>,
+    },
+    Or {
+        a: Box<Locator>,
+        b: Box<Locator>,
+    },
+    Filter {
+        inner: Box<Locator>,
+        pred: fn(&Span) -> bool,
+    },
 }
 
 impl Locator {
@@ -1019,7 +1056,9 @@ impl Locator {
             LocatorKind::And { a, b } => {
                 let a = a.resolve_core(screen, revision, scrollback)?;
                 let b = b.resolve_core(screen, revision, scrollback)?;
-                Ok(a.into_iter().filter(|s| b.iter().any(|o| overlaps(s, o))).collect())
+                Ok(a.into_iter()
+                    .filter(|s| b.iter().any(|o| overlaps(s, o)))
+                    .collect())
             }
             LocatorKind::Or { a, b } => {
                 let mut out = a.resolve_core(screen, revision, scrollback)?;
@@ -1049,7 +1088,11 @@ impl Locator {
         Ok(())
     }
 
-    fn check_regex_haystack(re: &MiniRegex, chars: &[char], source: &str) -> Result<(), LocateError> {
+    fn check_regex_haystack(
+        re: &MiniRegex,
+        chars: &[char],
+        source: &str,
+    ) -> Result<(), LocateError> {
         if re.case_insensitive && chars.iter().any(|c| !c.is_ascii()) {
             return Err(LocateError::Unsupported(format!(
                 "case-insensitive regex {source:?} over non-ASCII text: first-char lowering is unreliable"
@@ -1141,7 +1184,6 @@ impl RowText {
         }
         cell.symbol != " " && !cell.symbol.is_empty()
     }
-
 }
 
 /// A logical line: one physical row, or consecutive rows joined by the wrap
@@ -1433,7 +1475,10 @@ fn match_style_viewport(query: &StyleQuery, screen: &Screen, revision: u64) -> V
         let mut run_start: Option<u16> = None;
         let mut run_text = String::new();
         let mut run_end = 0u16;
-        let flush = |out: &mut Vec<Span>, run_start: &mut Option<u16>, run_text: &mut String, run_end: u16| {
+        let flush = |out: &mut Vec<Span>,
+                     run_start: &mut Option<u16>,
+                     run_text: &mut String,
+                     run_end: u16| {
             if let Some(x) = run_start.take() {
                 out.push(Span {
                     x,
@@ -1635,10 +1680,7 @@ impl Locator {
                     if Instant::now() >= deadline {
                         return Err(LocateError::Timeout {
                             waited: timeout,
-                            reason: format!(
-                                "count {} != expected {expected}",
-                                spans.len()
-                            ),
+                            reason: format!("count {} != expected {expected}", spans.len()),
                         });
                     }
                 }
@@ -1706,11 +1748,7 @@ impl Locator {
     /// Watch for the FULL `duration`: any match at any poll fails with
     /// [`LocateError::UnexpectedlyPresent`]. Usage/unsupported fail
     /// immediately. Returns `Ok(())` only after the whole window stays empty.
-    pub fn remains_absent<F>(
-        &self,
-        observe: &mut F,
-        duration: Duration,
-    ) -> Result<(), LocateError>
+    pub fn remains_absent<F>(&self, observe: &mut F, duration: Duration) -> Result<(), LocateError>
     where
         F: FnMut() -> Observation,
     {
@@ -1803,11 +1841,7 @@ impl PendingAction {
     /// Bind an already-resolved span. Fails with [`LocateError::ViewportOnly`]
     /// for scrollback spans and [`LocateError::Usage`] when the span's
     /// revision differs from `revision` (a cross-revision bind is meaningless).
-    pub fn from_span(
-        locator: Locator,
-        span: Span,
-        revision: u64,
-    ) -> Result<Self, LocateError> {
+    pub fn from_span(locator: Locator, span: Span, revision: u64) -> Result<Self, LocateError> {
         if span.scrollback {
             return Err(LocateError::ViewportOnly { span });
         }

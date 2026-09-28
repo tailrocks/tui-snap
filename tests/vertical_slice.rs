@@ -90,8 +90,8 @@ struct SettingRow {
 
 impl Settings {
     fn load() -> Self {
-        let text = std::fs::read_to_string(fixture_path("settings.json"))
-            .expect("read settings fixture");
+        let text =
+            std::fs::read_to_string(fixture_path("settings.json")).expect("read settings fixture");
         serde_json::from_str(&text).expect("parse settings fixture")
     }
 }
@@ -186,7 +186,9 @@ fn settings_view() {
     freeze_insta_updates();
     let ctx = TestContext::current("settings-view").expect("test context");
     let mut journal = Journal::open(&ctx.journal_path()).expect("open journal");
-    journal.append("start", "settings-view").expect("journal start");
+    journal
+        .append("start", "settings-view")
+        .expect("journal start");
 
     let model = Settings::load();
     assert_eq!(model.rows.len(), 4, "fixture row count");
@@ -202,7 +204,11 @@ fn settings_view() {
         "no wide-glyph clips expected: {:?}",
         capture.clipped
     );
-    assert!(capture.notes.is_empty(), "no capture notes: {:?}", capture.notes);
+    assert!(
+        capture.notes.is_empty(),
+        "no capture notes: {:?}",
+        capture.notes
+    );
     let screen = capture.into_screen();
     assert_eq!((screen.cols(), screen.rows()), (64, 18));
     assert!(screen.cursor().visible, "explicit cursor must survive");
@@ -215,7 +221,9 @@ fn settings_view() {
     for needle in ["Settings", "autosave", "tab_width", "disabled", "q quit"] {
         assert!(text.contains(needle), "view shows {needle:?}:\n{text}");
     }
-    journal.append("rendered", "64x18 settings screen").expect("journal");
+    journal
+        .append("rendered", "64x18 settings screen")
+        .expect("journal");
 
     tuisnap::assert_snapshot!("vertical_slice__settings_view", &screen);
     tuisnap::assert_screenshot!("vertical_slice__settings_view_shot", &screen);
