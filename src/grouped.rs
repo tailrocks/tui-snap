@@ -207,15 +207,6 @@ fn first_difference(approved: &[u8], actual: &[u8]) -> String {
     )
 }
 
-/// Options for [`GroupedStore::check_with`].
-#[derive(Debug, Clone, Copy, Default)]
-pub struct GroupedCheckOptions {
-    /// Retained for source compatibility only. Every check renders PNG/HTML
-    /// fresh from the candidate frame (C02); this flag no longer changes
-    /// behavior.
-    pub full_render: bool,
-}
-
 /// Outcome of one grouped [`GroupedStore::check_with`]. The shared
 /// [`CompareOutcome`] carries status, pixel score, diff path and the paths
 /// the report machinery reads; the per-artifact booleans record each byte
@@ -357,33 +348,14 @@ impl GroupedStore {
     }
 
     /// [`Self::check`] through a caller-owned [`Renderer`], so a suite
-    /// reuses the parsed faces and the glyph cache across checks.
+    /// reuses the parsed faces and the glyph cache across checks. PNG/HTML
+    /// always render fresh from the candidate frame (C02).
     pub fn check_with(
         &self,
         renderer: &mut Renderer,
         name: &str,
         actual: &Frame,
         pixel_threshold: f64,
-    ) -> Result<GroupedOutcome, SnapshotError> {
-        self.check_with_options(
-            renderer,
-            name,
-            actual,
-            pixel_threshold,
-            &GroupedCheckOptions::default(),
-        )
-    }
-
-    /// [`Self::check_with`] with explicit options. PNG/HTML always render
-    /// fresh from the candidate frame (C02); the options currently change
-    /// nothing and exist for source compatibility.
-    pub fn check_with_options(
-        &self,
-        renderer: &mut Renderer,
-        name: &str,
-        actual: &Frame,
-        pixel_threshold: f64,
-        options: &GroupedCheckOptions,
     ) -> Result<GroupedOutcome, SnapshotError> {
         validate_name(name)?;
         actual.validate().map_err(SnapshotError::from)?;
@@ -464,13 +436,7 @@ impl GroupedStore {
             // the gate fails closed. Seal so reports reuse this verdict.
             let profile_name = renderer.profile().name.clone();
             self.seal_candidate(&profile_name, name, &grouped.actual)?;
-            self.seal_verdict(
-                name,
-                &grouped,
-                pixel_threshold,
-                options.full_render,
-                &["approved-presence"],
-            )?;
+            self.seal_verdict(name, &grouped, pixel_threshold, &["approved-presence"])?;
             return Ok(grouped);
         }
         let (approved_ansi, approved_txt, approved_html, approved_png) = (
@@ -508,8 +474,6 @@ impl GroupedStore {
             ));
         }
 
-        let cell_gates_match = ansi_equal && txt_equal;
-
         // C02: actual evidence always renders fresh from the candidate frame.
         // The old tiered fast path copied approved PNG/HTML bytes into
         // actual/ when the cell gates passed — fabricating html_match=true
@@ -543,11 +507,7 @@ impl GroupedStore {
 
         // PNG pixel gate: decoded pixels, same threshold semantics as the
         // classic store. A corrupt approved PNG is an explicit error.
-        let verdict = diff::compare_png_with_flags(
-            &approved_png,
-            &actual_png_bytes,
-            cell_gates_match && !options.full_render,
-        )?;
+        let verdict = diff::compare_png(&approved_png, &actual_png_bytes)?;
         if !verdict.dims_equal {
             outcome.status = Status::DimensionMismatch;
             notes.push(format!(
@@ -583,7 +543,6 @@ impl GroupedStore {
             name,
             &grouped,
             pixel_threshold,
-            options.full_render,
             &[
                 "ansi-byte-gate",
                 "txt-byte-gate",
@@ -694,14 +653,7 @@ impl GroupedStore {
         let text = std::fs::read_to_string(&frame_path)
             .map_err(|e| SnapshotError(format!("cannot read {}: {e}", frame_path.display())))?;
         let frame = Frame::from_json(&text)?;
-        let full_render = self.stored_full_render(name);
-        let grouped = self.check_with_options(
-            renderer,
-            name,
-            &frame,
-            pixel_threshold,
-            &GroupedCheckOptions { full_render },
-        )?;
+        let grouped = self.check_with(renderer, name, &frame, pixel_threshold)?;
         Ok(grouped.outcome)
     }
 
@@ -743,16 +695,15 @@ impl GroupedStore {
         )
     }
 
-    /// Persist this check's exact verdict (C05): status, pixel policy, the
-    /// render tier, gate results, artifact hashes on both sides, and the
-    /// checks performed. Approved entries are `null` when that artifact is
-    /// absent, so a later accept visibly stales the verdict.
+    /// Persist this check's exact verdict (C05): status, pixel policy, gate
+    /// results, artifact hashes on both sides, and the checks performed.
+    /// Approved entries are `null` when that artifact is absent, so a later
+    /// accept visibly stales the verdict.
     fn seal_verdict(
         &self,
         name: &str,
         grouped: &GroupedOutcome,
         pixel_threshold: f64,
-        full_render: bool,
         checks: &[&str],
     ) -> Result<(), SnapshotError> {
         let actual_hash = |p: &Path| -> Result<String, SnapshotError> {
@@ -774,7 +725,6 @@ impl GroupedStore {
             "name": name,
             "status": grouped.outcome.status.as_str(),
             "pixel_threshold": pixel_threshold,
-            "full_render": full_render,
             "pixel_score": grouped.outcome.pixel_score,
             "ansi_match": grouped.ansi_match,
             "txt_match": grouped.txt_match,
@@ -962,17 +912,6 @@ impl GroupedStore {
                 .unwrap_or_default()
                 .to_string(),
         }))
-    }
-
-    /// Render tier the sealed verdict used, so a recompute re-runs the same
-    /// policy the check did. Absent/unparsable verdicts default to the tiered
-    /// check (`full_render: false`), matching plain `check`.
-    fn stored_full_render(&self, name: &str) -> bool {
-        std::fs::read_to_string(verdict_path(&self.actual_root, name))
-            .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-            .and_then(|v| v.get("full_render").and_then(|f| f.as_bool()))
-            .unwrap_or(false)
     }
 
     /// Report row for incomplete evidence (C08-grouped).

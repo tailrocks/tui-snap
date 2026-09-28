@@ -93,6 +93,12 @@ const WAIT_SLICE: Duration = Duration::from_millis(25);
 pub const DEFAULT_STABLE_QUIET: Duration = Duration::from_millis(200);
 /// Grace for SIGKILL-triggered reap during teardown.
 const KILL_GRACE: Duration = Duration::from_secs(2);
+/// Bound for joining one session thread during teardown. Must exceed the
+/// worker's worst case (`KILL_GRACE` + tick) so a healthy-but-slow kill is
+/// never misreported as stuck. The reader has no unblock handle (it owns
+/// the only PTY reader), so a child that survives kill would block `read()`
+/// forever — past this grace the thread is detached, never joined forever.
+const JOIN_GRACE: Duration = Duration::from_secs(5);
 
 // ---------------------------------------------------------------------------
 // TerminalProfile
@@ -1401,16 +1407,38 @@ impl Session {
         let worker = self.worker.lock().map(|mut g| g.take()).unwrap_or(None);
         let reader = self.reader.lock().map(|mut g| g.take()).unwrap_or(None);
         if let Some(h) = worker {
-            if h.join().is_err() {
-                self.shared.record_teardown("worker thread panicked");
-            }
+            join_one(h, &self.shared, "worker", JOIN_GRACE);
         }
         if let Some(h) = reader {
-            if h.join().is_err() {
-                self.shared.record_teardown("reader thread panicked");
-            }
+            join_one(h, &self.shared, "reader", JOIN_GRACE);
         }
         self.shared.mark_closed();
+    }
+}
+
+/// Bounded join of one session thread; never blocks past `grace`, never
+/// panics. On timeout the handle is detached (the waiter thread owns it
+/// and reaps the thread if it ever exits) and a teardown diagnostic is
+/// recorded, so `Drop` can never hang on a reader blocked in `read()`
+/// after a failed child kill. On waiter-spawn failure the handle drops
+/// here, which also detaches rather than hangs.
+fn join_one(h: std::thread::JoinHandle<()>, shared: &Shared, name: &str, grace: Duration) {
+    let (tx, rx) = mpsc::channel::<bool>();
+    let waiter = std::thread::Builder::new()
+        .name(format!("tuisnap-tui-join-{name}"))
+        .spawn(move || {
+            let panicked = h.join().is_err();
+            let _ = tx.send(panicked);
+        });
+    match waiter {
+        Ok(_waiter) => match rx.recv_timeout(grace) {
+            Ok(true) => shared.record_teardown(&format!("{name} thread panicked")),
+            Ok(false) => {}
+            Err(_) => shared.record_teardown(&format!(
+                "{name} thread did not exit within {grace:?}; detached"
+            )),
+        },
+        Err(e) => shared.record_teardown(&format!("join waiter spawn failed for {name}: {e}")),
     }
 }
 
@@ -2798,4 +2826,46 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn join_one_returns_for_clean_thread() {
+        let shared = Shared::new();
+        let h = std::thread::spawn(|| {});
+        join_one(h, &shared, "worker", Duration::from_secs(5));
+        assert_eq!(shared.teardown_error(), None);
+    }
+
+    #[test]
+    fn join_one_records_panic() {
+        let shared = Shared::new();
+        let h = std::thread::spawn(|| panic!("boom"));
+        join_one(h, &shared, "reader", Duration::from_secs(5));
+        assert_eq!(
+            shared.teardown_error().as_deref(),
+            Some("reader thread panicked")
+        );
+    }
+
+    /// F5: a thread stuck forever (kill-failure stand-in for a reader
+    /// blocked in `read()`) must not hang teardown: bounded wait, then
+    /// detach with a diagnostic.
+    #[test]
+    fn join_one_detaches_stuck_thread() {
+        let shared = Shared::new();
+        let h = std::thread::Builder::new()
+            .name("stuck-stand-in".to_string())
+            .spawn(std::thread::park)
+            .unwrap();
+        let start = Instant::now();
+        join_one(h, &shared, "reader", Duration::from_millis(50));
+        assert!(start.elapsed() < Duration::from_secs(5), "join hung");
+        let err = shared.teardown_error().expect("diagnostic recorded");
+        assert!(err.contains("did not exit"), "{err}");
+        assert!(err.contains("detached"), "{err}");
+    }
 }

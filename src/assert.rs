@@ -311,6 +311,8 @@ pub fn assert_screenshot_impl(name: &str, screen: &Screen, location: Location) {
 }
 
 fn write_evidence(name: &str, sample: &Sample, png: &[u8]) -> Result<(), AssertError> {
+    // F2: every path below joins `name` — reject escapes before any write.
+    crate::grouped::validate_name(name).map_err(|e| AssertError::Io(e.to_string()))?;
     let dir = evidence_dir();
     let io = |p: &Path, e: std::io::Error| AssertError::Io(format!("{}: {e}", p.display()));
     let base = dir.join(name);

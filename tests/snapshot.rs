@@ -445,3 +445,31 @@ fn script_embed_round_trips_hostile_symbols() {
         .unwrap();
     assert_eq!(back.digest(), frame.digest());
 }
+
+#[test]
+fn unsafe_names_rejected_before_any_write() {
+    let (dir, st) = tmp_store("badnames");
+    let frame = frame_with("x");
+    for bad in [
+        "../../evil",
+        "/abs/evil",
+        "a/../evil",
+        "",
+        "a\\evil",
+        "a//evil",
+        ".",
+        "a/./evil",
+    ] {
+        let err = st
+            .check(bad, &frame, &profile(), &VENDORED_FACES, 1.0)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("invalid snapshot name"), "{bad:?}: {err}");
+        let err = st.accept(bad).unwrap_err().to_string();
+        assert!(err.contains("invalid snapshot name"), "{bad:?}: {err}");
+    }
+    // Rejected before any write: no store dirs, no escape from the root.
+    assert!(!st.root().join("actual").exists());
+    assert!(!st.root().join("approved").exists());
+    assert!(!dir.path().join("evil").exists());
+}

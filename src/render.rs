@@ -1336,7 +1336,9 @@ pub fn render_frame_strict(frame: &Frame, rp: &RenderProfile<'_>) -> Result<Rend
 ///
 /// Redaction preserves grid geometry (widths/continuations), colors, and
 /// cursor position — layout evidence survives, content does not. Modifiers
-/// are cleared (nothing left to style). The output validates as a frame.
+/// are cleared (nothing left to style), and `provenance.argv` is cleared:
+/// launch arguments may carry secrets (defense-in-depth). The output
+/// validates as a frame.
 #[must_use]
 pub fn redact_frame(frame: &Frame) -> Frame {
     let mut out = frame.clone();
@@ -1351,6 +1353,7 @@ pub fn redact_frame(frame: &Frame) -> Frame {
         };
         c.mods = crate::frame::Mods::default();
     }
+    out.provenance.argv.clear();
     out
 }
 

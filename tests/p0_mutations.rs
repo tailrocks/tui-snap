@@ -9,7 +9,7 @@
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ImageEncoder, RgbImage, RgbaImage};
 use ratatui::widgets::Paragraph;
-use tuisnap::diff::compare_png_with_flags;
+use tuisnap::diff::compare_png;
 use tuisnap::grouped::GroupedStore;
 use tuisnap::snapshot::{Status, Store};
 use tuisnap::{Profile, Provenance, VENDORED_FACES};
@@ -106,8 +106,8 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
         "setup: decoded pixels must differ"
     );
 
-    // Guard: the real pixel gate (ansi_matched=false) catches the difference.
-    let honest = compare_png_with_flags(&png_a, &png_b, false).unwrap();
+    // Guard: the real pixel gate catches the difference.
+    let honest = compare_png(&png_a, &png_b).unwrap();
     assert!(honest.dims_equal);
     assert!(
         honest.score < 1.0,
@@ -115,13 +115,12 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
         honest.score
     );
 
-    // Gap (src/diff.rs `compare_png_with_flags`, `ansi_matched` branch):
-    // same cells+dims currently SKIP the pixel metric and report score 1.0.
-    let bypassed = compare_png_with_flags(&png_a, &png_b, true).unwrap();
+    // The strict gate must catch the same difference unconditionally:
+    // same cells+dims never SKIP the pixel metric (C01).
+    let bypassed = compare_png(&png_a, &png_b).unwrap();
     assert!(
         bypassed.score < 1.0,
-        "C01 gap: ansi_matched=true reports score={} for differing decoded pixels; \
-         strict check must fail",
+        "C01 gap: score={} for differing decoded pixels; strict check must fail",
         bypassed.score
     );
 }
@@ -139,7 +138,7 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     );
 
     // Re-encoding identical pixels must pass.
-    let re = compare_png_with_flags(&enc_default, &enc_best, false).unwrap();
+    let re = compare_png(&enc_default, &enc_best).unwrap();
     assert!(
         re.score >= 1.0,
         "re-encoded identical pixels must pass strict gate, got score={}",
@@ -151,7 +150,7 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     let p = *one.get_pixel(7, 7);
     one.put_pixel(7, 7, image::Rgb([p[0].wrapping_add(1), p[1], p[2]]));
     let enc_one = encode_rgb(&one, CompressionType::Default, FilterType::Adaptive);
-    let v_one = compare_png_with_flags(&enc_default, &enc_one, false).unwrap();
+    let v_one = compare_png(&enc_default, &enc_one).unwrap();
     assert!(
         v_one.score < 1.0,
         "one-channel pixel difference must fail strict gate, got score={}",
@@ -171,7 +170,7 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     }
     let png_opaque = encode_rgba(&opaque, CompressionType::Default, FilterType::Adaptive);
     let png_clear = encode_rgba(&clear, CompressionType::Default, FilterType::Adaptive);
-    let v_alpha = compare_png_with_flags(&png_opaque, &png_clear, false).unwrap();
+    let v_alpha = compare_png(&png_opaque, &png_clear).unwrap();
     assert!(
         v_alpha.score < 1.0,
         "C03 gap: fully-transparent vs fully-opaque (same RGB) scores {}; \
@@ -184,15 +183,15 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
 
 #[test]
 fn c04_similarity_score_must_not_establish_strict_equality() {
-    // Part 1: score >= 1.0 must imply decoded-pixel identity. The
-    // ansi_matched bypass breaks this: score 1.0 with differing pixels.
+    // Part 1: score >= 1.0 must imply decoded-pixel identity — never
+    // score 1.0 with differing pixels.
     let mut a = gradient_rgb();
     let mut b = gradient_rgb();
     b.put_pixel(0, 0, image::Rgb([1, 2, 3]));
     a.put_pixel(0, 0, image::Rgb([3, 2, 1]));
     let png_a = encode_rgb(&a, CompressionType::Default, FilterType::Adaptive);
     let png_b = encode_rgb(&b, CompressionType::Default, FilterType::Adaptive);
-    let v = compare_png_with_flags(&png_a, &png_b, true).unwrap();
+    let v = compare_png(&png_a, &png_b).unwrap();
     let decoded_equal = decode_rgb(&png_a).as_raw() == decode_rgb(&png_b).as_raw();
     assert!(
         v.score < 1.0 || decoded_equal,
@@ -482,46 +481,39 @@ fn c02_actual_evidence_comes_from_candidate_never_approved() {
     let mut renderer = profile().renderer(&VENDORED_FACES).unwrap();
     let fresh = renderer.render_artifacts(&frame, name).unwrap();
 
-    // Both tiers — the default check and the explicit tiered flag that used
-    // to skip rendering — must write fresh candidate renders as evidence.
-    // There is no skip-render path anymore, so there is no copied-bytes
-    // verdict to mark not-checked: every tier renders (C02).
-    for full_render in [false, true] {
-        let mut r = profile().renderer(&VENDORED_FACES).unwrap();
-        let opts = tuisnap::grouped::GroupedCheckOptions { full_render };
-        let outcome = gst
-            .check_with_options(&mut r, name, &frame, 1.0, &opts)
-            .unwrap();
-        assert_eq!(outcome.ansi_match, Some(true), "setup: cells unchanged");
-        assert_eq!(outcome.txt_match, Some(true), "setup: cells unchanged");
-        let actual_png = std::fs::read(&outcome.actual.png).unwrap();
-        let actual_html = std::fs::read(&outcome.actual.html).unwrap();
-        assert_eq!(
-            actual_png, fresh.png,
-            "C02 gap (full_render={full_render}): actual PNG must be a fresh \
-             render of the candidate frame, not approved bytes"
-        );
-        assert_eq!(
-            actual_html,
-            fresh.html.as_bytes(),
-            "C02 gap (full_render={full_render}): actual HTML must be a fresh \
-             render of the candidate frame, not approved bytes"
-        );
-        assert_ne!(
-            actual_png, reencoded,
-            "C02 gap: actual PNG copies sabotaged approved bytes"
-        );
-        assert_ne!(
-            actual_html, tampered_html,
-            "C02 gap: actual HTML copies sabotaged approved bytes"
-        );
-        // The render-level gate now sees the tamper (PNG pixels still match,
-        // so only HTML falls).
-        assert_eq!(
-            outcome.status(),
-            Status::PixelsDiffer,
-            "tampered approved HTML must fail the render-level gate"
-        );
-        assert_eq!(outcome.html_match, Some(false));
-    }
+    // The one check path must write fresh candidate renders as evidence:
+    // there is no skip-render path that could copy approved bytes (C02).
+    let mut r = profile().renderer(&VENDORED_FACES).unwrap();
+    let outcome = gst.check_with(&mut r, name, &frame, 1.0).unwrap();
+    assert_eq!(outcome.ansi_match, Some(true), "setup: cells unchanged");
+    assert_eq!(outcome.txt_match, Some(true), "setup: cells unchanged");
+    let actual_png = std::fs::read(&outcome.actual.png).unwrap();
+    let actual_html = std::fs::read(&outcome.actual.html).unwrap();
+    assert_eq!(
+        actual_png, fresh.png,
+        "C02 gap: actual PNG must be a fresh render of the candidate frame, \
+         not approved bytes"
+    );
+    assert_eq!(
+        actual_html,
+        fresh.html.as_bytes(),
+        "C02 gap: actual HTML must be a fresh render of the candidate frame, \
+         not approved bytes"
+    );
+    assert_ne!(
+        actual_png, reencoded,
+        "C02 gap: actual PNG copies sabotaged approved bytes"
+    );
+    assert_ne!(
+        actual_html, tampered_html,
+        "C02 gap: actual HTML copies sabotaged approved bytes"
+    );
+    // The render-level gate now sees the tamper (PNG pixels still match,
+    // so only HTML falls).
+    assert_eq!(
+        outcome.status(),
+        Status::PixelsDiffer,
+        "tampered approved HTML must fail the render-level gate"
+    );
+    assert_eq!(outcome.html_match, Some(false));
 }

@@ -758,11 +758,15 @@ fn redaction_destroys_content_and_validates() {
     let rp = RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder);
     let mut c = cell(0, 0, "S", 1);
     c.mods.hidden = true;
-    let frame = frame_from_leads(6, 2, vec![c, cell(1, 0, "東", 2), cont(2, 0)]);
+    let mut frame = frame_from_leads(6, 2, vec![c, cell(1, 0, "東", 2), cont(2, 0)]);
+    frame.provenance.argv = vec!["tuisnap".into(), "--password=s3cret".into()];
     let red = redact_frame(&frame);
     red.validate().unwrap();
     assert!(!red.to_json().contains('S'));
     assert!(!red.to_json().contains('東'));
+    // Defense-in-depth: launch arguments may carry secrets.
+    assert!(red.provenance.argv.is_empty());
+    assert!(!red.to_json().contains("s3cret"));
     // Geometry, colors, cursor survive; content and mods do not.
     assert_eq!((red.cols, red.rows), (frame.cols, frame.rows));
     assert_eq!(red.get(1, 0).unwrap().width, 2);

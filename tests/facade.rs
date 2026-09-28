@@ -501,3 +501,33 @@ fn generation_binding_roundtrip() {
         .unwrap();
     assert!(check_consistent(empty.path(), "c", "p").is_err());
 }
+
+// ---------------------------------------------------------------------------
+// F2: evidence names are validated before any write
+// ---------------------------------------------------------------------------
+
+#[test]
+fn screenshot_rejects_unsafe_names_before_evidence() {
+    let ws = workspace();
+    let screen = fixture();
+    for bad in [
+        "../../fac_evil",
+        "/tmp/fac_evil_abs",
+        "fac_nest/../fac_evil_dotdot",
+    ] {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tuisnap::assert_screenshot!(bad, &screen);
+        }));
+        let msg = panic_message(result.unwrap_err());
+        assert!(msg.contains("invalid snapshot name"), "{bad:?}: {msg}");
+    }
+    // Nothing written: no fac_evil evidence, no escape above the evidence root.
+    assert!(list_files(&ws.evidence).iter().all(|p| !p
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .contains("fac_evil")));
+    let mut top: Vec<PathBuf> = list_files(ws.evidence.parent().unwrap());
+    top.sort();
+    assert_eq!(top, vec![ws.evidence.clone(), ws.snaps.clone()]);
+}

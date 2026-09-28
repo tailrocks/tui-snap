@@ -19,9 +19,8 @@
 //!   range.
 //!
 //! Cell equality never implies pixel equality: there is no bypass from the
-//! cell gate into this engine (C01). [`compare_png_with_flags`] keeps its
-//! legacy signature for source compatibility, but the flag is ignored and
-//! the full decoded-pixel comparison always runs.
+//! cell gate into this engine (C01) — the full decoded-pixel comparison
+//! always runs.
 //!
 //! [`Frame::diff_cells`]: crate::frame::Frame::diff_cells
 
@@ -245,19 +244,6 @@ pub fn compare_png_with_alpha(
     })
 }
 
-/// Legacy signature, kept for source compatibility. The `ansi_matched` flag
-/// is IGNORED: same cells and dimensions never imply equal pixels (C01), so
-/// the full decoded-pixel comparison always runs. New code should call
-/// [`compare_png`] or [`compare_png_with_alpha`] directly, and
-/// [`perceptual_score`] for review diagnostics.
-pub fn compare_png_with_flags(
-    expected_png: &[u8],
-    actual_png: &[u8],
-    _ansi_matched: bool,
-) -> Result<PixelVerdict, DiffError> {
-    compare_png(expected_png, actual_png)
-}
-
 /// Diagnostic-only perceptual similarity in `[0.0, 1.0]` (hybrid
 /// structural+chroma over RGB). NEVER establishes strict equality — not
 /// even at 1.0: alpha-only differences are invisible to it, and rounding
@@ -335,18 +321,16 @@ mod tests {
     }
 
     #[test]
-    fn legacy_flag_cannot_skip_pixel_reads() {
+    fn differing_pixels_always_fail() {
         let mut a = gradient_rgba();
         let mut b = gradient_rgba();
         b.put_pixel(3, 5, image::Rgba([255, 0, 0, 255]));
         a.put_pixel(3, 5, image::Rgba([0, 0, 255, 255]));
         let pa = encode(&a, CompressionType::Default, FilterType::Adaptive);
         let pb = encode(&b, CompressionType::Default, FilterType::Adaptive);
-        for flag in [false, true] {
-            let v = compare_png_with_flags(&pa, &pb, flag).unwrap();
-            assert!(!v.pixels_equal, "flag={flag} must not bypass pixels");
-            assert!(v.score < 1.0, "flag={flag} score={}", v.score);
-        }
+        let v = compare_png(&pa, &pb).unwrap();
+        assert!(!v.pixels_equal);
+        assert!(v.score < 1.0, "score={}", v.score);
     }
 
     #[test]

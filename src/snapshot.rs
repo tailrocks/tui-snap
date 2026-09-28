@@ -387,6 +387,8 @@ impl Store {
         actual: &Frame,
         pixel_threshold: f64,
     ) -> Result<CompareOutcome, SnapshotError> {
+        // F1: every path below joins `name` — reject escapes before any write.
+        crate::grouped::validate_name(name)?;
         // C04: invalid tolerances are rejected, never silently applied — a
         // NaN threshold would make every `score < threshold` false and fake
         // a match. The strict gate itself takes no threshold; review
@@ -536,9 +538,7 @@ impl Store {
             }
         };
         outcome.expected_png = Some(approved_png_path);
-        let cells_match = matches!(outcome.status, Status::MissingApproval);
-        let verdict =
-            diff::compare_png_with_flags(&approved_png_bytes, actual_png_bytes, cells_match)?;
+        let verdict = diff::compare_png(&approved_png_bytes, actual_png_bytes)?;
         outcome.expected_png_bytes = Some(approved_png_bytes);
         if !verdict.dims_equal {
             outcome.status = Status::DimensionMismatch;
@@ -659,6 +659,8 @@ impl Store {
     /// Explicitly approve one snapshot: actual → approved (atomic).
     /// There is deliberately no environment-variable auto-accept.
     pub fn accept(&self, name: &str) -> Result<(), SnapshotError> {
+        // F1: every path below joins `name` — reject escapes before any copy.
+        crate::grouped::validate_name(name)?;
         for (src, dst) in [
             (self.actual_frame(name), self.approved_frame(name)),
             (self.actual_png(name), self.approved_png(name)),

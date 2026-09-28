@@ -3,7 +3,7 @@
 //! report, name validation, determinism.
 
 use ratatui::widgets::Paragraph;
-use tuisnap::grouped::{validate_name, GroupedCheckOptions, GroupedStore};
+use tuisnap::grouped::{validate_name, GroupedStore};
 use tuisnap::snapshot::Status;
 use tuisnap::{Profile, Provenance, VENDORED_FACES};
 
@@ -342,10 +342,7 @@ fn png_pixel_gate_honors_threshold() {
     std::fs::write(st.approved_root().join(format!("{name}.png")), &other_png).unwrap();
 
     let mut renderer = profile().renderer(&VENDORED_FACES).unwrap();
-    let opts = GroupedCheckOptions { full_render: true };
-    let strict = st
-        .check_with_options(&mut renderer, name, &frame, 1.0, &opts)
-        .unwrap();
+    let strict = st.check_with(&mut renderer, name, &frame, 1.0).unwrap();
     assert_eq!(strict.status(), Status::PixelsDiffer);
     assert_eq!(strict.ansi_match, Some(true));
     assert_eq!(strict.html_match, Some(true));
@@ -354,9 +351,7 @@ fn png_pixel_gate_honors_threshold() {
     assert!(strict.outcome.diff_png.as_ref().unwrap().exists());
 
     // Same comparison passes under a threshold at/below the score.
-    let relaxed = st
-        .check_with_options(&mut renderer, name, &frame, 0.0, &opts)
-        .unwrap();
+    let relaxed = st.check_with(&mut renderer, name, &frame, 0.0).unwrap();
     assert_eq!(relaxed.status(), Status::Matched);
     assert_eq!(relaxed.outcome.pixel_score, Some(score));
 }
@@ -390,13 +385,7 @@ fn corrupt_approved_png_is_an_explicit_error() {
     std::fs::write(st.approved_root().join(format!("{name}.png")), b"not a png").unwrap();
     let mut renderer = profile().renderer(&VENDORED_FACES).unwrap();
     let err = st
-        .check_with_options(
-            &mut renderer,
-            name,
-            &frame_with("x"),
-            1.0,
-            &GroupedCheckOptions { full_render: true },
-        )
+        .check_with(&mut renderer, name, &frame_with("x"), 1.0)
         .unwrap_err()
         .to_string();
     assert!(err.contains("cannot decode expected PNG"), "{err}");
