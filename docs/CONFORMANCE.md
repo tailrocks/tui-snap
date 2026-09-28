@@ -9,7 +9,7 @@ rustc 1.98.1, nextest 0.9.143).
 | Platform | Status | Evidence |
 |----------|--------|----------|
 | macOS (aarch64) | TESTED here | Full `cargo test` green (129 s wall); full `cargo nextest run` 379/379 green (43 s). Details in §3. |
-| Linux (x86_64) | CI-ONLY, unexecuted locally | No local Linux run in this session. CI lanes (`ci-pr.yml`, `ci-main.yml`, `ci-unit-rust.yml`, `nightly.yml`) all run `ubuntu-24.04`, unit `platform = "linux-x64"` (`.github/ci/project.toml`). Linux green must come from CI, not this file. |
+| Linux (x86_64) | CI-ONLY, currently RED — no green run exists | No local Linux run in this session. CI lanes run `ubuntu-24.04` (`platform = "linux-x64"` in `.github/ci/project.toml`). As of 2026-09-28 ~19:55 UTC every completed CI/PR run on this branch FAILS before tests go green (Rust lane: `Formatting check`; Policy: `generated-tree`). Per-lane evidence with run URLs in §5. |
 | Windows (ConPTY) | NOT RUN anywhere; compiles only | `cargo check --target x86_64-pc-windows-gnu --tests`: **0 errors** (lib + all test targets). `portable-pty 0.9.0` ships a ConPTY backend (`NativePtySystem = win::conpty::ConPtySystem`, Win10 1809+), but no Windows test process has ever executed here: no local run, and **no Windows CI lane exists** (every workflow is `runs-on: ubuntu-24.04`). Windows is never green until a CI lane runs it. |
 
 ### Windows compile-check notes (honest deltas)
@@ -109,7 +109,8 @@ not a verdict — leak triage belongs to the owning suites, not this file.
 
 ## 4. Open gaps
 
-- Linux: no local execution; covered only by the ubuntu-24.04 CI lanes.
+- Linux: no local execution; ubuntu-24.04 CI lanes exist but are RED
+  (see §5) — no green Linux run on this branch as of 2026-09-28.
 - Windows: compiles, never runs; no CI lane. ConPTY behavior,
   signal/exit-code mapping, and the `Containment::Unsupported`
   guardian path are all unverified at runtime.
@@ -118,3 +119,53 @@ not a verdict — leak triage belongs to the owning suites, not this file.
 - Leaky-test flags (§3 note) are untriaged.
 - All timings are single samples from a concurrently-edited tree;
   re-run on a quiet tree for quotable numbers.
+
+## 5. Linux CI evidence (A12)
+
+Checked 2026-09-28 ~19:55 UTC via `gh` (authenticated) against PR #6,
+branch `redesign/rust-first-testing-platform`, repo
+`tailrocks/tui-snap`. All lanes run on `ubuntu-24.04` (Linux x86_64).
+Note: origin advanced during the check — local `1503a60` was head at
+check start; `aa74aa7` ("feat(m2): add .config/nextest.toml") landed
+after and carries the newest run. Verdict covers both.
+
+### Per-lane status at newest completed run (head `aa74aa7`)
+
+Run: `CI / PR`, <https://github.com/tailrocks/tui-snap/actions/runs/36474976123>
+(conclusion: `failure`).
+
+| Lane (job) | Status | Detail |
+|------------|--------|--------|
+| Control / Planning | PASS | `completed/success` |
+| Rust · tuisnap · github-hosted | FAIL | `Formatting check` step fails: `Diff in src/grouped.rs:236`. Lint gate fails before any test result. |
+| ci-required | FAIL | Mirror of the Rust-lane failure (`Score expected work against reported results`) |
+| Control / Required | FAIL | Mirror (`Mirror CI / Required`) |
+| Policy (`Velnor workflow policy`) | FAIL | `generated-tree`: `.github/ci/project.toml`, `ci-pr.yml`, `ci-main.yml`, generator state differ from pinned render `be61acb`. Run: <https://github.com/tailrocks/tui-snap/actions/runs/36474894521> (head `1503a60`; same failure on every head) |
+| DCO | PASS | `completed/success` |
+
+### History: no green run on this branch
+
+Every completed `CI / PR` run fails in the Rust lane (fmt gate, one
+head at clippy); the Linux test suite has never executed to green:
+
+| Run | Head | Rust-lane failing step |
+|-----|------|------------------------|
+| <https://github.com/tailrocks/tui-snap/actions/runs/36474976123> | `aa74aa7` | Formatting check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36474650633> | `d3e3cb6` | Formatting check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36473000824> | `c991d23` | Formatting check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36472279771> | `35ea4d7` | Formatting check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36471470512> | `14f62de` | Formatting check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36470592834> | `67213c3` | Clippy check |
+| <https://github.com/tailrocks/tui-snap/actions/runs/36469376985> | `00635e2` | Formatting check |
+
+(Plus cancelled/superseded runs, e.g.
+`36474898948` @ `1503a60`, killed by `cancel-in-progress` when a newer
+run queued.)
+
+### Gap note
+
+Linux A12 conformance is UNPROVEN: the only Linux executor is CI and
+CI is red. To close: `cargo fmt` the tree (starting at
+`src/grouped.rs:236`), fix the Policy `generated-tree` drift or
+re-pin the generator, then re-run and record the first green
+`CI / PR` run URL here.

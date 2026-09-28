@@ -51,6 +51,27 @@ see caveat).
 | Full debug target dir, true-cold build (`/tmp/perf-truecold/debug`) | 1.4 G |
 | nextest archive (`tests.tar.zst`, 28 binaries + std) | 270 M |
 
+## Peak RSS (memory)
+
+Single-sample `/usr/bin/time -l` "maximum resident set size" (bytes,
+macOS reports the waited-for command), same machine/toolchain/date as
+above (2026-09-28 UTC, branch `redesign/rust-first-testing-platform`).
+Debug builds (`dev` profile, unoptimized + debuginfo). Test binaries
+run binary-direct with `<name> --exact`, same as row 7. Raw `time -l`
+logs lived in `/tmp` scratch and were not committed.
+
+| # | Measurement | Peak RSS |
+|---|-------------|----------|
+| M1 | Pure-view snapshot test, no PTY (`snapshot-* accept_then_match_round_trip --exact`, 1 passed; accept + match incl. PNG render/compare) | 349,618,176 B (~333 MiB) |
+| M2 | Piped CLI run (`tuisnap capture --out /tmp/perf-mem-cap -- echo hello`, child `Exit(0)`) | 6,488,064 B (~6.2 MiB) |
+| M3 | One PTY session test (`tui-* chord_press_sends_key --exact`, 1 passed) | 4,259,840 B (~4.1 MiB) |
+| M4 | One large-screen render (`tuisnap render --input <synthetic 200x60 frame.json, 12000 cells> --format png`; mixed latin/CJK/braille/box/greek + bold/italic mods, vendored fonts; output 4048x2568 PNG, 5.6 MiB, + fidelity sidecar) | 398,721,024 B (~380 MiB) |
+
+Caveats: one sample each — re-run before quoting. M2/M3 cover the
+parent/harness process; short-lived children (`echo`, PTY shell) exit
+before peak matters. M1/M4 peaks are font rasterization + PNG
+encode of debug builds, not a release profile.
+
 ## Fast-lane assessment vs the 120 s target
 
 - Full `cargo test`: **129 s — misses** the 120 s CI fast-lane target
