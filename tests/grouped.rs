@@ -134,6 +134,110 @@ fn ansi_and_txt_and_html_are_byte_deterministic() {
 }
 
 #[test]
+fn check_seals_manifest_and_verdict_that_report_reuses_verbatim() {
+    let name = "sealed/one";
+    let (_dir, st) = tmp_store("sealed");
+    let frame = frame_with("sealed verdict");
+    st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
+        .unwrap();
+    st.accept(name).unwrap();
+    let checked = st
+        .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
+        .unwrap();
+    assert_eq!(checked.status(), Status::Matched);
+
+    // C08-grouped: candidate seal written after all candidate writes.
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.manifest.json"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["complete"], true);
+    assert_eq!(manifest["name"], name);
+    assert!(manifest["profile"].is_string());
+    for key in [
+        "ansi_sha256",
+        "txt_sha256",
+        "png_sha256",
+        "html_sha256",
+        "frame_sha256",
+    ] {
+        assert_eq!(manifest[key].as_str().unwrap().len(), 64, "{key}");
+    }
+    // C05: the ONE persisted verdict.
+    let verdict: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(verdict["status"], "matched");
+    assert_eq!(verdict["pixel_threshold"], 1.0);
+    assert!(verdict["checks_performed"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::Value::String("png-pixel-gate".into())));
+
+    // C05: report on the same inputs reuses the verdict — same status.
+    let report = st
+        .report(&profile(), &VENDORED_FACES, 1.0, "sealed suite")
+        .unwrap();
+    assert_eq!(report.outcomes.len(), 1);
+    assert_eq!(report.outcomes[0].status, checked.status());
+    assert_eq!(report.outcomes[0].pixel_score, Some(1.0));
+}
+
+#[test]
+fn stale_verdict_after_accept_recomputes_instead_of_reuse() {
+    let name = "stale/one";
+    let (_dir, st) = tmp_store("stale");
+    let frame = frame_with("stale verdict");
+    let first = st
+        .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
+        .unwrap();
+    assert_eq!(first.status(), Status::MissingApproval);
+    // Accept WITHOUT re-checking: the sealed MissingApproval verdict is now
+    // stale (the approved side appeared). Report must recompute via check —
+    // never silently reuse the stale verdict.
+    st.accept(name).unwrap();
+    let report = st
+        .report(&profile(), &VENDORED_FACES, 1.0, "stale suite")
+        .unwrap();
+    assert_eq!(report.outcomes.len(), 1);
+    assert_eq!(report.outcomes[0].status, Status::Matched);
+    // The recompute re-sealed a fresh verdict for the next report.
+    let verdict: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(verdict["status"], "matched");
+}
+
+#[test]
+fn interrupted_candidate_reports_missing_approval_never_pixel_verdict() {
+    let name = "broken/one";
+    let (_dir, st) = tmp_store("broken");
+    let frame = frame_with("interrupted");
+    st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
+        .unwrap();
+    st.accept(name).unwrap();
+    let matched = st
+        .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
+        .unwrap();
+    assert_eq!(matched.status(), Status::Matched);
+
+    // Simulate interruption: frame survived, PNG write lost.
+    std::fs::remove_file(&matched.actual.png).unwrap();
+    let report = st
+        .report(&profile(), &VENDORED_FACES, 1.0, "broken suite")
+        .unwrap();
+    assert_eq!(report.outcomes.len(), 1);
+    assert_eq!(report.outcomes[0].status, Status::MissingApproval);
+    assert!(
+        report.outcomes[0].note.contains("incomplete"),
+        "{}",
+        report.outcomes[0].note
+    );
+}
+
+#[test]
 fn name_validation_rejects_unsafe_names() {
     for bad in [
         "",

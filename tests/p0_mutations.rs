@@ -274,7 +274,6 @@ fn c06_missing_approved_png_must_fail_not_regenerate_in_memory() {
 // ----------------------- C05: report/test verdict unification
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c05_report_verdict_must_equal_test_verdict_on_same_inputs() {
     // Gap: `GroupedStore::report_with` IGNORES pixel_threshold
     // (`_pixel_threshold`, src/grouped.rs) and byte-compares compressed PNGs
@@ -373,7 +372,6 @@ fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
 // ------ C08: transactional candidate generation / consistent approval
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c08_interrupted_candidate_must_report_incomplete_not_match() {
     // Case A (classic store): report RE-RENDERS from the actual frame
     // (`Store::report_with` → `check_with`), silently healing an interrupted
