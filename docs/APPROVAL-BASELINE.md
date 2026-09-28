@@ -250,6 +250,59 @@ grep -q 'e1d177a40af910100eceb0e825331e55f0cfd005bc0f26087fd4e58fbe60e6c5' src/p
 grep -h font_sha256 tests/fixtures/render-baseline/*.fidelity.json | sort -u
 ```
 
+### Amendment 2026-09-28: NEW approved PNGs (C06 fail-closed fix)
+
+The 24 `tests/visual/approved/*.png` files below are NEW approvals,
+committed so fresh checkouts pass the C06 fail-closed gate (the gate reads
+approved PNG bytes from disk and fails when they are missing; see
+`src/snapshot.rs` `check_with`). They are NOT covered by the original C09
+baseline above. The original C09 baseline is unchanged: all 24
+`*.frame.json`, all 8 render-baseline files, and all 12 `assets/fonts/*`
+hashes verified UNCHANGED at the time these PNGs were pinned.
+
+Genuineness proof: `cargo test --test visual` PASSES with these PNGs on
+disk, i.e. each PNG is decoded-pixel-equal to a fresh render of its
+committed `*.frame.json` — the PNGs approve the committed frames, not
+drift. Cross-check: the 4 names shared with `tests/fixtures/render-baseline`
+(`dialog-light-80x24`, `home-dark-80x24`, `home-light-160x50`,
+`table-dark-120x40`) are byte-identical to their render-baseline
+counterparts (same hashes).
+
+Approved fidelity sidecars (`tests/visual/approved/*.png.fidelity.json`)
+remain gitignored regenerable output: the gate never reads them (only
+actual sidecars are read, by `candidate_problem`). They are not hashed
+here.
+
+```
+07705046ef70eb3c03407ea486baa4d6874bdc867d913d9c4ae50c3f0bf8f5ae  tests/visual/approved/dialog-dark-120x40.png
+1dc63e9c913c1e15647510c2804aa8375ac6ffacd82656a32b8c32c29c06cf64  tests/visual/approved/dialog-dark-160x50.png
+53011e9863d28943ebf875b9dbf1aa65d99522b6f1d42b73aff31bbb7f2ae17b  tests/visual/approved/dialog-dark-80x24.png
+1d5927c7f405b2d0d27105a98757ae767f5223d8786356a33d86c1ddb45e2f6b  tests/visual/approved/dialog-light-120x40.png
+3f7b027318ee18696c939db89406286348181f1a7f2a735c779415101cdd4b01  tests/visual/approved/dialog-light-160x50.png
+1537d7e4b1ce6baf819c92d70b48098cd83498aac841bb68c9322c8b03b44654  tests/visual/approved/dialog-light-80x24.png
+08e4e3ffc65bd2285f64451655153f4d3c426deeb3b28eef0f4fd0550c07dbb1  tests/visual/approved/glyphs-dark-120x40.png
+9a5aae52d0a3b80c8e7b6070b7fbf60d00fc5c283d37d0d3990b65bebe29b652  tests/visual/approved/glyphs-dark-160x50.png
+dab0dd8348d566fa8b2c7499db9381864242514a11c77b398afa3e71a0b703c2  tests/visual/approved/glyphs-dark-80x24.png
+425c1169d76ee2a072c303d04dac6f3b31097a43d751cb44354feb2a10590710  tests/visual/approved/glyphs-light-120x40.png
+e1067aa69378634c829a3dcaed6d4231255441137d819ecbcce6e2533c4f0673  tests/visual/approved/glyphs-light-160x50.png
+5f59806586ebc3af6df49834bb7ca60c0a30e80607b19559deccd9639ed1208d  tests/visual/approved/glyphs-light-80x24.png
+1143c5dd76050722f6226fa2684c1deb9e13518ea9e44d352dd29c050e2b0375  tests/visual/approved/home-dark-120x40.png
+64a31007b1e254f826e19eab3a1477319bfa87a788eda139dad95f924e917725  tests/visual/approved/home-dark-160x50.png
+e668a6aa65bd015daddbc3404156384aef1be7ab333e0f77fa7fe3d3c2fc0e39  tests/visual/approved/home-dark-80x24.png
+1f0b7b3cdc1b17ae4620785541bc0c6dc6d8e6f496c87ae0cc972203a63b7931  tests/visual/approved/home-light-120x40.png
+1b00f13757f442f11fe26fe3c4b85636d841f038bfadea9175d336faf2d70fb5  tests/visual/approved/home-light-160x50.png
+7d0f9aabb7614becfb8ba1a02c4a9042dbfa64990bc500ba979d5b9114ae2285  tests/visual/approved/home-light-80x24.png
+ee8b2b25d2586088a6c0575cd779f6acb8d7333754868fc72705ffe0d58a6b79  tests/visual/approved/table-dark-120x40.png
+1b27b10c625dc7fb56cf11b0f4850d958c1930562f8de16377c1cac6055fc2f4  tests/visual/approved/table-dark-160x50.png
+3fea8ffa00c6bbc4c4b1f5addf342f6e5d822e85d3c782d6e12c2e7615111255  tests/visual/approved/table-dark-80x24.png
+7581ba1ad5323128810e2707c618e6ad6ad363b89bb722669737616510ba840b  tests/visual/approved/table-light-120x40.png
+c365942c1d5174d677f2eaaef0685f9d43cc94a4d46c41de64e5e18b09ce30c4  tests/visual/approved/table-light-160x50.png
+90142e5ca2e60a5b1ba911637413cc67cde5cc75f4ce4e605a697ac68a9ab08f  tests/visual/approved/table-light-80x24.png
+```
+
+Re-derive with: `shasum -a 256 tests/visual/approved/*.png | sort -k2`
+(on Linux use `sha256sum`).
+
 ## Anomalies
 
 None. All three roots exist; all 35 files + 12 font assets read
