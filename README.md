@@ -130,6 +130,7 @@ tuisnap inspect --dir shots/home                  # offline view; never executes
 tuisnap render --input shot.frame.json --format png --format svg --out shot
 tuisnap diff --expected a.png --actual b.png      # exit 4 on mismatch
 tuisnap review --dir verdicts                     # list verdicts; exit 4 on any fail
+tuisnap accept home --store shots/home            # accept one reviewed candidate (explicit)
 tuisnap report --dir verdicts --out report.html   # standalone HTML report
 tuisnap import --dir frozen                       # read-only frozen-tree import
 tuisnap session start --name demo -- ./my-tui     # + stop / list / prune / attach
