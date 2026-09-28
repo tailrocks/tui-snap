@@ -17,6 +17,13 @@
 //! );
 //! assert!(frame.text().contains("hi"));
 //! ```
+//!
+//! The [`Screen`]-based API below ([`render_screen`], [`screen_from_buffer`],
+//! [`screen_from_test_backend`], [`widget_screen`], [`stateful_screen`]) is the
+//! M1 path: production draw closures and real `Widget`/`StatefulWidget`
+//! renders convert into validated [`Screen`]s with buffer origins and
+//! post-draw cursor state preserved, and an explicit [`EdgePolicy`] for
+//! wide glyphs at row ends (backlog M05, M06, M03-partial, M07).
 
 use crate::frame::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance};
 use ratatui::backend::Backend;
@@ -207,4 +214,307 @@ pub fn draw_frame(
     let mut term = ratatui::Terminal::new(backend).expect("test terminal");
     term.draw(draw).expect("draw");
     capture(&mut term, provenance)
+}
+
+// ---------------------------------------------------------------------------
+// M1 Screen adapters (backlog M05, M06, M03-partial, M07 edge policy).
+// ---------------------------------------------------------------------------
+
+use crate::screen::{Screen, ScreenError};
+use ratatui::backend::TestBackend;
+use ratatui::widgets::{StatefulWidget, Widget};
+
+/// Policy for a width-2 grapheme landing in the last column of a row, where
+/// no room remains for its continuation cell (M07: never cut silently).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgePolicy {
+    /// Replace the glyph with [`REPLACEMENT`] (U+FFFD, width 1) and record
+    /// each clipped glyph in [`ScreenCapture::clipped`] plus a note. The
+    /// screen stays valid and the substitution is visible in evidence.
+    #[default]
+    ClipWithReplacement,
+    /// Fail with a [`ScreenError`] naming the glyph and its position.
+    Error,
+}
+
+/// Record of one wide glyph clipped at a row end (grid-local coordinates,
+/// original symbol preserved for evidence).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClippedCell {
+    pub x: u16,
+    pub y: u16,
+    pub symbol: String,
+}
+
+/// Substitute emitted by [`EdgePolicy::ClipWithReplacement`]: U+FFFD with
+/// display width 1, keeping grid geometry valid.
+pub const REPLACEMENT: &str = "�";
+
+/// A validated [`Screen`] plus the record of how it was produced.
+///
+/// `Screen` itself carries no provenance, so the edge policy applied, every
+/// clipped glyph, and any cursor adjustments are recorded here instead of
+/// being applied silently (M07/M08).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScreenCapture {
+    /// Validated grid; construction fails rather than producing invalid data.
+    pub screen: Screen,
+    /// Edge policy this capture was produced under.
+    pub policy: EdgePolicy,
+    /// Wide glyphs replaced at row ends (empty unless clipped).
+    pub clipped: Vec<ClippedCell>,
+    /// Human-readable notes: clip summaries, cursor adjustments.
+    pub notes: Vec<String>,
+}
+
+impl ScreenCapture {
+    #[must_use]
+    pub fn screen(&self) -> &Screen {
+        &self.screen
+    }
+
+    #[must_use]
+    pub fn into_screen(self) -> Screen {
+        self.screen
+    }
+
+    #[must_use]
+    pub fn has_clips(&self) -> bool {
+        !self.clipped.is_empty()
+    }
+}
+
+fn convert_buffer(
+    buf: &Buffer,
+    cursor: Option<(Position, bool)>,
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError> {
+    let area = buf.area;
+    let (cols, rows) = (area.width, area.height);
+    let (ox, oy) = (i32::from(area.x), i32::from(area.y));
+    let mut cells = Vec::with_capacity(cols as usize * rows as usize);
+    let mut clipped = Vec::new();
+    let mut notes = Vec::new();
+    let mut gy: u16 = 0;
+    while gy < rows {
+        let mut gx: u16 = 0;
+        while gx < cols {
+            // Buffer coordinates are global (offset by the area origin).
+            let ax = u16::try_from(u32::from(area.x) + u32::from(gx))
+                .map_err(|_| ScreenError(format!("buffer x overflow at grid ({gx},{gy})")))?;
+            let ay = u16::try_from(u32::from(area.y) + u32::from(gy))
+                .map_err(|_| ScreenError(format!("buffer y overflow at grid ({gx},{gy})")))?;
+            let rc = buf.cell((ax, ay)).ok_or_else(|| {
+                ScreenError(format!("buffer missing cell at global ({ax},{ay})"))
+            })?;
+            let symbol = rc.symbol().to_string();
+            let width = UnicodeWidthStr::width(symbol.as_str()).min(2).max(1) as u8;
+            if width == 2 && gx + 1 >= cols {
+                match policy {
+                    EdgePolicy::Error => {
+                        return Err(ScreenError(format!(
+                            "wide grapheme {symbol:?} at row end ({gx},{gy}): \
+                             no room for its continuation (EdgePolicy::Error)"
+                        )));
+                    }
+                    EdgePolicy::ClipWithReplacement => {
+                        cells.push(Cell {
+                            x: gx,
+                            y: gy,
+                            symbol: REPLACEMENT.to_string(),
+                            width: 1,
+                            continuation: false,
+                            fg: convert_color(rc.fg),
+                            bg: convert_color(rc.bg),
+                            mods: convert_mods(rc.modifier),
+                        });
+                        clipped.push(ClippedCell {
+                            x: gx,
+                            y: gy,
+                            symbol,
+                        });
+                        gx += 1;
+                        continue;
+                    }
+                }
+            }
+            let (fg, bg, mods) = (
+                convert_color(rc.fg),
+                convert_color(rc.bg),
+                convert_mods(rc.modifier),
+            );
+            cells.push(Cell {
+                x: gx,
+                y: gy,
+                symbol,
+                width,
+                continuation: false,
+                fg,
+                bg,
+                mods,
+            });
+            if width == 2 {
+                cells.push(Cell {
+                    x: gx + 1,
+                    y: gy,
+                    symbol: String::new(),
+                    width: 0,
+                    continuation: true,
+                    fg,
+                    bg,
+                    mods,
+                });
+                gx += 2;
+            } else {
+                gx += 1;
+            }
+        }
+        gy += 1;
+    }
+    if !clipped.is_empty() {
+        notes.push(format!(
+            "EdgePolicy::ClipWithReplacement replaced {} wide glyph(s) at row ends",
+            clipped.len()
+        ));
+    }
+    // Cursor positions are global; translate to grid-local. A cursor outside
+    // the buffer area cannot be represented on the grid, so it is captured
+    // hidden with a note rather than failing the whole capture.
+    let mut cur = Cursor::default();
+    if let Some((pos, visible)) = cursor {
+        let lx = i32::from(pos.x) - ox;
+        let ly = i32::from(pos.y) - oy;
+        if visible && lx >= 0 && ly >= 0 && lx < i32::from(cols) && ly < i32::from(rows) {
+            cur = Cursor {
+                x: lx as u16,
+                y: ly as u16,
+                visible: true,
+                style: CursorStyle::Block,
+                blinking: false,
+            };
+        } else if visible {
+            notes.push(format!(
+                "cursor at global ({},{}) is outside buffer area {area:?}: captured hidden",
+                pos.x, pos.y
+            ));
+        }
+    }
+    let screen = Screen::validate(cols, rows, ox, oy, cells, cur)?;
+    Ok(ScreenCapture {
+        screen,
+        policy,
+        clipped,
+        notes,
+    })
+}
+
+/// Convert a buffer into a validated [`Screen`] (M05 buffer adapter).
+///
+/// Dimensions and origin come from `buf.area`: a nonzero area origin is
+/// preserved as the screen origin, and cells are re-indexed to grid-local
+/// coordinates. `cursor` is `(global position, visible)`; it is translated
+/// to grid-local, and a visible cursor outside the area is captured hidden
+/// with a note.
+///
+/// Style coverage (M03-partial):
+///
+/// | Ratatui source | Canonical `Cell`/`Mods` | Status |
+/// |---|---|---|
+/// | symbol, display width, wide continuations | `symbol`, `width`, `continuation` | preserved |
+/// | fg/bg incl Reset/indexed/RGB | `fg`, `bg` | preserved |
+/// | BOLD/DIM/ITALIC/UNDERLINED/CROSSED_OUT/REVERSED | `mods` flags | preserved |
+/// | HIDDEN | `mods.hidden` | preserved (intent; renderers omit the glyph) |
+/// | SLOW_BLINK/RAPID_BLINK | `mods.blink` | preserved (intent; stills freeze phase) |
+/// | underline color | — | NOT preserved: `underline-color` cargo feature is off in this build and the canonical cell has no field |
+/// | underline style | — | NOT exposed by ratatui 0.30 (no Cell/Style API) |
+/// | hyperlinks (OSC 8) | — | NOT exposed: `Buffer`/`Cell` store no link targets |
+/// | title, bells, modes, palette, clipboard, graphics | — | NOT exposed by `Buffer`/`TestBackend` |
+/// | cursor position + visibility | `Cursor` x/y/visible | preserved (post-draw) |
+/// | cursor style / blink | `Block`, non-blinking | NOT exposed by `TestBackend`; defaults recorded |
+pub fn screen_from_buffer(
+    buf: &Buffer,
+    cursor: Option<(Position, bool)>,
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError> {
+    convert_buffer(buf, cursor, policy)
+}
+
+/// Capture the completed state of a `TestBackend` terminal: buffer + cursor
+/// (M05). Reads post-draw cursor position/visibility so cursor-only changes
+/// are gated; buffer origin is preserved like [`screen_from_buffer`].
+pub fn screen_from_test_backend(
+    term: &mut ratatui::Terminal<TestBackend>,
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError> {
+    let backend = term.backend();
+    let cursor = Some((backend.cursor_position(), backend.cursor_visible()));
+    let buf = backend.buffer().clone();
+    convert_buffer(&buf, cursor, policy)
+}
+
+/// Render a production draw closure into a validated [`Screen`] (M05/M06).
+///
+/// The closure is the real render path (`FnOnce(&mut ratatui::Frame)`):
+/// layouts, stateful widgets, and `set_cursor_position` all work. Cursor
+/// state is captured post-draw, so explicit cursor placement survives.
+pub fn render_screen(
+    cols: u16,
+    rows: u16,
+    draw: impl FnOnce(&mut ratatui::Frame),
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError> {
+    let backend = TestBackend::new(cols, rows);
+    let mut term =
+        ratatui::Terminal::new(backend).map_err(|e| ScreenError(format!("test terminal: {e}")))?;
+    term.draw(draw)
+        .map_err(|e| ScreenError(format!("draw: {e}")))?;
+    screen_from_test_backend(&mut term, policy)
+}
+
+/// Render any production `Widget` fullscreen into a [`ScreenCapture`] (M05).
+///
+/// Cursor state is whatever the draw leaves behind (`TestBackend` defaults
+/// to hidden); nothing is forced, so the capture reflects production.
+pub fn widget_screen<W>(
+    widget: W,
+    cols: u16,
+    rows: u16,
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError>
+where
+    W: Widget,
+{
+    render_screen(
+        cols,
+        rows,
+        |f| {
+            f.render_widget(widget, f.area());
+        },
+        policy,
+    )
+}
+
+/// Render a production `StatefulWidget` with caller-owned state (M06).
+///
+/// No artificial testing trait: the bound is the real
+/// `ratatui::widgets::StatefulWidget`, so actual production render functions
+/// work unchanged.
+pub fn stateful_screen<W>(
+    widget: W,
+    state: &mut W::State,
+    cols: u16,
+    rows: u16,
+    policy: EdgePolicy,
+) -> Result<ScreenCapture, ScreenError>
+where
+    W: StatefulWidget,
+{
+    render_screen(
+        cols,
+        rows,
+        |f| {
+            f.render_stateful_widget(widget, f.area(), state);
+        },
+        policy,
+    )
 }
