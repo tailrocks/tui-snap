@@ -34,11 +34,11 @@ No benchmark, cross-platform qualification, or complete competitor corpus was ru
 The current workspace is `tuisnap` 0.2.0. Its shipped surface includes:
 
 - a direct Ratatui capture path that renders production view closures without a child process;
-- an optional PTY path for real executables, keyboard/mouse/resize input, waits, and terminal-state capture;
+- an optional PTY path for real executables, keyboard/mouse/resize input, waits, and screen/cursor/style capture;
 - one canonical frame schema shared by capture and rendering;
 - deterministic, pinned-font PNG output with fallback-glyph diagnostics;
 - ANSI, TXT, JSON, SVG, HTML, and PNG export paths;
-- fail-closed approval with explicit `accept`, rather than automatic `BLESS` updates;
+- explicit `accept` rather than automatic `BLESS` updates; grouped references fail closed, but the classic missing-PNG path can regenerate an approved image in memory and report a match, a P0 correctness gap;
 - classic frame stores and a grouped four-artifact store;
 - pure view builds without the PTY feature.
 
@@ -66,7 +66,7 @@ The closest building blocks are complementary. The redesign should compose the u
 
 ### Ratatui `TestBackend` plus Insta
 
-Ratatui's official testing recipe renders a widget or application into `TestBackend` and passes the backend to Insta. It is the fastest baseline for layout and widget refactors. The recipe also states its boundary: `TestBackend` does not cover the event loop, key handling, terminal setup/teardown, or exit codes. The recipe's snapshot example is a buffer representation and currently documents that color assertions are not supported by that recipe.
+Ratatui's official testing recipe renders a widget or application into `TestBackend` and passes the backend to Insta. It is the fastest baseline for layout and widget refactors. This in-process buffer test does not exercise the application's event loop, key handling, terminal setup/teardown, process behavior, or exit codes. Its example snapshots the backend's debug representation; teams with explicit color/style contracts should add direct cell-style assertions or a separate visual-rendering check.
 
 Use this pattern in the first view-test milestone. The redesign should make the production draw closure and validated styled `Screen` equally easy to capture, then use native Insta storage and review. A screen assertion must preserve styles, geometry, continuations, and the documented cursor policy; it cannot silently reduce to plain text.
 
@@ -159,7 +159,7 @@ The redesign can add recording and media export after the core milestones. Those
 
 ## What to retain and what to replace
 
-Retain the current project's direct production-view capture, canonical grid, explicit font resources, offline rendering, missing-glyph diagnostics, fail-closed approval, and support for ANSI/TXT/PNG/HTML evidence. Those capabilities are useful differentiators and are already backed by workspace tests and committed references.
+Retain the current project's direct production-view capture, canonical grid, explicit font resources, offline rendering, missing-glyph diagnostics, explicit acceptance flow, and support for ANSI/TXT/PNG/HTML evidence. Keep the committed references. Fix the classic missing-image path and grouped candidate-evidence shortcut before treating approval as trustworthy. This documentation refresh did not execute the workspace tests.
 
 Replace the current API and dependency boundaries as the redesign milestones prove them. Do not preserve a cell-equality shortcut, approved-image reuse as candidate evidence, report/check disagreement, per-file mixed approval, or an assertion lifecycle that is easy to ignore. These are correctness defects identified in the plan, not alternative design choices.
 

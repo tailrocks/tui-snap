@@ -1,6 +1,8 @@
 # tui-snap research and redesign assessment
 
-Status: refreshed assessment. The former root RESEARCH.md is superseded by this file.
+Status: refreshed assessment. The former root RESEARCH.md is legacy; its
+obsolete findings are corrected in “Corrected assessment of the old report”
+below. This file is the current review.
 
 Research date: **2026-09-28**.
 
@@ -88,9 +90,13 @@ already matches the model → view requirement.
 
 pty::Session owns a termlens terminal, configures dimensions and terminal
 environment, sends keys/text/paste/mouse input, resizes, waits, takes snapshots,
-and exposes exit status. Drop delegates child cleanup to the owned terminal.
+and exposes exit status. Drop delegates bounded, best-effort child cleanup to
+the owned terminal; it does not join the reader thread or guarantee reaping of
+escaping descendants. The runtime redesign must define stronger supported
+containment and cleanup guarantees.
 wait_for_text and custom wait_until return errors on timeout. wait_stable
-compares full screen state through the backend, while wait_idle is an explicit
+compares screen size, cursor, and cells; it does not establish stability of
+out-of-band terminal state such as title or bells. wait_idle is an explicit
 quiet-output fallback. run_once propagates readiness and action wait failures
 and settles before returning a frame. [S4]
 
@@ -108,10 +114,12 @@ supported style flags are interpreted by the emulator. Normalized ANSI dumps
 created from a Frame are explicitly debugging artifacts and must not be fed
 back as raw state. [S5]
 
-Raw replay preserves cursor position and visibility, but its canonical adapter
-uses a block cursor and does not preserve cursor shape or blink phase. It also
-does not expose the broader terminal protocol state proposed for Observation.
-Use the PTY path when cursor shape or emulator behavior is part of the contract.
+Raw replay preserves in-grid cursor position and visibility, but loses pending
+wrap state when the emulator reports the cursor one column past the grid. Its
+canonical adapter uses a block cursor and does not preserve cursor shape or
+blink phase. It also does not expose the broader terminal protocol state
+proposed for Observation. Use the PTY path when cursor shape or emulator
+behavior is part of the contract.
 
 ### Canonical frame — implemented schema v3
 
@@ -144,11 +152,12 @@ Missing glyphs render as deterministic tofu and are recorded in a fidelity
 sidecar. Fallback-served glyphs and face fallbacks are also recorded. [S7][S8]
 
 The current default profile uses vendored JetBrains Mono Nerd Font faces, a
-10×21 cell geometry, 2× raster scale, and pinned font/fallback hashes. This is a
-reproducible terminal-like renderer. It is **not** proof of pixel identity with
-Ghostty, Terminal Control, a user's installed terminal, or any other desktop
-terminal. That distinction is part of the redesign's RenderProfile contract.
-[S8]
+10×21 cell geometry, 2× raster scale, a pinned regular-face hash, and pinned
+fallback hashes. Styled primary faces are not all fingerprinted in the profile
+yet. This is a reproducible terminal-like renderer. It is **not** proof of pixel
+identity with Ghostty, Terminal Control, a user's installed terminal, or any
+other desktop terminal. That distinction is part of the redesign's
+RenderProfile contract. [S8]
 
 Renderer::render_artifacts generates ANSI, TXT, HTML, PNG, and fidelity data
 from one render pass. HTML uses the PNG as the authoritative visual and adds a
@@ -186,21 +195,25 @@ The following correctness gaps remain in the inspected source and are P0 work:
 1. diff::compare_png_with_flags treats different decoded PNGs with equal
    dimensions as score 1.0 when ansi_matched is true. This lets cell equality
    stand in for independent pixel equality. [S13]
-2. The grouped fast path writes approved PNG/HTML bytes as the actual candidate
+2. The normal image path converts decoded PNGs to RGB, discarding alpha, and
+   uses a hybrid perceptual score rather than exact decoded-pixel equality.
+   Alpha policy is therefore not explicit, and the score must remain diagnostic
+   rather than establish a strict visual match. [S13]
+3. The grouped fast path writes approved PNG/HTML bytes as the actual candidate
    when ANSI and TXT match. The resulting files are not proof that the current
    renderer produced those bytes. full_render exists as an opt-in escape hatch,
    but the default verification path remains misleading. [S12]
-3. GroupedStore::report_with derives status from on-disk byte equality. It does
+4. GroupedStore::report_with derives status from on-disk byte equality. It does
    not use the decoded-pixel threshold or rerun the same comparison engine as
    check_with_options; a report and a test can disagree. [S12]
-4. Classic missing approved PNGs can be regenerated in memory from the approved
+5. Classic missing approved PNGs can be regenerated in memory from the approved
    frame. In the same-cell case the status can then become matched, even though
    the approved image is absent. Frozen visual mode must reject missing image
    references. [S11]
-5. Acceptance is atomic per file, not per logical sample. An interruption while
+6. Acceptance is atomic per file, not per logical sample. An interruption while
    accepting frame/PNG or the four grouped artifacts can leave a mixed
    generation. [S11][S12]
-6. The status enum does not represent the redesign's full result vocabulary
+7. The status enum does not represent the redesign's full result vocabulary
    (unsupported, capture-incomplete, not-checked, and related states). Reports
    and callers therefore cannot yet distinguish every incomplete or unavailable
    check from a match. [S11]
