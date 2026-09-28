@@ -18,6 +18,8 @@
 //! (`.ansi` / `.txt` / `.png` / `.html`), recursive accept and report, same
 //! statuses and renderer.
 
+pub mod assert;
+pub mod command;
 pub mod diff;
 pub mod frame;
 pub mod grouped;
@@ -25,6 +27,7 @@ pub mod insta_proto;
 pub mod profile;
 pub mod ratatui;
 pub mod render;
+pub mod runner;
 pub mod screen;
 pub mod snapshot;
 
