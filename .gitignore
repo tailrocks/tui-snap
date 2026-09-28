@@ -11,3 +11,4 @@ tests/visual/approved/*.png
 tests/visual/approved/*.png.fidelity.json
 vendor/termlens/Cargo.lock
 tests/visual/report-media/
+__pycache__/
