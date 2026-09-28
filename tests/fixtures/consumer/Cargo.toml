@@ -7,4 +7,5 @@ publish = false
 [workspace]
 
 [dependencies]
-tuisnap = { path = "../../.." }
+tuisnap = { path = "../../..", default-features = false }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
