@@ -8,8 +8,8 @@ rustc 1.98.1, nextest 0.9.143).
 
 | Platform | Status | Evidence |
 |----------|--------|----------|
-| macOS (aarch64) | TESTED here | Full `cargo test` green (129 s wall); full `cargo nextest run` 379/379 green (43 s). Details in §3. |
-| Linux (x86_64) | CI-ONLY, currently RED — no green run exists | No local Linux run in this session. CI lanes run `ubuntu-24.04` (`platform = "linux-x64"` in `.github/ci/project.toml`). As of 2026-09-28 ~19:55 UTC every completed CI/PR run on this branch FAILS before tests go green (Rust lane: `Formatting check`; Policy: `generated-tree`). Per-lane evidence with run URLs in §5. |
+| macOS (aarch64) | TESTED here | Full `cargo test` green (129 s wall); full `cargo nextest run --locked --all-features` 415/415 green (46 s, head `1911433`). Details in §3. |
+| Linux (x86_64) | GREEN in CI (ubuntu-24.04) | CI lanes run `ubuntu-24.04` (`platform = "linux-x64"` in `.github/ci/project.toml`). Latest `CI / PR` run <https://github.com/tailrocks/tui-snap/actions/runs/36497138111> (head `1911433`, conclusion `success`): Rust lane (fmt + clippy + nextest 415/415 + doctests), `ci-required`, Control lanes, Policy, DCO all green. History + flake post-mortem in §5. |
 | Windows (ConPTY) | NOT RUN anywhere; compiles only | `cargo check --target x86_64-pc-windows-gnu --tests`: **0 errors** (lib + all test targets). `portable-pty 0.9.0` ships a ConPTY backend (`NativePtySystem = win::conpty::ConPtySystem`, Win10 1809+), but no Windows test process has ever executed here: no local run, and **no Windows CI lane exists** (every workflow is `runs-on: ubuntu-24.04`). Windows is never green until a CI lane runs it. |
 
 ### Windows compile-check notes (honest deltas)
@@ -109,11 +109,19 @@ not a verdict — leak triage belongs to the owning suites, not this file.
 
 ## 4. Open gaps
 
-- Linux: no local execution; ubuntu-24.04 CI lanes exist but are RED
-  (see §5) — no green Linux run on this branch as of 2026-09-28.
 - Windows: compiles, never runs; no CI lane. ConPTY behavior,
   signal/exit-code mapping, and the `Containment::Unsupported`
   guardian path are all unverified at runtime.
+- macOS guardian sweep never signals (follow-up, fail-safe):
+  macOS `ps -o sess=` prints `0` for every process (verified
+  2026-09-28: pid 1 and self both `sess=0`), while `child.sid`
+  comes from `libc::getsid` (real sid), so the sid guard
+  (`src/tui_shell.rs:1474`, `m.sid != child.sid`) forces
+  `Refused` whenever members are alive. macOS containment
+  currently relies on `close()`'s kernel SIGHUP broadcast;
+  guardian tests pass via that path. Linux sweep works as
+  designed. Fix sketch: resolve per-pid sid via
+  `libc::getsid(pid)` instead of the ps-parsed `sess` column.
 - Retry-after-failure (row 5) and prompt-cancel (row 9) paths are
   documented as not-proven, not green.
 - Leaky-test flags (§3 note) are untriaged.
@@ -181,4 +189,33 @@ setup hit its 10 s timeout while two sibling `Shell::sh()` tests on
 the same runner passed in ~0.06 s; 6/6 local stress runs green;
 `wait_loop` reviewed (checks-latest-before-wait, no lost-wakeup);
 rerun green. Recorded as a single under-load flake; no code change.
-Reopen if it recurs.
+It recurred — see post-mortem below.
+
+### Flake post-mortem — ROOT-CAUSED + FIXED (`1911433`)
+
+Run <https://github.com/tailrocks/tui-snap/actions/runs/36493281115>
+(head `0f86ac1`, conclusion `failure`) showed both flakes on Linux:
+
+1. **Shell-setup 10 s timeout.** Reproduced under load in docker
+   (`rust:1.89-slim`, dash): 4/25 iters. Captured failure grid:
+   row = `# __TUISNAP_SETUP_OK__` — the interactive shell's
+   prompt landed on the attestation row, breaking the exact
+   protocol match (input echoed, command executed, pipeline
+   healthy). Fix: spawn `/bin/sh` with empty `PS1`/`PS2`
+   (`src/tui_shell.rs:1044`), removing prompt bytes
+   structurally; matching stays strict. Post-fix Linux stress:
+   25/25 green (was 21/25).
+2. **Guardian `setsid` escapee died.** Test race, implementation
+   correct: `wait_found("29372")` fires on pre-`setsid`
+   cmdline matches, and teardown legitimately kills
+   still-in-group processes via the kernel SIGHUP broadcast
+   (proven: close-alone killed a HUP-default in-group
+   process; a HUP-immune sibling survived). Fix: the test
+   waits (≤10 s) for a token-matching pid *outside* the
+   child process group — the escape itself — before
+   `finish` (`tests/tui_shell.rs:537`). Linux 30/30 iters
+   green under load.
+
+Verification run
+<https://github.com/tailrocks/tui-snap/actions/runs/36497138111>
+(head `1911433`, conclusion `success`): all four jobs green.
