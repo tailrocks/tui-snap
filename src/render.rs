@@ -31,9 +31,14 @@
 //!   reporting, never silent tofu.
 
 use crate::frame::{Frame, Rgb};
-use crate::profile::{FontFaces, Profile};
+use crate::profile::{
+    BlinkPhase, FontFaces, MissingGlyphPolicy, Profile, RenderProfile, RENDERER_VERSION,
+};
+use crate::screen::Screen;
 use fontdue::{Font, FontSettings};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 /// Import/render failure: explicit, never silent.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,6 +299,14 @@ pub struct Renderer {
     profile: Profile,
     set: FontSet,
     glyphs: GlyphCache,
+    /// V05 strict missing-glyph policy: fail instead of tofu. Legacy
+    /// constructors leave this false (placeholder + fidelity record, the
+    /// long-standing behavior); [`Self::for_render_profile`] sets it from
+    /// the strict profile.
+    strict_missing: bool,
+    /// V07 still sample phase for `mods.blink` cells. Legacy constructors
+    /// sample [`BlinkPhase::On`] (frozen-visible, byte-identical to before).
+    blink_phase: BlinkPhase,
 }
 
 impl Renderer {
@@ -327,7 +340,41 @@ impl Renderer {
             profile: profile.clone(),
             set,
             glyphs: GlyphCache::new(),
+            strict_missing: false,
+            blink_phase: BlinkPhase::On,
         })
+    }
+
+    /// Build a renderer from a strict [`RenderProfile`] (V01/V05/V07): the
+    /// SAME engine as [`Self::new`] (geometry pinned to the regular face,
+    /// same fallback chain mechanics), plus the profile's missing-glyph
+    /// policy and blink sample phase. The profile's hashes were already
+    /// verified at strict construction; the chain is verified again at load
+    /// (defense in depth — a face swap between the two still refuses).
+    pub fn for_render_profile(rp: &RenderProfile<'_>) -> Result<Self, RenderError> {
+        // Re-verify the primary pins at render time: the bytes are borrowed,
+        // so a swap between strict construction and this call must still
+        // refuse (fallback pins are re-verified inside `with_fallbacks`).
+        let faces = *rp.faces();
+        let slots = [
+            ("regular", faces.regular, &rp.face_hashes()[0]),
+            ("bold", faces.bold, &rp.face_hashes()[1]),
+            ("italic", faces.italic, &rp.face_hashes()[2]),
+            ("bold-italic", faces.bold_italic, &rp.face_hashes()[3]),
+        ];
+        for (label, bytes, pin) in slots {
+            let actual = crate::profile::font_sha256(bytes);
+            if actual != *pin {
+                return Err(RenderError(format!(
+                    "{label} face sha256 mismatch at render: pinned {pin}, got {actual} — refusing to render"
+                )));
+            }
+        }
+        let profile = rp.to_profile();
+        let mut r = Self::with_fallbacks(&profile, &faces, rp.fallback_order())?;
+        r.strict_missing = rp.missing() == MissingGlyphPolicy::Strict;
+        r.blink_phase = rp.blink_phase();
+        Ok(r)
     }
 
     /// The profile this renderer is pinned to.
@@ -345,6 +392,21 @@ impl Renderer {
     /// Render a validated frame to PNG bytes.
     pub fn render_png(&mut self, frame: &Frame) -> Result<Vec<u8>, RenderError> {
         Ok(self.render(frame)?.png)
+    }
+
+    /// Render a validated [`Screen`] (V01): the screen is adapted to the
+    /// render input losslessly ([`frame_from_screen`]) and run through the
+    /// SAME engine as [`Self::render`] — one code path for saved, direct,
+    /// and live screens. The screen origin is positional metadata and does
+    /// not affect pixels; grid, cursor, colors, and modifiers do.
+    pub fn render_screen(&mut self, screen: &Screen) -> Result<Rendered, RenderError> {
+        let frame = frame_from_screen(screen, &self.profile.name);
+        self.render(&frame)
+    }
+
+    /// [`Self::render_screen`] returning PNG bytes only.
+    pub fn render_screen_png(&mut self, screen: &Screen) -> Result<Vec<u8>, RenderError> {
+        Ok(self.render_screen(screen)?.png)
     }
 
     /// Standalone colored HTML render of a frame: the authoritative PNG as
@@ -413,7 +475,12 @@ impl Renderer {
                 if cbg != profile.default_bg {
                     fill_rect(&mut img, cx, cy, span, cell_h, cbg);
                 }
-                if cell.mods.hidden {
+                // V07: a still samples one declared blink phase. Off-phase
+                // blinking cells keep their background but draw no ink and no
+                // text decorations — what a real terminal shows mid-blink.
+                // Blink intent stays in canonical state; only the still is
+                // sampled. Legacy renderers pin phase On (frozen-visible).
+                if cell.mods.hidden || (cell.mods.blink && self.blink_phase == BlinkPhase::Off) {
                     continue;
                 }
                 let baseline = cy as i32 + self.set.regular.ascent.round() as i32;
@@ -519,6 +586,30 @@ impl Renderer {
                     }
                 }
             }
+        }
+
+        // V05 strict missing-glyph policy: fail with the exact uncovered
+        // set instead of returning tofu. Placeholder mode (legacy behavior)
+        // returns the tofu PNG plus the fidelity record.
+        if self.strict_missing && !missing.is_empty() {
+            let mut detail: Vec<String> = missing
+                .iter()
+                .map(|m| {
+                    format!(
+                        "({},{}) {:?} [{}]",
+                        m.x,
+                        m.y,
+                        m.symbol,
+                        m.codepoints.join(",")
+                    )
+                })
+                .collect();
+            detail.sort();
+            return Err(RenderError(format!(
+                "strict missing-glyph policy: {} uncovered cell(s): {}",
+                missing.len(),
+                detail.join("; ")
+            )));
         }
 
         let mut out = Vec::new();
@@ -913,9 +1004,46 @@ fn esc_attr(s: &str) -> String {
     esc_xml(s).replace('"', "&quot;").replace('\'', "&#39;")
 }
 
+// ---------------------------------------------------------------------------
+// Safe-export audit (V06): every untrusted string crossing into HTML/JSON is
+// escaped at exactly one of these chokepoints. Cell symbols, titles, and the
+// embedded canonical JSON all arrive here; raw interpolation anywhere else is
+// a bug. Trace journals (backlog A04) must route cell text through the same
+// JSON chokepoint — never `format!` it into a hand-built envelope.
+// ---------------------------------------------------------------------------
+
+/// Escape untrusted text for HTML element content (SVG `<text>`, `<title>`).
+#[must_use]
+pub fn escape_html(s: &str) -> String {
+    esc_xml(s)
+}
+
+/// Escape untrusted text for a double-quoted HTML attribute (`alt`, `title`).
+#[must_use]
+pub fn escape_html_attr(s: &str) -> String {
+    esc_attr(s)
+}
+
+/// Escape canonical JSON for `<script type="application/json">`: `<` becomes
+/// `\u003c` so a cell symbol like `</script>` cannot terminate the element.
+/// Still valid JSON — `\u003c` re-parses to `<`, keeping lossless re-import.
+#[must_use]
+pub fn escape_json_for_script(json: &str) -> String {
+    json.replace('<', "\\u003c")
+}
+
 /// Selectable-text SVG (secondary evidence: viewer fonts apply, so the PNG
-/// stays authoritative for pixel gates).
+/// stays authoritative for pixel gates). Blinking cells sample
+/// [`BlinkPhase::On`] (frozen-visible); use [`render_svg_phased`] to sample
+/// the off phase.
 pub fn render_svg(frame: &Frame, profile: &Profile) -> String {
+    render_svg_phased(frame, profile, BlinkPhase::On)
+}
+
+/// [`render_svg`] sampling a declared blink phase (V07): off-phase blinking
+/// cells contribute blank space, like concealed cells. Blink intent stays in
+/// canonical state; only the still is sampled.
+pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) -> String {
     let cw = profile.cell_w;
     let ch = profile.cell_h;
     let pad = profile.pad;
@@ -969,7 +1097,7 @@ pub fn render_svg(frame: &Frame, profile: &Profile) -> String {
                 {
                     break;
                 }
-                if c.mods.hidden {
+                if c.mods.hidden || (c.mods.blink && phase == BlinkPhase::Off) {
                     run.push_str(&" ".repeat(usize::from(c.width.max(1))));
                 } else {
                     run.push_str(&c.symbol);
@@ -1044,7 +1172,7 @@ fn html_document(frame: &Frame, profile: &Profile, title: &str, png: &[u8]) -> S
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title><style>body{{background:#141414;margin:24px}}.shot{{position:relative;display:inline-block;line-height:0}}.shot>img{{display:block;image-rendering:pixelated}}.shot>svg{{position:absolute;inset:0;width:100%;height:100%}}.shot>svg rect,.shot>svg text{{fill:transparent!important}}</style></head><body><div class=\"shot\"><img src=\"data:image/png;base64,{b64}\" alt=\"{}\" width=\"{png_w}\" height=\"{png_h}\">{svg}</div><script type=\"application/json\">{}</script></body></html>",
         esc_attr(title),
         esc_attr(title),
-        crate::snapshot::json_for_script(&embedded.to_json())
+        escape_json_for_script(&embedded.to_json())
     )
 }
 
@@ -1110,6 +1238,424 @@ fn sgr_for(c: &crate::frame::Cell) -> String {
     push_color(&mut p, 38, c.fg);
     push_color(&mut p, 48, c.bg);
     p.join(";")
+}
+
+// ---------------------------------------------------------------------------
+// Screen entry (V01) + strict one-shots (V05).
+// ---------------------------------------------------------------------------
+
+/// Adapt a validated [`Screen`] to the render input, losslessly: grid cells
+/// (symbols, widths, continuations, colors, modifiers incl. hidden/blink)
+/// and cursor intent are preserved verbatim. The screen origin is positional
+/// metadata, not pixels, and is not carried over. Provenance is fixed and
+/// deterministic (`created_unix = 0`, source `"screen"`) so identical
+/// screens render identical bytes.
+#[must_use]
+pub fn frame_from_screen(screen: &Screen, profile_name: &str) -> Frame {
+    Frame {
+        version: crate::frame::FRAME_VERSION,
+        cols: screen.cols(),
+        rows: screen.rows(),
+        cells: screen.cells().to_vec(),
+        cursor: *screen.cursor(),
+        provenance: crate::frame::Provenance {
+            tool: "tuisnap".to_string(),
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            profile: profile_name.to_string(),
+            source: "screen".to_string(),
+            argv: Vec::new(),
+            created_unix: 0,
+        },
+    }
+}
+
+/// Render a validated [`Screen`] under a strict [`RenderProfile`] (V01):
+/// saved, direct, and live screens share this ONE engine with frame
+/// rendering ([`Renderer::render`]). Strict missing policy fails on
+/// uncovered glyphs; see [`MissingGlyphPolicy`].
+///
+/// One-shot convenience: constructs a fresh [`Renderer`] per call. Bulk
+/// gates should keep a [`Renderer::for_render_profile`] instance instead.
+pub fn render_screen(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
+    Renderer::for_render_profile(rp)?.render_screen(screen)
+}
+
+/// [`render_screen`] returning PNG bytes only.
+pub fn render_screen_png(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Vec<u8>, RenderError> {
+    Ok(render_screen(screen, rp)?.png)
+}
+
+/// Render a validated [`Frame`] under a strict [`RenderProfile`]: the same
+/// engine as [`render_png_report`], plus the profile's missing-glyph policy
+/// and blink sample phase.
+pub fn render_frame_strict(frame: &Frame, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
+    Renderer::for_render_profile(rp)?.render(frame)
+}
+
+// ---------------------------------------------------------------------------
+// Concealment vs redaction (V06).
+// ---------------------------------------------------------------------------
+
+/// Concealment (`mods.hidden`) is NOT redaction: concealed glyphs are omitted
+/// from PNG/SVG/HTML pixels, but their source symbols REMAIN in canonical
+/// JSON, ANSI dumps, and plain text. Never capture real secrets expecting
+/// concealment to protect them. [`redact_frame`]/[`redact_screen`] are the
+/// separate, destructive API for evidence that must not carry content at all:
+///
+/// | API | PNG/HTML pixels | canonical JSON |
+/// |---|---|---|
+/// | `mods.hidden` (conceal) | omitted | PRESENT (source symbol) |
+/// | [`redact_frame`] (redact) | block glyphs | block glyphs (destroyed) |
+///
+/// Redaction preserves grid geometry (widths/continuations), colors, and
+/// cursor position — layout evidence survives, content does not. Modifiers
+/// are cleared (nothing left to style). The output validates as a frame.
+#[must_use]
+pub fn redact_frame(frame: &Frame) -> Frame {
+    let mut out = frame.clone();
+    for c in &mut out.cells {
+        if c.continuation {
+            continue;
+        }
+        c.symbol = if c.width == 2 {
+            "██".to_string()
+        } else {
+            "█".to_string()
+        };
+        c.mods = crate::frame::Mods::default();
+    }
+    out
+}
+
+/// [`redact_frame`] for [`Screen`]s: same destruction, origin preserved.
+/// Fails only if the redacted grid would not validate (unreachable for
+/// validated inputs — widths and continuations are untouched).
+pub fn redact_screen(screen: &Screen) -> Result<Screen, crate::screen::ScreenError> {
+    let frame = frame_from_screen(screen, "redacted");
+    let redacted = redact_frame(&frame);
+    let (ox, oy) = screen.origin();
+    Screen::validate(
+        redacted.cols,
+        redacted.rows,
+        ox,
+        oy,
+        redacted.cells,
+        redacted.cursor,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Content-addressed render cache (V08).
+// ---------------------------------------------------------------------------
+
+/// `RENDER_NO_CACHE` set (to anything but `""`/`"0"`) disables the
+/// [`RenderCache`]: every `get` misses, every `put` is dropped. Qualification
+/// runs set this so no cache entry can mask a renderer change.
+#[must_use]
+pub fn render_cache_disabled() -> bool {
+    matches!(std::env::var("RENDER_NO_CACHE"), Ok(v) if v != "0" && !v.is_empty())
+}
+
+/// Deterministic content hash of a screen's approval-relevant state (dims,
+/// cells, cursor — no provenance, no origin). One input of the cache key.
+#[must_use]
+pub fn screen_content_hash(screen: &Screen) -> String {
+    let mut h = Sha256::new();
+    h.update(b"tuisnap-screen/1\n");
+    h.update(screen.cols().to_le_bytes());
+    h.update(screen.rows().to_le_bytes());
+    for c in screen.cells() {
+        h.update(c.x.to_le_bytes());
+        h.update(c.y.to_le_bytes());
+        h.update(c.symbol.as_bytes());
+        h.update([c.width, u8::from(c.continuation)]);
+        h.update(format!("{:?}|{:?}|{:?}", c.fg, c.bg, c.mods).as_bytes());
+    }
+    let cur = screen.cursor();
+    h.update(
+        format!(
+            "{},{},{},{:?},{}",
+            cur.x, cur.y, cur.visible, cur.style, cur.blinking
+        )
+        .as_bytes(),
+    );
+    let digest = h.finalize();
+    let mut s = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// Content-addressed PNG cache. The key covers the screen hash, the profile
+/// hash, every pinned face hash (styles + ordered fallbacks), and the
+/// renderer version — any input or renderer change is a different key, never
+/// a false hit. Entries carry their renderer version up front; corrupt or
+/// version-mismatched entries are rejected, REMOVED, and counted
+/// ([`RenderCache::rejected`]), never served.
+///
+/// Approved artifacts are NEVER a render cache: [`RenderCache::open`]
+/// refuses a cache dir equal to any approved root, so review evidence can
+/// neither be read as cache hits nor overwritten by cache writes.
+pub struct RenderCache {
+    dir: PathBuf,
+    rejected: u64,
+    hits: u64,
+    stores: u64,
+}
+
+impl RenderCache {
+    /// Open (creating) `dir` as a cache. Fails when `dir` equals any path in
+    /// `approved_roots` — approved trees are review evidence, not cache
+    /// storage, in either direction.
+    pub fn open(dir: &Path, approved_roots: &[&Path]) -> Result<Self, RenderError> {
+        for root in approved_roots {
+            if dir == *root {
+                return Err(RenderError(format!(
+                    "cache dir {} equals approved root {}: approved artifacts are never a render cache",
+                    dir.display(),
+                    root.display()
+                )));
+            }
+        }
+        std::fs::create_dir_all(dir)
+            .map_err(|e| RenderError(format!("cannot create cache dir {}: {e}", dir.display())))?;
+        Ok(Self {
+            dir: dir.to_path_buf(),
+            rejected: 0,
+            hits: 0,
+            stores: 0,
+        })
+    }
+
+    /// Cache key for a screen under a strict profile: SHA-256 over the
+    /// screen content hash, the profile hash, every pinned face hash
+    /// (styles, then fallbacks IN ORDER), and the renderer version.
+    #[must_use]
+    pub fn key_for(screen: &Screen, rp: &RenderProfile<'_>) -> String {
+        Self::key(&screen_content_hash(screen), rp)
+    }
+
+    /// [`Self::key_for`] from a precomputed screen hash.
+    #[must_use]
+    pub fn key(screen_hash: &str, rp: &RenderProfile<'_>) -> String {
+        let mut h = Sha256::new();
+        h.update(b"tuisnap-render-cache/1\n");
+        h.update(screen_hash.as_bytes());
+        h.update(b"\n");
+        h.update(rp.hash().as_bytes());
+        h.update(b"\n");
+        for pin in rp.face_hashes() {
+            h.update(pin.as_bytes());
+            h.update(b"\n");
+        }
+        for f in rp.fallback_order() {
+            h.update(f.sha256.as_bytes());
+            h.update(b"\n");
+        }
+        h.update(RENDERER_VERSION.to_le_bytes());
+        let digest = h.finalize();
+        let mut s = String::with_capacity(digest.len() * 2);
+        for b in digest {
+            s.push_str(&format!("{b:02x}"));
+        }
+        s
+    }
+
+    fn path(&self, key: &str) -> PathBuf {
+        self.dir.join(format!("{key}.cache"))
+    }
+
+    /// Fetch a cached PNG. Returns `None` (miss) when caching is disabled
+    /// ([`render_cache_disabled`]), the key is absent, or the entry is
+    /// corrupt/incompatible — the last case also removes the entry and
+    /// increments [`Self::rejected`].
+    pub fn get(&mut self, key: &str) -> Option<Vec<u8>> {
+        if render_cache_disabled() {
+            return None;
+        }
+        let bytes = std::fs::read(self.path(key)).ok()?;
+        if Self::valid_entry(&bytes) {
+            self.hits += 1;
+            Some(bytes[4..].to_vec())
+        } else {
+            self.rejected += 1;
+            let _ = std::fs::remove_file(self.path(key));
+            None
+        }
+    }
+
+    /// Store a PNG under `key`. Silently dropped when caching is disabled
+    /// (qualification mode). Overwrites any previous entry for the key.
+    pub fn put(&mut self, key: &str, png: &[u8]) -> Result<(), RenderError> {
+        if render_cache_disabled() {
+            return Ok(());
+        }
+        let mut entry = RENDERER_VERSION.to_le_bytes().to_vec();
+        entry.extend_from_slice(png);
+        std::fs::write(self.path(key), &entry)
+            .map_err(|e| RenderError(format!("cache write failed: {e}")))?;
+        self.stores += 1;
+        Ok(())
+    }
+
+    /// A valid entry: the pinned renderer version up front, then a real PNG.
+    fn valid_entry(bytes: &[u8]) -> bool {
+        const PNG_MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
+        bytes.len() > 12
+            && bytes[0..4] == RENDERER_VERSION.to_le_bytes()
+            && bytes[4..12] == *PNG_MAGIC
+    }
+
+    /// Entries rejected as corrupt or version-incompatible (and removed).
+    #[must_use]
+    pub fn rejected(&self) -> u64 {
+        self.rejected
+    }
+
+    /// Successful cache reads.
+    #[must_use]
+    pub fn hits(&self) -> u64 {
+        self.hits
+    }
+
+    /// Successful cache writes.
+    #[must_use]
+    pub fn stores(&self) -> u64 {
+        self.stores
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Byte-sensitive contracts, opt-in (V10).
+// ---------------------------------------------------------------------------
+
+/// The exact representation bytes of one render: normalized ANSI dump, plain
+/// text, and standalone HTML. Byte comparison of these is OPT-IN — for
+/// suites where the representation bytes themselves are contractual — via
+/// [`check_contract_bytes`]. No gate calls it by default.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ContractBytes {
+    pub ansi: String,
+    pub txt: String,
+    pub html: String,
+}
+
+impl Artifacts {
+    /// The byte-contract view of these artifacts.
+    #[must_use]
+    pub fn contract(&self) -> ContractBytes {
+        ContractBytes {
+            ansi: self.ansi.clone(),
+            txt: self.txt.clone(),
+            html: self.html.clone(),
+        }
+    }
+}
+
+/// Opt-in byte-identity check over [`ContractBytes`]: every field must match
+/// byte-for-byte. The error names the first differing field with lengths and
+/// the first differing byte offset. Never part of the default gate.
+pub fn check_contract_bytes(
+    actual: &ContractBytes,
+    expected: &ContractBytes,
+) -> Result<(), RenderError> {
+    for (label, a, e) in [
+        ("ansi", actual.ansi.as_bytes(), expected.ansi.as_bytes()),
+        ("txt", actual.txt.as_bytes(), expected.txt.as_bytes()),
+        ("html", actual.html.as_bytes(), expected.html.as_bytes()),
+    ] {
+        if a != e {
+            let off = a
+                .iter()
+                .zip(e.iter())
+                .position(|(x, y)| x != y)
+                .unwrap_or(a.len().min(e.len()));
+            return Err(RenderError(format!(
+                "contract bytes differ in {label}: actual {} bytes, expected {} bytes, first diff at byte {off}",
+                a.len(),
+                e.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Portable offline bundle (V09 support).
+// ---------------------------------------------------------------------------
+
+/// Manifest for a portable offline evidence bundle: renderer version, strict
+/// profile identity + hash, every pinned face hash, scale, and the fidelity
+/// verdict. Together with the artifact files it makes the bundle
+/// self-describing with no network and no viewer fonts required (the HTML
+/// embeds the PNG as a data URI).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BundleManifest {
+    pub renderer_version: u32,
+    pub profile: String,
+    pub profile_hash: String,
+    pub face_hashes: [String; 4],
+    pub fallback_faces: Vec<String>,
+    pub scale: u32,
+    pub approximate: bool,
+}
+
+impl BundleManifest {
+    #[must_use]
+    pub fn for_render(rp: &RenderProfile<'_>, fidelity: &Fidelity) -> Self {
+        Self {
+            renderer_version: RENDERER_VERSION,
+            profile: rp.name().to_string(),
+            profile_hash: rp.hash(),
+            face_hashes: rp.face_hashes().clone(),
+            fallback_faces: rp
+                .fallback_order()
+                .iter()
+                .map(|f| format!("{}:{}", f.desc, f.sha256))
+                .collect(),
+            scale: rp.scale(),
+            approximate: fidelity.approximate,
+        }
+    }
+
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).expect("BundleManifest is plain serializable data")
+    }
+}
+
+impl Artifacts {
+    /// Write a portable offline bundle: `screen.ansi`, `screen.txt`,
+    /// `screen.png`, `screen.html`, `fidelity.json`, `manifest.json`.
+    /// Returns the written paths. The HTML is self-contained (PNG embedded,
+    /// no external references); the manifest pins the renderer and fonts.
+    pub fn write_bundle(
+        &self,
+        dir: &Path,
+        manifest: &BundleManifest,
+    ) -> Result<Vec<PathBuf>, RenderError> {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| RenderError(format!("cannot create bundle dir {}: {e}", dir.display())))?;
+        let fidelity_json = self.fidelity.to_json();
+        let manifest_json = manifest.to_json();
+        let files: Vec<(&str, &[u8])> = vec![
+            ("screen.ansi", self.ansi.as_bytes()),
+            ("screen.txt", self.txt.as_bytes()),
+            ("screen.png", &self.png),
+            ("screen.html", self.html.as_bytes()),
+            ("fidelity.json", fidelity_json.as_bytes()),
+            ("manifest.json", manifest_json.as_bytes()),
+        ];
+        let mut out = Vec::with_capacity(files.len());
+        for (name, bytes) in files {
+            let path = dir.join(name);
+            std::fs::write(&path, bytes)
+                .map_err(|e| RenderError(format!("bundle write {name} failed: {e}")))?;
+            out.push(path);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
