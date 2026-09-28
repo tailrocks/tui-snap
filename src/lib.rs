@@ -21,6 +21,7 @@
 pub mod diff;
 pub mod frame;
 pub mod grouped;
+pub mod insta_proto;
 pub mod profile;
 pub mod ratatui;
 pub mod render;

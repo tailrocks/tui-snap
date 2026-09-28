@@ -23,6 +23,7 @@ pty = ["dep:termlens", "dep:termpane"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+insta = { version = "1.48", default-features = false, features = ["json"] }
 image = "0.25"
 image-compare = "0.5"
 fontdue = "0.9"
