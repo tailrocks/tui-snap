@@ -164,6 +164,11 @@ enum SessionCmd {
     List,
     /// Remove endpoints whose process already exited.
     Prune,
+    /// Attach to a named session (best-effort human view; EOF detaches).
+    Attach {
+        #[arg(long)]
+        name: String,
+    },
 }
 
 fn main() {
@@ -775,6 +780,85 @@ fn cmd_session(cmd: SessionCmd) -> i32 {
             }
             Err(e) => op_error(&e),
         },
+        SessionCmd::Attach { name } => cmd_session_attach(&name),
+    }
+}
+
+/// Best-effort human view of a named session: tails the session log as text
+/// frames. Assertions remain on `Observation`s, never on this output.
+/// Detached process sessions have no input transport (stdin is null), so
+/// stdin bytes are drained and discarded; EOF on stdin detaches.
+fn cmd_session_attach(name: &str) -> i32 {
+    use std::io::Read;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    let info = match tuisnap::proto::session_list() {
+        Ok(list) => list.into_iter().find(|s| s.name == *name),
+        Err(e) => return op_error(&e),
+    };
+    let Some(info) = info else {
+        eprintln!("error: [not-found] no session {name:?}");
+        return EXIT_OP_ERROR;
+    };
+    let dir = match tuisnap::proto::runtime_dir() {
+        Ok(d) => d,
+        Err(e) => return op_error(&e),
+    };
+    let log_path = dir.join(format!("{name}.log"));
+    if !log_path.is_file() {
+        eprintln!("error: [not-found] no log for session {name:?}");
+        return EXIT_OP_ERROR;
+    }
+    println!(
+        "attached: {} (pid {} {:?}) — best-effort human view; assertions stay on Observations",
+        info.name, info.pid, info.status
+    );
+    println!("stdin is not delivered (process sessions have no input transport); EOF detaches");
+    let eof = Arc::new(AtomicBool::new(false));
+    let stdin_eof = Arc::clone(&eof);
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        let mut stdin = std::io::stdin().lock();
+        let mut discarded: u64 = 0;
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => discarded += n as u64,
+                Err(_) => break,
+            }
+        }
+        if discarded > 0 {
+            eprintln!("note: discarded {discarded} input byte(s): no input transport");
+        }
+        stdin_eof.store(true, Ordering::SeqCst);
+    });
+    let mut offset: u64 = 0;
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    loop {
+        if eof.load(Ordering::SeqCst) {
+            println!("detached: stdin EOF");
+            return 0;
+        }
+        let bytes = std::fs::read(&log_path).unwrap_or_default();
+        if bytes.len() as u64 > offset {
+            use std::io::Write;
+            let _ = out.write_all(&bytes[offset as usize..]);
+            let _ = out.flush();
+            offset = bytes.len() as u64;
+        }
+        let alive = tuisnap::proto::session_list()
+            .map(|l| {
+                l.iter().any(|s| {
+                    s.name == *name && s.status == tuisnap::proto::SessionStatus::Running
+                })
+            })
+            .unwrap_or(false);
+        if !alive {
+            println!("detached: session ended");
+            return 0;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
