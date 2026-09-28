@@ -1,0 +1,1160 @@
+---
+source: src/assert.rs
+description: "tuisnap generation d231a201f284ff4c2ff850f12f096913791f8a17e3750c517614a12e61bc15dc at tests/vertical_slice.rs:220"
+expression: canonical
+---
+tuisnap screen snapshot v1
+geometry cols=64 rows=18 ox=0 oy=0
+cursor x=19 y=7 visible=true style=block blinking=false
+cell 0,0 sym="┌" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 1,0 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 2,0 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 3,0 sym="u" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 4,0 sym="i" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 5,0 sym="s" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 6,0 sym="n" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 7,0 sym="a" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 8,0 sym="p" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 9,0 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 10,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 11,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 12,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 13,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 14,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 15,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 16,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 17,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 18,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 19,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 20,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 21,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 22,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 23,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 24,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 25,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 26,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 27,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 28,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 29,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 30,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 31,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 32,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 33,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 34,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 35,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 36,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 37,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 38,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 39,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 40,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 41,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 42,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 43,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 44,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 45,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 46,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 47,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 48,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 49,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 50,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 51,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 52,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 53,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 54,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 55,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 56,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 57,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 58,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 59,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 60,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 61,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 62,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 63,0 sym="┐" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 0,1 sym="│" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 1,1 sym="S" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 2,1 sym="e" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 3,1 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 4,1 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 5,1 sym="i" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 6,1 sym="n" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 7,1 sym="g" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 8,1 sym="s" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 9,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 10,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 11,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 12,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 13,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 14,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 15,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 16,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 17,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 18,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 19,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 20,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 21,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 22,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 23,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 24,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 25,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 26,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 27,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 28,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 29,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 30,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 31,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 32,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 33,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 34,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 35,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 36,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 37,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 38,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 39,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 40,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 41,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 42,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 43,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 44,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 45,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 46,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 47,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 48,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 49,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 50,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 51,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 52,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 53,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 54,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 55,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 56,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 57,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 58,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 59,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 60,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 61,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 62,1 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
+cell 63,1 sym="│" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 0,2 sym="└" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 1,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 2,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 3,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 4,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 5,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 6,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 7,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 8,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 9,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 10,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 11,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 12,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 13,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 14,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 15,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 16,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 17,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 18,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 19,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 20,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 21,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 22,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 23,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 24,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 25,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 26,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 27,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 28,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 29,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 30,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 31,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 32,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 33,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 34,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 35,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 36,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 37,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 38,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 39,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 40,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 41,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 42,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 43,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 44,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 45,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 46,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 47,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 48,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 49,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 50,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 51,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 52,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 53,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 54,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 55,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 56,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 57,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 58,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 59,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 60,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 61,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 62,2 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 63,2 sym="┘" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 0,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 2,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 63,3 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,4 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,4 sym="┌" w=1 cont=false fg=default bg=default mods=-
+cell 2,4 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,4 sym="s" w=1 cont=false fg=default bg=default mods=-
+cell 4,4 sym="e" w=1 cont=false fg=default bg=default mods=-
+cell 5,4 sym="t" w=1 cont=false fg=default bg=default mods=-
+cell 6,4 sym="t" w=1 cont=false fg=default bg=default mods=-
+cell 7,4 sym="i" w=1 cont=false fg=default bg=default mods=-
+cell 8,4 sym="n" w=1 cont=false fg=default bg=default mods=-
+cell 9,4 sym="g" w=1 cont=false fg=default bg=default mods=-
+cell 10,4 sym="s" w=1 cont=false fg=default bg=default mods=-
+cell 11,4 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 13,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 14,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 15,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 16,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 17,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 18,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 19,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 20,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 21,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 22,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 23,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 24,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 25,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 26,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 27,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 28,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 29,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 30,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 31,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 32,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 33,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 34,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 35,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 36,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 37,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 38,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 39,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 40,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 41,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 42,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 43,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 44,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 45,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 46,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 47,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 48,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 49,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 50,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 51,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 52,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 53,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 54,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 55,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 56,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 57,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 58,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 59,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 60,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 61,4 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 62,4 sym="┐" w=1 cont=false fg=default bg=default mods=-
+cell 63,4 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,5 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,5 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,5 sym="k" w=1 cont=false fg=default bg=default mods=underline
+cell 3,5 sym="e" w=1 cont=false fg=default bg=default mods=underline
+cell 4,5 sym="y" w=1 cont=false fg=default bg=default mods=underline
+cell 5,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 6,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 7,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 8,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 9,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 10,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 11,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 12,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 13,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 14,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 15,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 16,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 17,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 18,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 19,5 sym="v" w=1 cont=false fg=default bg=default mods=underline
+cell 20,5 sym="a" w=1 cont=false fg=default bg=default mods=underline
+cell 21,5 sym="l" w=1 cont=false fg=default bg=default mods=underline
+cell 22,5 sym="u" w=1 cont=false fg=default bg=default mods=underline
+cell 23,5 sym="e" w=1 cont=false fg=default bg=default mods=underline
+cell 24,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 25,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 26,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 27,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 28,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 29,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 30,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 31,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 32,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 33,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 34,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 35,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 36,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 37,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 38,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 39,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 40,5 sym="s" w=1 cont=false fg=default bg=default mods=underline
+cell 41,5 sym="t" w=1 cont=false fg=default bg=default mods=underline
+cell 42,5 sym="a" w=1 cont=false fg=default bg=default mods=underline
+cell 43,5 sym="t" w=1 cont=false fg=default bg=default mods=underline
+cell 44,5 sym="u" w=1 cont=false fg=default bg=default mods=underline
+cell 45,5 sym="s" w=1 cont=false fg=default bg=default mods=underline
+cell 46,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 47,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 48,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 49,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 50,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 51,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 52,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 53,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 54,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 55,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 56,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 57,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 58,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 59,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 60,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 61,5 sym=" " w=1 cont=false fg=default bg=default mods=underline
+cell 62,5 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,5 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,6 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,6 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,6 sym="t" w=1 cont=false fg=index=2 bg=default mods=-
+cell 3,6 sym="h" w=1 cont=false fg=index=2 bg=default mods=-
+cell 4,6 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 5,6 sym="m" w=1 cont=false fg=index=2 bg=default mods=-
+cell 6,6 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 7,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 8,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 9,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 10,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 11,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 12,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 13,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 14,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 15,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 16,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 17,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 18,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 19,6 sym="d" w=1 cont=false fg=index=2 bg=default mods=-
+cell 20,6 sym="a" w=1 cont=false fg=index=2 bg=default mods=-
+cell 21,6 sym="r" w=1 cont=false fg=index=2 bg=default mods=-
+cell 22,6 sym="k" w=1 cont=false fg=index=2 bg=default mods=-
+cell 23,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 24,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 25,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 26,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 27,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 28,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 29,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 30,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 31,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 32,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 33,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 34,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 35,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 36,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 37,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 38,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 39,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 40,6 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 41,6 sym="n" w=1 cont=false fg=index=2 bg=default mods=-
+cell 42,6 sym="a" w=1 cont=false fg=index=2 bg=default mods=-
+cell 43,6 sym="b" w=1 cont=false fg=index=2 bg=default mods=-
+cell 44,6 sym="l" w=1 cont=false fg=index=2 bg=default mods=-
+cell 45,6 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 46,6 sym="d" w=1 cont=false fg=index=2 bg=default mods=-
+cell 47,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 48,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 49,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 50,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 51,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 52,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 53,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 54,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 55,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 56,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 57,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 58,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 59,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 60,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 61,6 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 62,6 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,6 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,7 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,7 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,7 sym="a" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 3,7 sym="u" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 4,7 sym="t" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 5,7 sym="o" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 6,7 sym="s" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 7,7 sym="a" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 8,7 sym="v" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 9,7 sym="e" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 10,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 11,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 12,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 13,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 14,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 15,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 16,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 17,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 18,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 19,7 sym="o" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 20,7 sym="n" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 21,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 22,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 23,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 24,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 25,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 26,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 27,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 28,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 29,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 30,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 31,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 32,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 33,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 34,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 35,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 36,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 37,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 38,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 39,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 40,7 sym="e" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 41,7 sym="n" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 42,7 sym="a" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 43,7 sym="b" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 44,7 sym="l" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 45,7 sym="e" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 46,7 sym="d" w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 47,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 48,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 49,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 50,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 51,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 52,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 53,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 54,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 55,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 56,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 57,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 58,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 59,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 60,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 61,7 sym=" " w=1 cont=false fg=index=15 bg=index=4 mods=bold
+cell 62,7 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,7 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,8 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,8 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,8 sym="t" w=1 cont=false fg=index=8 bg=default mods=-
+cell 3,8 sym="a" w=1 cont=false fg=index=8 bg=default mods=-
+cell 4,8 sym="b" w=1 cont=false fg=index=8 bg=default mods=-
+cell 5,8 sym="_" w=1 cont=false fg=index=8 bg=default mods=-
+cell 6,8 sym="w" w=1 cont=false fg=index=8 bg=default mods=-
+cell 7,8 sym="i" w=1 cont=false fg=index=8 bg=default mods=-
+cell 8,8 sym="d" w=1 cont=false fg=index=8 bg=default mods=-
+cell 9,8 sym="t" w=1 cont=false fg=index=8 bg=default mods=-
+cell 10,8 sym="h" w=1 cont=false fg=index=8 bg=default mods=-
+cell 11,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 12,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 13,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 14,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 15,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 16,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 17,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 18,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 19,8 sym="4" w=1 cont=false fg=index=8 bg=default mods=-
+cell 20,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 21,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 22,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 23,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 24,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 25,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 26,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 27,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 28,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 29,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 30,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 31,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 32,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 33,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 34,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 35,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 36,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 37,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 38,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 39,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 40,8 sym="d" w=1 cont=false fg=index=8 bg=default mods=-
+cell 41,8 sym="i" w=1 cont=false fg=index=8 bg=default mods=-
+cell 42,8 sym="s" w=1 cont=false fg=index=8 bg=default mods=-
+cell 43,8 sym="a" w=1 cont=false fg=index=8 bg=default mods=-
+cell 44,8 sym="b" w=1 cont=false fg=index=8 bg=default mods=-
+cell 45,8 sym="l" w=1 cont=false fg=index=8 bg=default mods=-
+cell 46,8 sym="e" w=1 cont=false fg=index=8 bg=default mods=-
+cell 47,8 sym="d" w=1 cont=false fg=index=8 bg=default mods=-
+cell 48,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 49,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 50,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 51,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 52,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 53,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 54,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 55,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 56,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 57,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 58,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 59,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 60,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 61,8 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 62,8 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,8 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,9 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,9 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,9 sym="w" w=1 cont=false fg=index=2 bg=default mods=-
+cell 3,9 sym="o" w=1 cont=false fg=index=2 bg=default mods=-
+cell 4,9 sym="r" w=1 cont=false fg=index=2 bg=default mods=-
+cell 5,9 sym="d" w=1 cont=false fg=index=2 bg=default mods=-
+cell 6,9 sym="_" w=1 cont=false fg=index=2 bg=default mods=-
+cell 7,9 sym="w" w=1 cont=false fg=index=2 bg=default mods=-
+cell 8,9 sym="r" w=1 cont=false fg=index=2 bg=default mods=-
+cell 9,9 sym="a" w=1 cont=false fg=index=2 bg=default mods=-
+cell 10,9 sym="p" w=1 cont=false fg=index=2 bg=default mods=-
+cell 11,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 12,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 13,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 14,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 15,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 16,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 17,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 18,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 19,9 sym="o" w=1 cont=false fg=index=2 bg=default mods=-
+cell 20,9 sym="f" w=1 cont=false fg=index=2 bg=default mods=-
+cell 21,9 sym="f" w=1 cont=false fg=index=2 bg=default mods=-
+cell 22,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 23,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 24,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 25,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 26,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 27,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 28,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 29,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 30,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 31,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 32,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 33,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 34,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 35,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 36,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 37,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 38,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 39,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 40,9 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 41,9 sym="n" w=1 cont=false fg=index=2 bg=default mods=-
+cell 42,9 sym="a" w=1 cont=false fg=index=2 bg=default mods=-
+cell 43,9 sym="b" w=1 cont=false fg=index=2 bg=default mods=-
+cell 44,9 sym="l" w=1 cont=false fg=index=2 bg=default mods=-
+cell 45,9 sym="e" w=1 cont=false fg=index=2 bg=default mods=-
+cell 46,9 sym="d" w=1 cont=false fg=index=2 bg=default mods=-
+cell 47,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 48,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 49,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 50,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 51,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 52,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 53,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 54,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 55,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 56,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 57,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 58,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 59,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 60,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 61,9 sym=" " w=1 cont=false fg=index=2 bg=default mods=-
+cell 62,9 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,9 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,10 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,10 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,10 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,11 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,11 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,11 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,12 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,12 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,12 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,13 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 2,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,13 sym="│" w=1 cont=false fg=default bg=default mods=-
+cell 63,13 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,14 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,14 sym="└" w=1 cont=false fg=default bg=default mods=-
+cell 2,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 3,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 4,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 5,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 6,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 7,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 8,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 9,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 10,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 11,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 12,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 13,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 14,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 15,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 16,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 17,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 18,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 19,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 20,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 21,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 22,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 23,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 24,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 25,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 26,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 27,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 28,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 29,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 30,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 31,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 32,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 33,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 34,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 35,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 36,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 37,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 38,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 39,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 40,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 41,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 42,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 43,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 44,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 45,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 46,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 47,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 48,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 49,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 50,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 51,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 52,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 53,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 54,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 55,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 56,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 57,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 58,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 59,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 60,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 61,14 sym="─" w=1 cont=false fg=default bg=default mods=-
+cell 62,14 sym="┘" w=1 cont=false fg=default bg=default mods=-
+cell 63,14 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 1,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 2,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 3,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 4,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 5,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 6,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 7,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 8,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 9,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 10,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 11,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 12,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 13,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 14,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 15,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 16,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 17,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 18,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 19,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 20,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 21,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 22,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 23,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 24,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 25,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 26,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 27,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 28,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 29,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 30,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 31,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 32,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 33,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 34,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 35,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 36,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 37,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 38,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 39,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 40,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 41,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 42,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 43,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 44,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 45,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 46,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 47,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 48,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 49,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 50,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 51,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 52,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 53,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 54,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 55,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 56,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 57,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 58,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 59,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 60,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 61,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 62,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 63,15 sym=" " w=1 cont=false fg=default bg=default mods=-
+cell 0,16 sym="u" w=1 cont=false fg=index=8 bg=default mods=-
+cell 1,16 sym="p" w=1 cont=false fg=index=8 bg=default mods=-
+cell 2,16 sym="/" w=1 cont=false fg=index=8 bg=default mods=-
+cell 3,16 sym="d" w=1 cont=false fg=index=8 bg=default mods=-
+cell 4,16 sym="o" w=1 cont=false fg=index=8 bg=default mods=-
+cell 5,16 sym="w" w=1 cont=false fg=index=8 bg=default mods=-
+cell 6,16 sym="n" w=1 cont=false fg=index=8 bg=default mods=-
+cell 7,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 8,16 sym="m" w=1 cont=false fg=index=8 bg=default mods=-
+cell 9,16 sym="o" w=1 cont=false fg=index=8 bg=default mods=-
+cell 10,16 sym="v" w=1 cont=false fg=index=8 bg=default mods=-
+cell 11,16 sym="e" w=1 cont=false fg=index=8 bg=default mods=-
+cell 12,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 13,16 sym="·" w=1 cont=false fg=index=8 bg=default mods=-
+cell 14,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 15,16 sym="e" w=1 cont=false fg=index=8 bg=default mods=-
+cell 16,16 sym="n" w=1 cont=false fg=index=8 bg=default mods=-
+cell 17,16 sym="t" w=1 cont=false fg=index=8 bg=default mods=-
+cell 18,16 sym="e" w=1 cont=false fg=index=8 bg=default mods=-
+cell 19,16 sym="r" w=1 cont=false fg=index=8 bg=default mods=-
+cell 20,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 21,16 sym="t" w=1 cont=false fg=index=8 bg=default mods=-
+cell 22,16 sym="o" w=1 cont=false fg=index=8 bg=default mods=-
+cell 23,16 sym="g" w=1 cont=false fg=index=8 bg=default mods=-
+cell 24,16 sym="g" w=1 cont=false fg=index=8 bg=default mods=-
+cell 25,16 sym="l" w=1 cont=false fg=index=8 bg=default mods=-
+cell 26,16 sym="e" w=1 cont=false fg=index=8 bg=default mods=-
+cell 27,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 28,16 sym="·" w=1 cont=false fg=index=8 bg=default mods=-
+cell 29,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 30,16 sym="q" w=1 cont=false fg=index=8 bg=default mods=-
+cell 31,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 32,16 sym="q" w=1 cont=false fg=index=8 bg=default mods=-
+cell 33,16 sym="u" w=1 cont=false fg=index=8 bg=default mods=-
+cell 34,16 sym="i" w=1 cont=false fg=index=8 bg=default mods=-
+cell 35,16 sym="t" w=1 cont=false fg=index=8 bg=default mods=-
+cell 36,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 37,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 38,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 39,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 40,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 41,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 42,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 43,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 44,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 45,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 46,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 47,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 48,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 49,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 50,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 51,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 52,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 53,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 54,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 55,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 56,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 57,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 58,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 59,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 60,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 61,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 62,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 63,16 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 0,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 1,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 2,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 3,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 4,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 5,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 6,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 7,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 8,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 9,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 10,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 11,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 12,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 13,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 14,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 15,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 16,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 17,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 18,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 19,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 20,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 21,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 22,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 23,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 24,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 25,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 26,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 27,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 28,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 29,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 30,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 31,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 32,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 33,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 34,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 35,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 36,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 37,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 38,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 39,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 40,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 41,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 42,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 43,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 44,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 45,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 46,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 47,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 48,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 49,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 50,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 51,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 52,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 53,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 54,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 55,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 56,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 57,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 58,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 59,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 60,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 61,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 62,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
+cell 63,17 sym=" " w=1 cont=false fg=index=8 bg=default mods=-
