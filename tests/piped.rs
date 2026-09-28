@@ -21,7 +21,8 @@ fn separate_stdout_stderr_bytes() {
 #[test]
 fn non_utf8_bytes_preserved() {
     let out = Command::new("/bin/sh")
-        .args(["-c", "printf '\\xff\\xfe\\x00A'; printf '\\x80\\x81' >&2"])
+        // POSIX octal: dash (Linux /bin/sh) does not interpret \xNN.
+        .args(["-c", "printf '\\377\\376\\000A'; printf '\\200\\201' >&2"])
         .run();
     assert_eq!(out.status, Termination::Exit(0));
     assert_eq!(out.stdout, vec![0xff, 0xfe, 0x00, b'A']);

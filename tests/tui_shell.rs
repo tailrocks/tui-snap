@@ -347,27 +347,60 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
     }
     cmd.env("ENV", "/dev/null");
     let mut child = pair.slave.spawn_command(cmd).unwrap();
+    // Drop our slave handle before reading: a parent-held slave fd
+    // suppresses master EOF/EIO on Linux, blocking the reader forever
+    // after child exit (macOS returns regardless; Linux hung CI here).
+    drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().unwrap();
-    let mut out = Vec::new();
-    let mut buf = [0u8; 4096];
+    // Drain on a thread: a blocking PTY read cannot be preempted, so the
+    // deadline lives on this thread, never behind a read that may not return.
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut out = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => out.extend_from_slice(&buf[..n]),
+                Err(_) => break,
+            }
+        }
+        let _ = tx.send(out);
+    });
     let dl = deadline(10);
     loop {
-        match reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => out.extend_from_slice(&buf[..n]),
-            Err(_) => break,
+        if child.try_wait().unwrap().is_some() {
+            break;
         }
-        assert!(Instant::now() < dl, "raw capture timed out");
+        // Kill before failing: a timed-out capture must not leak the child.
+        if Instant::now() >= dl {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("raw capture timed out waiting for child exit");
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
-    let _ = child.wait();
-    out
+    // Trailing bytes after exit, still bounded; kill on overrun so a
+    // daemonized grandchild holding the slave cannot hang the suite.
+    match rx.recv_timeout(dl.saturating_duration_since(Instant::now())) {
+        Ok(out) => {
+            let _ = child.wait();
+            out
+        }
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("raw capture timed out draining PTY output");
+        }
+    }
 }
 
 #[test]
 fn replay_recorded_pty_bytes_chunk_invariant() {
     let bytes = capture_raw(
         "/bin/sh",
-        &["-c", "printf 'X\\x1b[1mB\\x1b[0m\\n\\xe2\\x82\\xac\\n'"],
+        // POSIX octal: dash (Linux /bin/sh) does not interpret \xNN.
+        &["-c", "printf 'X\\033[1mB\\033[0m\\n\\342\\202\\254\\n'"],
     );
     assert!(!bytes.is_empty());
     assert!(bytes.windows(3).any(|w| w == b"\xe2\x82\xac"));
@@ -378,6 +411,23 @@ fn replay_recorded_pty_bytes_chunk_invariant() {
     }
     let ones: Vec<&[u8]> = bytes.chunks(1).collect();
     assert_eq!(replay_chunks(ones, 80, 24).unwrap().screen, whole.screen);
+}
+
+#[test]
+fn capture_raw_bounded_when_child_exits_silently() {
+    // Regression for the Linux-CI hang (run 36482350762): capture_raw once
+    // blocked forever in read() because the parent held the slave fd open,
+    // suppressing master EOF/EIO. A silent immediate exit is the worst case
+    // (no bytes, pure EOF dependence); run it off-thread so a regression
+    // fails fast instead of hanging the suite.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(capture_raw("/bin/sh", &["-c", "exit 0"]));
+    });
+    let bytes = rx
+        .recv_timeout(Duration::from_secs(20))
+        .expect("capture_raw hung on silent immediate child exit");
+    assert!(bytes.is_empty(), "unexpected bytes: {bytes:?}");
 }
 
 #[test]
