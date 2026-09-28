@@ -92,13 +92,7 @@ fn stateful_screen_uses_production_render_fn() {
 
 #[test]
 fn widget_screen_renders_fullscreen() {
-    let cap = widget_screen(
-        Paragraph::new("wide"),
-        10,
-        3,
-        EdgePolicy::default(),
-    )
-    .unwrap();
+    let cap = widget_screen(Paragraph::new("wide"), 10, 3, EdgePolicy::default()).unwrap();
     assert_eq!(row_text(&cap.screen, 0), "wide");
     assert_eq!((cap.screen.cols(), cap.screen.rows()), (10, 3));
     assert!(!cap.screen.cursor().visible);
@@ -191,11 +185,7 @@ fn wide_glyph_at_row_end_clips_with_replacement_by_default() {
     assert_eq!(cap.clipped[0].x, 9);
     assert_eq!(cap.clipped[0].y, 0);
     assert_eq!(cap.clipped[0].symbol, "漢");
-    assert!(
-        cap.notes
-            .iter()
-            .any(|n| n.contains("ClipWithReplacement"))
-    );
+    assert!(cap.notes.iter().any(|n| n.contains("ClipWithReplacement")));
 }
 
 #[test]

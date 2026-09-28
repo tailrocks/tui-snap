@@ -304,9 +304,9 @@ fn convert_buffer(
                 .map_err(|_| ScreenError(format!("buffer x overflow at grid ({gx},{gy})")))?;
             let ay = u16::try_from(u32::from(area.y) + u32::from(gy))
                 .map_err(|_| ScreenError(format!("buffer y overflow at grid ({gx},{gy})")))?;
-            let rc = buf.cell((ax, ay)).ok_or_else(|| {
-                ScreenError(format!("buffer missing cell at global ({ax},{ay})"))
-            })?;
+            let rc = buf
+                .cell((ax, ay))
+                .ok_or_else(|| ScreenError(format!("buffer missing cell at global ({ax},{ay})")))?;
             let symbol = rc.symbol().to_string();
             let width = UnicodeWidthStr::width(symbol.as_str()).min(2).max(1) as u8;
             if width == 2 && gx + 1 >= cols {
