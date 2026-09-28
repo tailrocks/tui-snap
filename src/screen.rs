@@ -46,6 +46,7 @@ impl Hash for crate::frame::Mods {
         self.dim.hash(state);
         self.italic.hash(state);
         self.underline.hash(state);
+        self.underline_style.hash(state);
         self.strikethrough.hash(state);
         self.reverse.hash(state);
     }
@@ -61,6 +62,7 @@ impl Hash for Cell {
         self.fg.hash(state);
         self.bg.hash(state);
         self.mods.hash(state);
+        self.underline_color.hash(state);
     }
 }
 

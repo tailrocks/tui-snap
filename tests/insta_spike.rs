@@ -64,7 +64,7 @@ use std::path::{Path, PathBuf};
 
 use tuisnap::diff::AlphaPolicy;
 use tuisnap::insta_proto::{insta_string, insta_value, PngPixelComparator};
-use tuisnap::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen};
+use tuisnap::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen, UnderlineStyle};
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -94,6 +94,7 @@ fn cell(
         fg,
         bg,
         mods,
+        underline_color: Color::Default,
     }
 }
 
@@ -105,6 +106,7 @@ fn mods_of(bold: bool, underline: bool, hidden: bool, blink: bool, reverse: bool
         dim: false,
         italic: false,
         underline,
+        underline_style: UnderlineStyle::None,
         strikethrough: false,
         reverse,
     }

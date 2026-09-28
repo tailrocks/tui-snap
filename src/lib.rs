@@ -43,7 +43,9 @@ pub mod tui;
 #[cfg(feature = "pty")]
 pub mod tui_shell;
 
-pub use frame::{Cell, Color, Cursor, CursorStyle, Frame, FrameError, Mods, Provenance, Rgb};
+pub use frame::{
+    Cell, Color, Cursor, CursorStyle, Frame, FrameError, Mods, Provenance, Rgb, UnderlineStyle,
+};
 pub use grouped::{ArtifactPaths, GroupedCheckOptions, GroupedOutcome, GroupedStore, InvalidName};
 pub use profile::{
     FallbackFace, FontFaces, Profile, VENDORED_CJK_FONT, VENDORED_CJK_FONT_SHA256, VENDORED_FACES,

@@ -215,14 +215,27 @@ fn summarize(cell: &crate::frame::Cell) -> String {
     if cell.mods.italic {
         mods.push_str("+italic");
     }
-    if cell.mods.underline {
-        mods.push_str("+ul");
+    match cell.mods.effective_underline_style() {
+        crate::frame::UnderlineStyle::None => {}
+        crate::frame::UnderlineStyle::Single => mods.push_str("+ul"),
+        crate::frame::UnderlineStyle::Double => mods.push_str("+ul2"),
+        crate::frame::UnderlineStyle::Curly => mods.push_str("+ulcurl"),
+        crate::frame::UnderlineStyle::Dotted => mods.push_str("+uldot"),
+        crate::frame::UnderlineStyle::Dashed => mods.push_str("+uldash"),
     }
     if cell.mods.strikethrough {
         mods.push_str("+strike");
     }
     if cell.mods.reverse {
         mods.push_str("+rev");
+    }
+    if !cell.underline_color.is_default() {
+        let uc = match cell.underline_color {
+            crate::frame::Color::Default => fg,
+            crate::frame::Color::Indexed(i) => crate::frame::Rgb::from_indexed(i),
+            crate::frame::Color::Rgb(r) => r,
+        };
+        mods.push_str(&format!("+ulc={}", uc.to_hex()));
     }
     format!(
         "{:?} fg={} bg={}{mods}",

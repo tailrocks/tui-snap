@@ -64,6 +64,7 @@ fn fixture() -> Screen {
             fg: Color::Indexed(1),
             bg: Color::Default,
             mods: bold,
+            underline_color: Color::Default,
         },
         Cell {
             x: 1,
@@ -74,6 +75,7 @@ fn fixture() -> Screen {
             fg: Color::Rgb(Rgb::new(1, 2, 3)),
             bg: Color::Default,
             mods: plain,
+            underline_color: Color::Default,
         },
         Cell {
             x: 2,
@@ -84,6 +86,7 @@ fn fixture() -> Screen {
             fg: Color::Default,
             bg: Color::Indexed(4),
             mods: plain,
+            underline_color: Color::Default,
         },
         Cell {
             x: 0,
@@ -94,6 +97,7 @@ fn fixture() -> Screen {
             fg: Color::Default,
             bg: Color::Default,
             mods: plain,
+            underline_color: Color::Default,
         },
         Cell {
             x: 1,
@@ -104,6 +108,7 @@ fn fixture() -> Screen {
             fg: Color::Default,
             bg: Color::Default,
             mods: plain,
+            underline_color: Color::Default,
         },
         Cell {
             x: 2,
@@ -114,6 +119,7 @@ fn fixture() -> Screen {
             fg: Color::Default,
             bg: Color::Default,
             mods: plain,
+            underline_color: Color::Default,
         },
     ];
     Screen::validate(

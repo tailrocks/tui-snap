@@ -512,11 +512,19 @@ impl Renderer {
                     );
                 }
                 if cell.mods.underline {
+                    // All styles render as one rule; only the color varies
+                    // (SGR 58) — double/curly/dotted/dashed geometry is a
+                    // known renderer limitation, tracked in canonical state.
+                    let ul = match cell.underline_color {
+                        crate::frame::Color::Default => fg,
+                        crate::frame::Color::Indexed(i) => crate::frame::Rgb::from_indexed(i),
+                        crate::frame::Color::Rgb(r) => r,
+                    };
                     let uy = (baseline + 2 * u_i).min((cy + cell_h - 1) as i32);
                     let th = if cell.mods.bold { 2 * u } else { u };
                     for t in 0..th {
                         for dx in 0..span {
-                            blend(&mut img, cx + dx, (uy + t as i32) as u32, fg, 255);
+                            blend(&mut img, cx + dx, (uy + t as i32) as u32, ul, 255);
                         }
                     }
                 }
@@ -1075,7 +1083,8 @@ pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) ->
                 bg0,
                 cell.mods.bold,
                 cell.mods.italic,
-                cell.mods.underline,
+                cell.mods.effective_underline_style(),
+                cell.underline_color,
                 cell.mods.strikethrough,
             );
             let mut run = String::new();
@@ -1091,7 +1100,8 @@ pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) ->
                     bg,
                     c.mods.bold,
                     c.mods.italic,
-                    c.mods.underline,
+                    c.mods.effective_underline_style(),
+                    c.underline_color,
                     c.mods.strikethrough,
                 ) != key
                 {
@@ -1140,7 +1150,18 @@ pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) ->
             } else {
                 format!(" text-decoration=\"{}\"", deco.join(" "))
             };
-            let attrs = format!("{weight}{style}{decoration}");
+            // Non-single styles map to the SVG decoration style. The style
+            // applies to every decoration on the run (a combined
+            // double-underline + strike doubles both); single underlines
+            // emit nothing, keeping existing SVG byte-identical.
+            let deco_style = match cell.mods.effective_underline_style() {
+                crate::frame::UnderlineStyle::Double => " text-decoration-style=\"double\"",
+                crate::frame::UnderlineStyle::Curly => " text-decoration-style=\"wavy\"",
+                crate::frame::UnderlineStyle::Dotted => " text-decoration-style=\"dotted\"",
+                crate::frame::UnderlineStyle::Dashed => " text-decoration-style=\"dashed\"",
+                crate::frame::UnderlineStyle::None | crate::frame::UnderlineStyle::Single => "",
+            };
+            let attrs = format!("{weight}{style}{decoration}{deco_style}");
             s.push_str(&format!(
                 "<text xml:space=\"preserve\" x=\"{px}\" y=\"{}\" fill=\"{}\"{}>{}</text>\n",
                 py + ch - 4,
@@ -1219,8 +1240,13 @@ fn sgr_for(c: &crate::frame::Cell) -> String {
     if c.mods.italic {
         p.push("3".into());
     }
-    if c.mods.underline {
-        p.push("4".into());
+    match c.mods.effective_underline_style() {
+        crate::frame::UnderlineStyle::None => {}
+        crate::frame::UnderlineStyle::Single => p.push("4".into()),
+        crate::frame::UnderlineStyle::Double => p.push("4:2".into()),
+        crate::frame::UnderlineStyle::Curly => p.push("4:3".into()),
+        crate::frame::UnderlineStyle::Dotted => p.push("4:4".into()),
+        crate::frame::UnderlineStyle::Dashed => p.push("4:5".into()),
     }
     if c.mods.strikethrough {
         p.push("9".into());
@@ -1237,6 +1263,7 @@ fn sgr_for(c: &crate::frame::Cell) -> String {
     };
     push_color(&mut p, 38, c.fg);
     push_color(&mut p, 48, c.bg);
+    push_color(&mut p, 58, c.underline_color);
     p.join(";")
 }
 

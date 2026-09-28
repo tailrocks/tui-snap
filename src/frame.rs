@@ -79,11 +79,70 @@ impl Rgb {
 }
 
 /// A cell color: terminal default, palette index, or direct RGB.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Color {
+    #[default]
     Default,
     Indexed(u8),
     Rgb(Rgb),
+}
+
+impl Color {
+    /// `true` for [`Color::Default`]. Used by `skip_serializing_if` so stored
+    /// frames stay sparse.
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        matches!(self, Color::Default)
+    }
+}
+
+/// Underline style (SGR 4 / 4:x; kitty/ITU numbering: `4:1` single through
+/// `4:5` dashed, `4:0`/`24` cancel). Stored in [`Mods::underline_style`]
+/// alongside the legacy [`Mods::underline`] bool; readers use
+/// [`Mods::effective_underline_style`] so both agree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize)]
+pub enum UnderlineStyle {
+    /// No underline (default; omitted from stored JSON and snapshots).
+    #[default]
+    None,
+    /// SGR 4 / 4:1.
+    Single,
+    /// SGR 4:2.
+    Double,
+    /// SGR 4:3 (undercurl).
+    Curly,
+    /// SGR 4:4.
+    Dotted,
+    /// SGR 4:5.
+    Dashed,
+}
+
+impl UnderlineStyle {
+    /// Any visible underline, regardless of style.
+    #[must_use]
+    pub fn is_some(self) -> bool {
+        !matches!(self, UnderlineStyle::None)
+    }
+
+    /// No underline. Used by `skip_serializing_if` so stored frames stay sparse.
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        matches!(self, UnderlineStyle::None)
+    }
+
+    /// Canonical token used by text/JSON projections (`None` has no token;
+    /// callers omit it).
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            UnderlineStyle::None => "-",
+            UnderlineStyle::Single => "underline",
+            UnderlineStyle::Double => "double-underline",
+            UnderlineStyle::Curly => "undercurl",
+            UnderlineStyle::Dotted => "dotted-underline",
+            UnderlineStyle::Dashed => "dashed-underline",
+        }
+    }
 }
 
 /// Cell modifiers retained in canonical data. Blink phase is frozen visible;
@@ -97,8 +156,33 @@ pub struct Mods {
     pub dim: bool,
     pub italic: bool,
     pub underline: bool,
+    /// Underline style refinement (SGR 4:x). Additive v3 field: missing in
+    /// legacy files (defaults to `None`) and omitted from stored JSON when
+    /// `None`, so only new data carries it. Producer invariant:
+    /// `underline == underline_style.is_some()`; legacy `underline=true`
+    /// cells with `None` read as Single via
+    /// [`Mods::effective_underline_style`].
+    #[serde(default, skip_serializing_if = "UnderlineStyle::is_none")]
+    pub underline_style: UnderlineStyle,
     pub strikethrough: bool,
     pub reverse: bool,
+}
+
+impl Mods {
+    /// Effective underline style: the explicit style when set, else Single
+    /// for legacy `underline=true` cells, else None. All readers (canonical
+    /// projections, renderer, SGR dump, assertions) use this so legacy and
+    /// new data agree.
+    #[must_use]
+    pub fn effective_underline_style(self) -> UnderlineStyle {
+        if self.underline_style.is_some() {
+            self.underline_style
+        } else if self.underline {
+            UnderlineStyle::Single
+        } else {
+            UnderlineStyle::None
+        }
+    }
 }
 
 /// One grid cell.
@@ -118,6 +202,10 @@ pub struct Cell {
     pub fg: Color,
     pub bg: Color,
     pub mods: Mods,
+    /// Underline color (SGR 58; SGR 59 resets). `Default` follows the
+    /// resolved foreground. Omitted from stored JSON when default.
+    #[serde(default, skip_serializing_if = "Color::is_default")]
+    pub underline_color: Color,
 }
 
 impl Cell {
@@ -132,6 +220,7 @@ impl Cell {
             fg: Color::Default,
             bg: Color::Default,
             mods: Mods::default(),
+            underline_color: Color::Default,
         }
     }
 }
@@ -362,11 +451,20 @@ impl Frame {
         Ok(())
     }
 
-    /// Parse + validate canonical JSON.
+    /// Parse + validate canonical JSON. Legacy bool-only underlines
+    /// (`underline=true` with no style key) normalize to the producer form
+    /// (`Single`): in v3 the bool could only mean single, so this loses no
+    /// information and keeps representation out of comparison — in memory,
+    /// `underline == underline_style.is_some()` always holds.
     pub fn from_json(text: &str) -> Result<Self, FrameError> {
-        let frame: Self =
+        let mut frame: Self =
             serde_json::from_str(text).map_err(|e| FrameError(format!("bad JSON: {e}")))?;
         frame.validate()?;
+        for c in &mut frame.cells {
+            if c.mods.underline && c.mods.underline_style.is_none() {
+                c.mods.underline_style = UnderlineStyle::Single;
+            }
+        }
         Ok(frame)
     }
 
@@ -428,7 +526,10 @@ impl Frame {
             h = mix(h, &c.y.to_le_bytes());
             h = mix(h, c.symbol.as_bytes());
             h = mix(h, &[c.width, u8::from(c.continuation)]);
-            h = mix(h, format!("{:?}|{:?}|{:?}", c.fg, c.bg, c.mods).as_bytes());
+            h = mix(
+                h,
+                format!("{:?}|{:?}|{:?}|{:?}", c.fg, c.bg, c.mods, c.underline_color).as_bytes(),
+            );
         }
         h = mix(
             h,
@@ -465,6 +566,7 @@ impl Frame {
                 || a.fg != b.fg
                 || a.bg != b.bg
                 || a.mods != b.mods
+                || a.underline_color != b.underline_color
             {
                 out.push((a.x, a.y));
             }

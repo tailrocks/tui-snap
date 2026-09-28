@@ -236,7 +236,6 @@ pub struct GroupedOutcome {
 }
 
 impl GroupedOutcome {
-    
     pub fn status(&self) -> Status {
         self.outcome.status
     }

@@ -44,6 +44,7 @@ fn cell(x: u16, y: u16, symbol: &str, width: u8) -> Cell {
         fg: Color::Default,
         bg: Color::Default,
         mods: Mods::default(),
+        underline_color: Color::Default,
     }
 }
 
@@ -57,6 +58,7 @@ fn cont(x: u16, y: u16) -> Cell {
         fg: Color::Default,
         bg: Color::Default,
         mods: Mods::default(),
+        underline_color: Color::Default,
     }
 }
 

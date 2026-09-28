@@ -4,7 +4,7 @@
 //! wide/continuation geometry, corrupt imports (each malformed class),
 //! JSON round trips, deterministic digests, dimension-mismatch errors.
 
-use tuisnap::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance, Rgb};
+use tuisnap::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance, Rgb, UnderlineStyle};
 
 fn prov() -> Provenance {
     Provenance {
@@ -92,6 +92,7 @@ fn json_round_trip_preserves_everything() {
         Mods {
             italic: true,
             underline: true,
+            underline_style: UnderlineStyle::Single,
             ..Default::default()
         },
         Cursor {

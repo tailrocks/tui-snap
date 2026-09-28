@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use ratatui::widgets::Paragraph;
-use tuisnap::snapshot::Store;
+use tuisnap::snapshot::{Status, Store};
 use tuisnap::{Profile, Provenance, VENDORED_FACES};
 
 fn bin() -> PathBuf {
@@ -115,9 +115,10 @@ fn readme_accept_flow() {
     let store = Store::new(&tmp.path().join("visual"));
     let profile = Profile::default_profile();
     let frame = home_frame();
-    store
+    let first = store
         .check("home", &frame, &profile, &VENDORED_FACES, 1.0)
         .unwrap();
+    assert!(matches!(first.status, Status::MissingApproval));
     accept_reviewed(&store).unwrap();
     let outcome = store
         .check("home", &frame, &profile, &VENDORED_FACES, 1.0)
@@ -282,14 +283,15 @@ fn readme_api_map_resolves() {
     assert_eq!((profile.cell_w, profile.cell_h), (10, 21));
     assert_eq!(profile.font_px, 16.0);
     assert_eq!(profile.scale, 2);
-    assert_eq!(tuisnap::frame::FRAME_VERSION, 4);
-    // Schema v4: styled underlines + underline color are canonical.
+    assert_eq!(tuisnap::frame::FRAME_VERSION, 3);
+    // Schema v3 + additive underline style/color: bool untouched, new keys sparse.
     use tuisnap::frame::UnderlineStyle;
     assert_eq!(UnderlineStyle::default(), UnderlineStyle::None);
     assert!(UnderlineStyle::Curly.is_some());
     assert_eq!(UnderlineStyle::Double.token(), "double-underline");
     let cell = tuisnap::frame::Cell::blank(0, 0);
-    assert_eq!(cell.mods.underline, UnderlineStyle::None);
+    assert!(!cell.mods.underline);
+    assert_eq!(cell.mods.underline_style, UnderlineStyle::None);
     assert_eq!(cell.underline_color, tuisnap::frame::Color::Default);
 }
 

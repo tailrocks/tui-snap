@@ -55,7 +55,7 @@
 //! `scrollback_index` and `scrollback: true`. Style/region locators ignore
 //! scrollback (it has no cell geometry); text/regex combinators apply to both.
 
-use crate::frame::{Cell, Color};
+use crate::frame::{Cell, Color, UnderlineStyle};
 use crate::screen::{Observation, Screen};
 use std::time::{Duration, Instant};
 
@@ -266,6 +266,8 @@ pub struct StyleQuery {
     dim: Option<bool>,
     italic: Option<bool>,
     underline: Option<bool>,
+    underline_style: Option<UnderlineStyle>,
+    underline_color: Option<Color>,
     strikethrough: Option<bool>,
     reverse: Option<bool>,
     hidden: Option<bool>,
@@ -309,9 +311,24 @@ impl StyleQuery {
         self
     }
 
+    /// Any (`true`) or no (`false`) underline, regardless of style.
     #[must_use]
     pub fn underline(mut self, v: bool) -> Self {
         self.underline = Some(v);
+        self
+    }
+
+    /// Exact underline style.
+    #[must_use]
+    pub fn underline_style(mut self, s: UnderlineStyle) -> Self {
+        self.underline_style = Some(s);
+        self
+    }
+
+    /// Exact underline (SGR 58) color.
+    #[must_use]
+    pub fn underline_color(mut self, c: Color) -> Self {
+        self.underline_color = Some(c);
         self
     }
 
@@ -375,6 +392,16 @@ impl StyleQuery {
                 if w != got {
                     return false;
                 }
+            }
+        }
+        if let Some(s) = self.underline_style {
+            if cell.mods.effective_underline_style() != s {
+                return false;
+            }
+        }
+        if let Some(uc) = self.underline_color {
+            if cell.underline_color != uc {
+                return false;
             }
         }
         if let Some(p) = self.custom {

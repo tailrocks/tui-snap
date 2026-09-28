@@ -63,8 +63,9 @@ fn mods_token(m: crate::frame::Mods) -> String {
     if m.italic {
         out.push("italic");
     }
-    if m.underline {
-        out.push("underline");
+    let ul = m.effective_underline_style();
+    if ul.is_some() {
+        out.push(ul.token());
     }
     if m.strikethrough {
         out.push("strikethrough");
@@ -115,7 +116,7 @@ pub fn insta_string(screen: &Screen) -> String {
     ));
     for cell in screen.cells() {
         out.push_str(&format!(
-            "cell {},{} sym={:?} w={} cont={} fg={} bg={} mods={}\n",
+            "cell {},{} sym={:?} w={} cont={} fg={} bg={} mods={}",
             cell.x,
             cell.y,
             cell.symbol,
@@ -125,6 +126,12 @@ pub fn insta_string(screen: &Screen) -> String {
             color_token(cell.bg),
             mods_token(cell.mods)
         ));
+        // Sparse: default underline color adds nothing, so default snapshots
+        // keep their exact shape.
+        if !cell.underline_color.is_default() {
+            out.push_str(&format!(" uc={}", color_token(cell.underline_color)));
+        }
+        out.push('\n');
     }
     out
 }
@@ -132,7 +139,10 @@ pub fn insta_string(screen: &Screen) -> String {
 /// Structured projection of the same state for `assert_json_snapshot!` (I01).
 ///
 /// Same coverage as [`insta_string`] (geometry, all cells, cursor); colors use
-/// the same tokens, modifiers are explicit booleans.
+/// the same tokens, modifiers are explicit booleans. `"underline"` stays a
+/// bool (any style) for shape stability; the exact style and underline color
+/// appear as sparse keys (`"underline_style"` / `"underline_color"`) only
+/// when non-default, so default snapshots keep their exact shape.
 #[must_use]
 pub fn insta_value(screen: &Screen) -> serde_json::Value {
     let (ox, oy) = screen.origin();
@@ -141,7 +151,20 @@ pub fn insta_value(screen: &Screen) -> serde_json::Value {
         .cells()
         .iter()
         .map(|cell| {
-            serde_json::json!({
+            let mut mods = serde_json::json!({
+                "hidden": cell.mods.hidden,
+                "blink": cell.mods.blink,
+                "bold": cell.mods.bold,
+                "dim": cell.mods.dim,
+                "italic": cell.mods.italic,
+                "underline": cell.mods.underline,
+                "strikethrough": cell.mods.strikethrough,
+                "reverse": cell.mods.reverse,
+            });
+            if cell.mods.underline_style.is_some() {
+                mods["underline_style"] = serde_json::json!(cell.mods.underline_style.token());
+            }
+            let mut obj = serde_json::json!({
                 "x": cell.x,
                 "y": cell.y,
                 "symbol": cell.symbol,
@@ -149,17 +172,12 @@ pub fn insta_value(screen: &Screen) -> serde_json::Value {
                 "continuation": cell.continuation,
                 "fg": color_token(cell.fg),
                 "bg": color_token(cell.bg),
-                "mods": {
-                    "hidden": cell.mods.hidden,
-                    "blink": cell.mods.blink,
-                    "bold": cell.mods.bold,
-                    "dim": cell.mods.dim,
-                    "italic": cell.mods.italic,
-                    "underline": cell.mods.underline,
-                    "strikethrough": cell.mods.strikethrough,
-                    "reverse": cell.mods.reverse,
-                },
-            })
+                "mods": mods,
+            });
+            if !cell.underline_color.is_default() {
+                obj["underline_color"] = serde_json::json!(color_token(cell.underline_color));
+            }
+            obj
         })
         .collect();
     serde_json::json!({

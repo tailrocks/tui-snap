@@ -62,7 +62,7 @@ use alacritty_terminal::vte::ansi::{
 };
 use portable_pty::{native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize};
 
-use crate::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb};
+use crate::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use crate::screen::{CaptureProvenance, CaptureReason, Maybe, Observation, Screen, TermState};
 
 // ---------------------------------------------------------------------------
@@ -2555,6 +2555,7 @@ fn build_observation<T: EventListener>(
                     fg: Color::Default,
                     bg: Color::Default,
                     mods: Mods::default(),
+                    underline_color: Color::Default,
                 });
                 x += 2;
             } else if flags.contains(CellFlags::WIDE_CHAR_SPACER)
@@ -2574,6 +2575,7 @@ fn build_observation<T: EventListener>(
                     fg: Color::Default,
                     bg: Color::Default,
                     mods: Mods::default(),
+                    underline_color: Color::Default,
                 });
                 x += 1;
             } else if flags
@@ -2657,9 +2659,33 @@ fn frame_cell(
             dim: flags.contains(CellFlags::DIM),
             italic: flags.contains(CellFlags::ITALIC),
             underline: flags.intersects(CellFlags::ALL_UNDERLINES),
+            underline_style: frame_underline_style(flags),
             strikethrough: flags.contains(CellFlags::STRIKEOUT),
             reverse: flags.contains(CellFlags::INVERSE),
         },
+        underline_color: cell
+            .underline_color()
+            .map(frame_color)
+            .unwrap_or(Color::Default),
+    }
+}
+
+/// Map alacritty underline flags (set from SGR 4 / 4:0..4:5 / 24) to the
+/// canonical style. The emulator holds at most one underline flag per cell
+/// (each SGR 4:x clears the rest); the order below is defensive only.
+fn frame_underline_style(flags: CellFlags) -> UnderlineStyle {
+    if flags.contains(CellFlags::DOUBLE_UNDERLINE) {
+        UnderlineStyle::Double
+    } else if flags.contains(CellFlags::UNDERCURL) {
+        UnderlineStyle::Curly
+    } else if flags.contains(CellFlags::DOTTED_UNDERLINE) {
+        UnderlineStyle::Dotted
+    } else if flags.contains(CellFlags::DASHED_UNDERLINE) {
+        UnderlineStyle::Dashed
+    } else if flags.contains(CellFlags::UNDERLINE) {
+        UnderlineStyle::Single
+    } else {
+        UnderlineStyle::None
     }
 }
 

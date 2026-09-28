@@ -25,7 +25,7 @@
 //! post-draw cursor state preserved, and an explicit [`EdgePolicy`] for
 //! wide glyphs at row ends (backlog M05, M06, M03-partial, M07).
 
-use crate::frame::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance};
+use crate::frame::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance, UnderlineStyle};
 use ratatui::backend::Backend;
 use ratatui::buffer::{Buffer, Cell as RCell};
 use ratatui::layout::Position;
@@ -64,7 +64,14 @@ fn convert_mods(m: Modifier) -> Mods {
         bold: m.contains(Modifier::BOLD),
         dim: m.contains(Modifier::DIM),
         italic: m.contains(Modifier::ITALIC),
+        // Ratatui exposes no underline STYLE (only the UNDERLINED bit), so
+        // any ratatui underline is Single; see the `screen_from_buffer` table.
         underline: m.contains(Modifier::UNDERLINED),
+        underline_style: if m.contains(Modifier::UNDERLINED) {
+            UnderlineStyle::Single
+        } else {
+            UnderlineStyle::None
+        },
         strikethrough: m.contains(Modifier::CROSSED_OUT),
         reverse: m.contains(Modifier::REVERSED),
     }
@@ -86,6 +93,7 @@ fn lead_cell(x: u16, y: u16, rc: &RCell) -> (Cell, u8) {
             fg: convert_color(rc.fg),
             bg: convert_color(rc.bg),
             mods: convert_mods(rc.modifier),
+            underline_color: convert_color(rc.underline_color),
         },
         width,
     )
@@ -117,6 +125,7 @@ pub fn from_buffer(
                 cont.fg = convert_color(rc.fg);
                 cont.bg = convert_color(rc.bg);
                 cont.mods = convert_mods(rc.modifier);
+                cont.underline_color = convert_color(rc.underline_color);
                 cont.width = 0;
                 cont.continuation = true;
                 cont.symbol = String::new();
@@ -142,6 +151,7 @@ pub fn from_buffer(
                 cont.fg = convert_color(rc.fg);
                 cont.bg = convert_color(rc.bg);
                 cont.mods = convert_mods(rc.modifier);
+                cont.underline_color = convert_color(rc.underline_color);
                 cont.width = 0;
                 cont.continuation = true;
                 cont.symbol = String::new();
@@ -327,6 +337,7 @@ fn convert_buffer(
                             fg: convert_color(rc.fg),
                             bg: convert_color(rc.bg),
                             mods: convert_mods(rc.modifier),
+                            underline_color: convert_color(rc.underline_color),
                         });
                         clipped.push(ClippedCell {
                             x: gx,
@@ -338,10 +349,11 @@ fn convert_buffer(
                     }
                 }
             }
-            let (fg, bg, mods) = (
+            let (fg, bg, mods, ucolor) = (
                 convert_color(rc.fg),
                 convert_color(rc.bg),
                 convert_mods(rc.modifier),
+                convert_color(rc.underline_color),
             );
             cells.push(Cell {
                 x: gx,
@@ -352,6 +364,7 @@ fn convert_buffer(
                 fg,
                 bg,
                 mods,
+                underline_color: ucolor,
             });
             if width == 2 {
                 cells.push(Cell {
@@ -363,6 +376,7 @@ fn convert_buffer(
                     fg,
                     bg,
                     mods,
+                    underline_color: ucolor,
                 });
                 gx += 2;
             } else {
@@ -425,8 +439,8 @@ fn convert_buffer(
 /// | BOLD/DIM/ITALIC/UNDERLINED/CROSSED_OUT/REVERSED | `mods` flags | preserved |
 /// | HIDDEN | `mods.hidden` | preserved (intent; renderers omit the glyph) |
 /// | SLOW_BLINK/RAPID_BLINK | `mods.blink` | preserved (intent; stills freeze phase) |
-/// | underline color | — | NOT preserved: `underline-color` cargo feature is off in this build and the canonical cell has no field |
-/// | underline style | — | NOT exposed by ratatui 0.30 (no Cell/Style API) |
+/// | underline color | `underline_color` | preserved via the `underline-color` cargo feature (`Reset` → `Default`) |
+/// | underline style | `mods.underline` | PARTIAL: ratatui 0.30 exposes only the UNDERLINED bit (no style API), so every ratatui underline maps to `Single` |
 /// | hyperlinks (OSC 8) | — | NOT exposed: `Buffer`/`Cell` store no link targets |
 /// | title, bells, modes, palette, clipboard, graphics | — | NOT exposed by `Buffer`/`TestBackend` |
 /// | cursor position + visibility | `Cursor` x/y/visible | preserved (post-draw) |
