@@ -16,7 +16,7 @@ full `cargo nextest run --locked --offline` 379/379 pass (43 s) — see `docs/PE
 `--test p0_mutations` 8/8, `--test screen` 26/26, `--test facade` 12/12, all green.
 Per-row "Verified" commands below use `cargo test --locked --offline --test <suite> <filter>`.
 
-Tally: **78 done / 4 partial (C10, M03, A11, A12) / 0 missing**.
+Tally: **81 done / 1 partial (A12: awaiting first green Linux CI run) / 0 missing**.
 
 ## P0 — Verification correctness (M0)
 
@@ -31,7 +31,7 @@ Tally: **78 done / 4 partial (C10, M03, A11, A12) / 0 missing**.
 | C07 | Outcomes `#[must_use]`; mismatch fails | done | `src/snapshot.rs` outcome type (`45c0638`); `#[must_use]` throughout `src/` | `tests/p0_mutations.rs::c07_dropped_mismatch_outcome_must_not_silently_pass` | `cargo test --locked --offline --test p0_mutations c07_` — green (spot-run) |
 | C08 | Completion manifest; interrupted/partial never matched | done | `src/snapshot.rs` candidate manifest + `src/grouped.rs` manifest (`45c0638`, `4fc1e23`) | `tests/p0_mutations.rs::c08_interrupted_candidate_must_report_incomplete_not_match`, `tests/snapshot.rs::check_seals_candidate_manifest_and_verify_accepts_it`, `::interrupted_candidate_reports_capture_incomplete_not_match`, `tests/grouped.rs::interrupted_candidate_reports_missing_approval_never_pixel_verdict` | `cargo test --locked --offline --test p0_mutations c08_` — green (spot-run) |
 | C09 | Original approval hashes unchanged | done | `docs/APPROVAL-BASELINE.md` (24 frame JSON + 8 render-baseline + 12 fonts); M7 amendment re-verified all UNCHANGED, consumer fixture repinned deliberately | re-hash commands in doc | `adfda5e` baseline; M7 re-verify recorded in doc amendment (2026-09-28) |
-| C10 | README matches actual behavior | partial | `README.md` reconciled at `7bc8725`, untouched since while M1–M7 rebuilt the API/runtime/CLI — drifted again; no lock-in test | none | no — needs re-reconciliation + automated check |
+| C10 | README matches actual behavior | done | `README.md` re-reconciled at `9f64196` (quickstart/bulk/accept fences compile; no CLI accept — `Store::accept`/`accept_all`/`cargo insta review` documented) + `tests/readme_lock.rs` lock test | `tests/readme_lock.rs` (12 tests: fences compile, CLI subcommands in `--help`, API map, macro gates) | `cargo test --test readme_lock` — 12/12 green |
 
 ## P1 — Model, API, direct views (M1)
 
@@ -39,7 +39,7 @@ Tally: **78 done / 4 partial (C10, M03, A11, A12) / 0 missing**.
 |----|-----------|--------|----------------|-------|----------|
 | M01 | Validated immutable screen/observation; one capture = one revision | done | `src/screen.rs::Screen`/`Observation` validation + immutability (`b88d334`) | `tests/screen.rs::validate_*` (14 tests), `::observation_identity_determinism_provenance_excluded`, `::screen_is_immutable_snapshot_of_inputs` | `cargo test --locked --offline --test screen` — 26/26 green (spot-run) |
 | M02 | All baseline source distinctions preserved | done | `src/screen.rs::from_frame`, `src/frame.rs` colors/mods/continuations/cursor | `tests/screen.rs::from_frame_roundtrip_preserves_source_distinctions`, `tests/cells.rs` (text/style/cursor change detection), `tests/tool_qualification.rs` (hidden/blink/dim/combined flags) | `cargo test --locked --offline --test screen from_frame` + whole-tree green |
-| M03 | Extended state assertable without bloating snapshots | partial | `src/screen.rs::TermState` (modes/palette/title/bells, `Maybe`-wrapped), `src/tui_shell.rs` `assert_*` (clipboard/hyperlinks/scrollback/defaults), `src/export.rs` graphics inspection; MISSING: underline style/color (only `Mods::underline: bool`; no undercurl/dotted/dashed/SGR 58 anywhere in `src/`) | `tests/tui_shell.rs::live_title_bells_modes_palette`, `::replay_full_state_asserts`, `tests/export.rs::graphics_*`, `kitty_*`, `sixel_*` | `cargo test --locked --offline --test tui_shell live_` + `--test export graphics_` — green per whole-tree state; underline-style gap confirmed by grep (zero hits) |
+| M03 | Extended state assertable without bloating snapshots | done | `src/screen.rs::TermState`, `src/tui_shell.rs` `assert_*`, `src/export.rs` graphics inspection + (`f6064a4`) `UnderlineStyle` (None/Single/Double/Curly/Dotted/Dashed) + `Cell.underline_color`, additive v3 serde (sparse, version stays 3), SGR 4:x/58/59, ratatui underline-color adapter, `check_underline_at` | `tests/underline.rs` (15 tests incl `all_approved_frames_verify_unchanged`), `tests/tui_shell.rs::live_*`, `tests/export.rs::graphics_*` | `cargo test --test underline` — 15/15 green; 24 approved frames byte-identical |
 | M04 | 1-row/1-col static fixtures work (no PTY limits) | done | `src/screen.rs` dimension validation split (`b88d334`) | `tests/screen.rs::validate_1x1_ok`, `::validate_1col_and_1row_ok` | `cargo test --locked --offline --test screen validate_1` — green (spot-run suite) |
 | M05 | Direct Ratatui closure/buffer/TestBackend adapters, no round trip | done | `src/ratatui.rs` production adapters (`92be241`) | `tests/ratatui_views.rs::draw_closure_*`, `::widget_screen_renders_fullscreen`, `::buffer_*`, `::test_backend_capture_includes_cursor` | `cargo test --locked --offline --test ratatui_views` — green per whole-tree state |
 | M06 | Stateful views + explicit cursor without Widget bound | done | `src/ratatui.rs::draw_frame` (`92be241`) | `tests/ratatui_views.rs::stateful_screen_uses_production_render_fn`, `::draw_closure_supports_stateful_widget`, `::draw_closure_renders_content_and_places_cursor` | `cargo test --locked --offline --test ratatui_views stateful` — green per whole-tree state |
@@ -153,17 +153,17 @@ importers (`0304d72`), live/watch/replay-vs-rerun (`14f62de`).
 | A08 | Agent CLI + schema/capabilities + optional MCP | done | `src/main.rs` CLI + `src/mcp.rs` stdio server + `src/proto.rs` (`61bfe51`, `ee7d5b3`) | `tests/agent_if.rs` (12 protocol tests incl. `::schema_snapshot_matches_committed_json`), `tests/cli.rs` (21 CLI tests incl. `::cli_schema_and_doctor`, `::cli_help_and_version`) | `cargo test --locked --offline --test agent_if` + `--test cli` — green per whole-tree state |
 | A09 | Thin JS/TS + Python clients, no second engine | done | `clients/ts/index.js`, `clients/py/tuisnap_client.py` — transport only, engine stays in Rust (`ee7d5b3`) | `tests/agent_if.rs::ts_client_example_e2e`, `::py_client_example_e2e`, `::ts_client_propagates_op_errors_verbatim`, `::py_client_propagates_op_errors_verbatim` | `cargo test --locked --offline --test agent_if _client_` — green per whole-tree state |
 | A10 | Read-only importers (tui-snap stores + selected competitor traces) | done | `src/import_compat.rs` (`0304d72`); frozen-store importer in `src/assert.rs` | `tests/import_compat.rs` (12 tests: `cast_*` 5, `termctrl_*` 5, `imports_never_write_nor_execute_canary`, `frozen_four_file_tree_roundtrip_readonly`), `tests/facade.rs::import_frozen_v1_*` (2) | `cargo test --locked --offline --test import_compat` — green per whole-tree state |
-| A11 | Performance qualification (cold/warm/latency/memory/suite) | partial | `docs/PERF.md` (`35ea4d7`): cold/warm builds (11/7/4 s), single-test latency (63 ms PTY, 10 ms piped CLI), suite totals (129 s cargo test, 43 s nextest 379/379), artifact sizes; MISSING: runtime memory/RSS numbers | measurements, not `#[test]`; method + single-sample caveat in doc | `docs/PERF.md` rows 1–10 observed; no memory row (grep confirms) — needs RSS/peak measurement lane |
+| A11 | Performance qualification (cold/warm/latency/memory/suite) | done | `docs/PERF.md`: builds, latency, suite totals (129 s cargo test, 43 s nextest 407/407), artifact sizes + (`8d41440`) Peak RSS section M1–M4 (333/6.2/4.1/380 MiB, `/usr/bin/time -l`, single-sample caveats) | measurements, not `#[test]`; method + caveats in doc | `docs/PERF.md` Peak RSS rows observed; nextest fast lane 43 s < 120 s target |
 | A12 | macOS/Linux conformance; truthful Windows ConPTY subset | partial | `docs/CONFORMANCE.md` (`35ea4d7`): macOS TESTED (full green both runners); Linux CI-only, unexecuted locally; Windows compiles for `x86_64-pc-windows-gnu` (0 errors) but never runs, no Windows CI lane — truthful-subset part satisfied, Linux-green + Windows-runtime unproven | macOS: whole suite; Windows: `cargo check --target x86_64-pc-windows-gnu --tests` (0 errors, recorded) + `#[cfg]` exclusion ledger §1 | `docs/CONFORMANCE.md` §§1–4 observed; `gh` unavailable in ledger session so Linux CI-green on this branch unconfirmed — needs CI evidence link or Windows lane |
 
 ## Milestone gates (M0–M7)
 
 All SHAs on branch `redesign/rust-first-testing-platform` (`git log --oneline`):
 
-- M0 ✅ (C01–C08 green; C09 pinned; C10 reconciled-then-drifted → now partial):
+- M0 ✅ (C01–C08 green; C09 pinned; C10 re-reconciled `9f64196` + lock test):
   `adfda5e` P0 mutation tests + C09 baseline, `a8d7b22` C01/C03/C04, `45c0638` C06/C07/C08-classic,
   `4fc1e23` C05/C08-grouped, `7bc8725` C02/C10.
-- M1 ✅ (M03 underline-style/color excepted → partial): `b88d334` M01/M02/M04/M07/M08, `92be241` M05/M06/M03/M07.
+- M1 ✅: `b88d334` M01/M02/M04/M07/M08, `92be241` M05/M06/M03/M07, `f6064a4` M03 underline style/color (additive v3).
 - M2 ✅: `9ad39a9` I01–I05 spike, `915be82` I01/I02/I06/I07, `939ade6` N02–N10,
   `08750b8` vertical slice (settings view + piped CLI error), `1742f2d` PTY settings-navigation journey.
   Slice tests: `tests/vertical_slice.rs`, `tests/journey.rs::settings_navigation`.
@@ -175,9 +175,8 @@ All SHAs on branch `redesign/rust-first-testing-platform` (`git log --oneline`):
   `0304d72` A10, `14f62de` A03/A05.
 - M7 ⚠️ near-complete: `35ea4d7` A11/A12/M09 docs + C09 re-verify amendment (approvals UNCHANGED, consumer repinned);
   `c991d23` LEARNING.md + 8 tutorials + examples lane (N10). Old runtime removed (`4d02e2e`),
-  import read-only (`0304d72`). Remaining: C10 re-reconciliation, M03 underline styles, A11 memory lane,
-  A12 Linux-CI/Windows-runtime evidence — this ledger refresh itself closes the "docs = implemented contracts" gap
-  except those four rows.
+  import read-only (`0304d72`). Closed since: C10 (`9f64196`), M03 (`f6064a4`), A11 memory lane (`8d41440`),
+  `.config/nextest.toml` (`aa74aa7`), CI regen (`c5bcd7a` + state `5b2a6fb`). Remaining: A12 first green Linux CI run.
 
 First vertical slice (early M2) ✅: pure settings view + piped CLI error (`08750b8`, `tests/vertical_slice.rs`)
 + PTY settings-navigation journey (`1742f2d`, `tests/journey.rs`), all under nextest with native Insta
