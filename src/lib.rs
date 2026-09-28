@@ -21,10 +21,12 @@
 pub mod assert;
 pub mod command;
 pub mod diff;
+pub mod export;
 pub mod frame;
 pub mod grouped;
 pub mod insta_proto;
 pub mod locate;
+pub mod mcp;
 pub mod profile;
 pub mod proto;
 pub mod ratatui;

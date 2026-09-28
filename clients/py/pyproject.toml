@@ -1,0 +1,13 @@
+[project]
+name = "tuisnap-client"
+version = "0.2.0"
+description = "Thin tui-snap client: spawns `tuisnap --machine` and sends typed ops. No assertion semantics; all checks run in the shared Rust engine."
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["tuisnap_client"]
