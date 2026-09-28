@@ -10,12 +10,14 @@ Fixture model + view state + viewport + theme
 Real executable ──▶ PTY + terminal-state engine ──▶ frame   (keyboard/mouse/resize)
 ```
 
-A changed snapshot requires explicit review (`tuisnap accept`). Equality only
-validates the fixtures covered — never every app state.
+A changed snapshot requires explicit review (`Store::accept` /
+`GroupedStore::accept_all`, or `cargo insta review` for the macro gates).
+Equality only validates the fixtures covered — never every app state.
 
 ## Quick start: pure view tests
 
 ```rust
+use ratatui::widgets::Paragraph;
 use tuisnap::{Profile, Provenance, VENDORED_FACES};
 use tuisnap::snapshot::Store;
 
@@ -24,9 +26,12 @@ fn home_screen() {
     let store = Store::new(std::path::Path::new("tests/visual"));
     let profile = Profile::default_profile();
     // Render the ACTUAL production view from fixture data:
-    let frame = tuisnap::ratatui::draw_frame(120, 40, prov(), |f| {
-        myapp::render_home(f, &fixture_model())
-    });
+    let frame = tuisnap::ratatui::draw_frame(
+        120,
+        40,
+        Provenance::now("tuisnap-default", "home", vec![]),
+        |f| f.render_widget(Paragraph::new("home"), f.area()),
+    );
     // Actual artifacts are written BEFORE the assertion, so a failure still
     // leaves reviewable evidence (actual/*.frame.json + *.png + report.html).
     let outcome = store.check("home", &frame, &profile, &VENDORED_FACES, 1.0).unwrap();
@@ -38,17 +43,31 @@ Bulk suites reuse one cached renderer per thread and can rebuild the HTML
 report without the CLI:
 
 ```rust
-let mut renderer = profile.renderer(&VENDORED_FACES)?;      // fonts parsed once
-let outcome = store.check_with(&mut renderer, "home", &frame, 1.0)?;
-let report = store.report_with(&mut renderer, 1.0, "my suite")?; // re-verify + report.html
+fn bulk(
+    store: &tuisnap::snapshot::Store,
+    profile: &tuisnap::Profile,
+    frame: &tuisnap::Frame,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut renderer = profile.renderer(&tuisnap::VENDORED_FACES)?; // fonts parsed once
+    let outcome = store.check_with(&mut renderer, "home", frame, 1.0)?;
+    outcome.ensure_matched()?;
+    let report = store.report_with(&mut renderer, 1.0, "my suite")?; // re-verify + report.html
+    assert_eq!(report.failed(), 0);
+    Ok(())
+}
 ```
 
 First run fails with `missing-approval` (fail-closed). Inspect
-`actual/*.png` + `report.html`, then accept explicitly:
+`actual/*.png` + `report.html`, then accept explicitly from Rust:
 
-```text
-cargo run -q -- accept --store tests/visual --name home   # one snapshot
-cargo run -q -- accept --store tests/visual --all         # everything reviewed
+```rust
+fn accept_reviewed(store: &tuisnap::snapshot::Store) -> Result<(), tuisnap::snapshot::SnapshotError> {
+    store.accept("home")?; // one snapshot
+    for name in store.actual_names()? { // everything reviewed
+        store.accept(&name)?;
+    }
+    Ok(())
+}
 ```
 
 There is deliberately **no** `BLESS=1` / auto-accept: CI must never approve
@@ -57,42 +76,86 @@ snapshots by itself (see `docs/CI.md`).
 ## Interactive tests (feature `pty`, on by default)
 
 ```rust
-let opts = tuisnap::pty::PtyOptions::default()
-    .without_env("NO_COLOR")                    // strip inherited vars from the child
-    .with_env("HOLLA_NO_HISTORY", "1");         // set app-specific ones
-let mut s = tuisnap::pty::Session::spawn(&["./my-tui".into()], &opts)?;
-s.wait_for_text("Ready")?;                 // timeout fails WITH the screen
-s.wait_until(|sc| sc.cursor() == (0, 4, true))?;  // any predicate on the live screen
-s.send_key("ctrl-up")?;                    // ctrl/alt/shift + special keys, too
-s.scroll(10, 5, tuisnap::pty::Scroll::Down)?;     // wheel + non-left clicks: click_with
-let frame = s.wait_stable(Duration::from_millis(300))?;  // style-aware settle
+use std::time::{Duration, Instant};
+use tuisnap::tui::{CancelToken, Tui};
+
+let mut s = Tui::new(["./my-tui"]).size(120, 40).spawn()?;
+let cancel = CancelToken::new();
+let obs = s.wait_predicate(
+    |o| tuisnap::proto::screen_text(&o.screen).contains("Ready"),
+    Instant::now() + Duration::from_secs(5),
+    &cancel,
+)?; // timeout fails WITH the screen
+s.press("ctrl+Up")?; // modifiers + special keys, `+`-joined
+s.send_text("hello")?; // literal input (bracketed paste: `paste`)
+let settled = s.wait_stable(Instant::now() + Duration::from_secs(5), &cancel)?;
+let frame = tuisnap::assert::frame_from_screen(&s.snapshot()?);
+s.close()?;
 ```
 
+Mouse input (`click`, `mouse_wheel`, …) requires the app to enable mouse
+reporting first; otherwise it fails with `ModeNotEnabled` instead of
+silently dropping.
+
 Pure view tests build without the PTY engine: `cargo test --no-default-features`.
+The `tuisnap` CLI binary itself requires the default `pty` feature.
+
+## API map (examples 01–08)
+
+The library facade (`src/lib.rs`) centers on `Screen`/`Frame` plus:
+
+- gates: `tuisnap::assert_snapshot!` / `tuisnap::assert_screenshot!` (Insta
+  review), `snapshot::Store`, `grouped::GroupedStore`
+- capture: `ratatui::render_screen` (pure views), `tui::{Tui, Session}`
+  (interactive, feature `pty`), `command::Command` (piped CLI)
+- queries: `locate::Locator` (`text`/`regex`/`style` + `expect_*` waits),
+  `observe`, `screen::Observation`
+- agents/CI: `proto::{Op, execute, run_machine_line}` (typed ops +
+  `--machine` JSON), `runner::TestContext`, `export`, `mcp`
+- rendering: `Profile::default_profile`, `render::Renderer`,
+  `VENDORED_FACES`, `VENDORED_FALLBACK_FACES`
+
+`examples/01-pure-view.rs` … `examples/08-agent-workflow.rs` each run end to
+end (`cargo run --example 01-pure-view`); `tests/examples_lane.rs` keeps
+them green.
 
 ## CLI
 
 ```text
+tuisnap init --dir .                              # scaffold tui-snap.toml + nextest config + example
+tuisnap doctor                                     # toolchain / fonts / profile / env report
+tuisnap schema                                     # print the op-protocol JSON schema
+tuisnap capture --out shots/home -- ./my-tui --flag  # run + collect artifacts
+tuisnap inspect --dir shots/home                  # offline view; never executes
 tuisnap render --input shot.frame.json --format png --format svg --out shot
-tuisnap check  --store tests/visual --name home --input actual.frame.json
-tuisnap accept --store tests/visual --name home        # or --all
-tuisnap report --store tests/visual                    # re-verify + rewrite report.html
-tuisnap run --cols 120 --rows 40 --send enter --wait-for Ready \
-  --store shots --name home -- ./my-tui                # capture + gate
+tuisnap diff --expected a.png --actual b.png      # exit 4 on mismatch
+tuisnap review --dir verdicts                     # list verdicts; exit 4 on any fail
+tuisnap report --dir verdicts --out report.html   # standalone HTML report
+tuisnap import --dir frozen                       # read-only frozen-tree import
+tuisnap session start --name demo -- ./my-tui     # + stop / list / prune / attach
+tuisnap record --out trace.jsonl -- ./my-tui      # bounded event recording
+tuisnap trace --input trace.jsonl                 # offline journal view
+tuisnap --machine < ops.jsonl                     # typed op protocol over stdio
 ```
 
-`render` also accepts `--font-file` (hash recorded); all gates accept it too
-(the fallback chain below still applies on top of an override).
-Offline `frame.json` re-renders byte-identical PNGs (proven by tests).
+Exit statuses: 0 ok; 2 CLI usage error; 3 op error; 4 verification
+disagreement. `capture`/`record` preserve the child's exit code instead.
+Full reference: `tuisnap --help` (per command: `tuisnap <cmd> --help`).
 
-Git/path library dependencies include the pinned PTY engine (termpane v0.1.0
-via termlens) and need no Cargo patches. Use `tuisnap::termlens` when
-constructing engine types for `frame_from_screen`. See `docs/MIGRATION.md`
-for schema 3, the vt100 → termpane engine swap, and fixture migration.
+`render` accepts `--font-file` (hash recorded in the profile); the fallback
+chain below still applies on top of an override. Offline `frame.json`
+re-renders byte-identical PNGs (pinned by tests).
 
-MSRV: 1.97 (termpane floor). Schema v3 unchanged: blink is frozen-visible
-with slow/rapid combined, hidden is conceal, overline/underline-styles stay
-dropped.
+The PTY engine is `portable-pty` 0.9 (PTY owner) + `alacritty_terminal` 0.26
+(terminal state) from crates.io — no git/path dependencies, no Cargo
+patches. Convert captures with `tuisnap::assert::frame_from_screen` (or
+`Screen::from_frame` the other way). See `docs/MIGRATION.md` for schema 3
+history.
+
+Pinned toolchain: 1.98.1 (`rust-toolchain.toml`). Schema v4: underline
+styles (single/double/curly/dotted/dashed) and underline color are
+canonical; blink stays frozen-visible with slow/rapid combined, hidden is
+conceal, overline stays dropped.
 
 Consumer and migration gates:
 
@@ -116,7 +179,7 @@ A missing approved PNG fails closed (`missing-approval`); nothing
 regenerates approvals except explicit `accept`. The PNG gate compares exact
 decoded pixels (re-encoding passes, one changed channel fails); review
 leniency lives only on a validated threshold (`PerceptualPolicy` rejects
-NaN/out-of-range). Outcomes are `#[must_use]` — dropping one without
+NaN/out-of-range). `CompareOutcome` is `#[must_use]` — dropping one without
 `ensure_matched()` warns instead of silently passing.
 
 ## Grouped multi-artifact store
@@ -134,11 +197,17 @@ snapshots/showcase/pages/overview_120x40_truecolor.html   # standalone colored H
 ```
 
 ```rust
-let store = tuisnap::grouped::GroupedStore::new(std::path::Path::new("tests/snapshots"));
-let mut renderer = profile.renderer(&VENDORED_FACES)?;
-let outcome = store.check_with(&mut renderer, "pages/overview", &frame, 1.0)?;
-outcome.ensure_matched()?;
-store.report_with(&mut renderer, 1.0, "my suite")?;   // HTML report, outside approved/
+fn check_page(
+    store: &tuisnap::grouped::GroupedStore,
+    profile: &tuisnap::Profile,
+    frame: &tuisnap::Frame,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut renderer = profile.renderer(&tuisnap::VENDORED_FACES)?;
+    let outcome = store.check_with(&mut renderer, "pages/overview", frame, 1.0)?;
+    outcome.ensure_matched()?;
+    store.report_with(&mut renderer, 1.0, "my suite")?; // HTML report, outside approved/
+    Ok(())
+}
 ```
 
 Actuals (`snapshots.actual/`), diff PNGs (`snapshots.diff/`) and the report
@@ -149,11 +218,10 @@ ansi dump is the cell-exact gate; html catches renderer changes) plus the
 same exact decoded-pixel PNG gate as the classic store. Actual PNG/HTML
 always render fresh from the candidate frame — never copied from approved.
 Missing approvals fail closed; names with absolute paths, `..`, empty
-segments or backslashes are rejected. Bless recursively from the CLI:
+segments or backslashes are rejected. Bless recursively from Rust:
 
-```text
-tuisnap accept --grouped --store snapshots --all
-tuisnap report --grouped --store snapshots --report-path target/report.html
+```rust
+let accepted = store.accept_all()?; // every reviewed actual → approved
 ```
 
 The classic `Store` above is fully unaffected; both share statuses, the
@@ -204,12 +272,18 @@ byte-stable). Register your own faces (or render primary-only) with
 [`Renderer::with_fallbacks`]; each face carries its own sha256 pin:
 
 ```rust
-let chain = [tuisnap::FallbackFace {
-    bytes: MY_FONT,
-    sha256: MY_FONT_SHA256,   // verified at load; mismatch refuses to render
-    desc: "my extra symbols",
-}];
-let mut r = tuisnap::render::Renderer::with_fallbacks(&profile, &faces, &chain)?;
+fn custom_chain(profile: &tuisnap::Profile) -> Result<tuisnap::Renderer, Box<dyn std::error::Error>> {
+    let chain = [tuisnap::FallbackFace {
+        bytes: tuisnap::VENDORED_SYMBOLS2_FONT,
+        sha256: tuisnap::VENDORED_SYMBOLS2_FONT_SHA256, // verified at load; mismatch refuses to render
+        desc: "my extra symbols",
+    }];
+    Ok(tuisnap::render::Renderer::with_fallbacks(
+        profile,
+        &tuisnap::VENDORED_FACES,
+        &chain,
+    )?)
+}
 ```
 
 The subsets are reproducible and extensible (JIS level-2, Hangul, more
