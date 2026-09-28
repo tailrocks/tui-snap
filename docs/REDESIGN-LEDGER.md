@@ -5,145 +5,180 @@ Status key: `done` = implemented + qualifying test green; `red` = failing regres
 `missing` = no implementation; `keep` = current behavior is the target, needs qualification lock-in.
 A checkbox without a qualifying test is not completion. Evidence = test names + commands.
 
-Frozen discovery: 2026-09-28. Revisions reviewed: tui-snap `9dc86da`, tui-test `7afb14b` (=HEAD),
-terminal-control `c1d4f95` (=HEAD, anomalyco), insta `064742e` (=HEAD).
-Competitor deltas: tui-test writes missing snapshot even when update=false (do not copy);
+Refreshed: 2026-09-28, branch `redesign/rust-first-testing-platform` @ `c991d23`.
+Discovery frozen at `d6b2574`; implementation spans `adfda5e`..`c991d23` (see Milestone gates).
+Competitor deltas (unchanged): tui-test writes missing snapshot even when update=false (do not copy);
 terminal-control extractor resolves RGB / swaps inverse / skips continuations / collapses underlines (presentation, not source contract).
+
+Whole-tree green state (recorded, not re-run here): full `cargo test --locked --offline` exit 0 (129 s wall),
+full `cargo nextest run --locked --offline` 379/379 pass (43 s) — see `docs/PERF.md` rows 4–5,
+`docs/CONFORMANCE.md` §3. Spot-runs by the ledger refresher (2026-09-28):
+`--test p0_mutations` 8/8, `--test screen` 26/26, `--test facade` 12/12, all green.
+Per-row "Verified" commands below use `cargo test --locked --offline --test <suite> <filter>`.
+
+Tally: **78 done / 4 partial (C10, M03, A11, A12) / 0 missing**.
 
 ## P0 — Verification correctness (M0)
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| C01 | Same cells+dims, different decoded pixels fail strict check | red | `src/diff.rs` remove `ansi_matched` bypass | `tests/p0_mutations.rs::c01_*` (ignored) | `cargo test --test p0_mutations -- --ignored c01_` must pass after fix |
-| C02 | Actual images rendered from candidate, never copied from approved | open | `src/grouped.rs` actual-evidence path | needs test | no |
-| C03 | Exact decoded RGBA/opaque comparison; recompression passes | red | `src/diff.rs` + `AlphaPolicy` | `tests/p0_mutations.rs::c03_*` (ignored) | same pattern |
-| C04 | Perceptual score never establishes strict equality; invalid tolerances rejected | red | `src/diff.rs` separate diagnostic | `tests/p0_mutations.rs::c04_*` (ignored) | same pattern |
-| C05 | One verdict engine for test/CLI/report | red | `src/grouped.rs` report via persisted verdict | `tests/p0_mutations.rs::c05_*` (ignored) | same pattern |
-| C06 | Missing approved PNG fails; no in-memory regen | red | `src/snapshot.rs` remove regen path | `tests/p0_mutations.rs::c06_*` (ignored) | same pattern |
-| C07 | Outcomes `#[must_use]`; mismatch fails | red | `src/snapshot.rs` outcome type | `tests/p0_mutations.rs::c07_*` (ignored) | same pattern |
-| C08 | Completion manifest; interrupted/partial never matched | red | `src/snapshot.rs` + `src/grouped.rs` manifest | `tests/p0_mutations.rs::c08_*` (ignored) | same pattern |
-| C09 | Original approval hashes unchanged | done | `docs/APPROVAL-BASELINE.md` (35 files + fonts) | re-hash command in doc | `adfda5e`, baseline committed; re-verify at M7 |
-| C10 | README matches actual behavior | open | `README.md` | doc review vs tests | no |
+| C01 | Same cells+dims, different decoded pixels fail strict check | done | `src/diff.rs` exact engine, `ansi_matched` bypass removed (`a8d7b22`) | `tests/p0_mutations.rs::c01_same_cells_dims_but_different_pixels_must_fail_strict_check` | `cargo test --locked --offline --test p0_mutations c01_` — green (spot-run) |
+| C02 | Actual images rendered from candidate, never copied from approved | done | `src/grouped.rs` actual-evidence path renders candidate (`7bc8725`) | `tests/p0_mutations.rs::c02_actual_evidence_comes_from_candidate_never_approved` | `cargo test --locked --offline --test p0_mutations c02_` — green (spot-run) |
+| C03 | Exact decoded RGBA/opaque comparison; recompression passes | done | `src/diff.rs` + `AlphaPolicy` (`a8d7b22`) | `tests/p0_mutations.rs::c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy` | `cargo test --locked --offline --test p0_mutations c03_` — green (spot-run) |
+| C04 | Perceptual score never establishes strict equality; invalid tolerances rejected | done | `src/diff.rs` similarity is diagnostic-only (`a8d7b22`) | `tests/p0_mutations.rs::c04_similarity_score_must_not_establish_strict_equality` | `cargo test --locked --offline --test p0_mutations c04_` — green (spot-run) |
+| C05 | One verdict engine for test/CLI/report | done | `src/grouped.rs` report reuses persisted verdict; stale verdict recomputes (`4fc1e23`) | `tests/p0_mutations.rs::c05_report_verdict_must_equal_test_verdict_on_same_inputs`, `tests/grouped.rs::check_seals_manifest_and_verdict_that_report_reuses_verbatim`, `::stale_verdict_after_accept_recomputes_instead_of_reuse` | `cargo test --locked --offline --test p0_mutations c05_` — green (spot-run) |
+| C06 | Missing approved PNG fails; no in-memory regen | done | `src/snapshot.rs` fail-closed, regen path removed (`45c0638`) | `tests/p0_mutations.rs::c06_missing_approved_png_must_fail_not_regenerate_in_memory`, `tests/snapshot.rs::missing_approved_png_fails_closed_with_missing_approval_panel`, `tests/grouped.rs::missing_single_artifact_fails_closed` | `cargo test --locked --offline --test p0_mutations c06_` — green (spot-run) |
+| C07 | Outcomes `#[must_use]`; mismatch fails | done | `src/snapshot.rs` outcome type (`45c0638`); `#[must_use]` throughout `src/` | `tests/p0_mutations.rs::c07_dropped_mismatch_outcome_must_not_silently_pass` | `cargo test --locked --offline --test p0_mutations c07_` — green (spot-run) |
+| C08 | Completion manifest; interrupted/partial never matched | done | `src/snapshot.rs` candidate manifest + `src/grouped.rs` manifest (`45c0638`, `4fc1e23`) | `tests/p0_mutations.rs::c08_interrupted_candidate_must_report_incomplete_not_match`, `tests/snapshot.rs::check_seals_candidate_manifest_and_verify_accepts_it`, `::interrupted_candidate_reports_capture_incomplete_not_match`, `tests/grouped.rs::interrupted_candidate_reports_missing_approval_never_pixel_verdict` | `cargo test --locked --offline --test p0_mutations c08_` — green (spot-run) |
+| C09 | Original approval hashes unchanged | done | `docs/APPROVAL-BASELINE.md` (24 frame JSON + 8 render-baseline + 12 fonts); M7 amendment re-verified all UNCHANGED, consumer fixture repinned deliberately | re-hash commands in doc | `adfda5e` baseline; M7 re-verify recorded in doc amendment (2026-09-28) |
+| C10 | README matches actual behavior | partial | `README.md` reconciled at `7bc8725`, untouched since while M1–M7 rebuilt the API/runtime/CLI — drifted again; no lock-in test | none | no — needs re-reconciliation + automated check |
 
 ## P1 — Model, API, direct views (M1)
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| M01 | Validated immutable screen/observation; one capture = one revision | partial | `src/frame.rs` Frame v3 → `Screen`/`Observation` | `tests/cells.rs` (partial) | no |
-| M02 | All baseline source distinctions preserved | partial | `src/frame.rs` colors/mods/continuations/cursor | `tests/tool_qualification.rs` (partial) | no |
-| M03 | Extended state assertable without bloating snapshots | missing | underline style/color, links, modes, title, bells, clipboard, palette, graphics | none | no |
-| M04 | 1-row/1-col static fixtures work (no PTY limits) | open | dimension validation split | needs test | no |
-| M05 | Direct Ratatui closure/buffer/TestBackend adapters, no round trip | partial | `src/ratatui.rs` | `tests/render.rs` (partial) | no |
-| M06 | Stateful views + explicit cursor without Widget bound | partial | `src/ratatui.rs::draw_frame` | needs test | no |
-| M07 | Region/mask policies; no silent wide-grapheme split | missing | new region API | none (`src/ratatui.rs:121` silently clamps today) | no |
-| M08 | Stable identity separate from runtime metadata | partial | `Provenance` split | `tests/cells.rs` (partial) | no |
-| M09 | Pure-view consumer builds without pty/native deps | partial | `Cargo.toml` default/`pty` features | `tests/fixtures/consumer` | no |
+| M01 | Validated immutable screen/observation; one capture = one revision | done | `src/screen.rs::Screen`/`Observation` validation + immutability (`b88d334`) | `tests/screen.rs::validate_*` (14 tests), `::observation_identity_determinism_provenance_excluded`, `::screen_is_immutable_snapshot_of_inputs` | `cargo test --locked --offline --test screen` — 26/26 green (spot-run) |
+| M02 | All baseline source distinctions preserved | done | `src/screen.rs::from_frame`, `src/frame.rs` colors/mods/continuations/cursor | `tests/screen.rs::from_frame_roundtrip_preserves_source_distinctions`, `tests/cells.rs` (text/style/cursor change detection), `tests/tool_qualification.rs` (hidden/blink/dim/combined flags) | `cargo test --locked --offline --test screen from_frame` + whole-tree green |
+| M03 | Extended state assertable without bloating snapshots | partial | `src/screen.rs::TermState` (modes/palette/title/bells, `Maybe`-wrapped), `src/tui_shell.rs` `assert_*` (clipboard/hyperlinks/scrollback/defaults), `src/export.rs` graphics inspection; MISSING: underline style/color (only `Mods::underline: bool`; no undercurl/dotted/dashed/SGR 58 anywhere in `src/`) | `tests/tui_shell.rs::live_title_bells_modes_palette`, `::replay_full_state_asserts`, `tests/export.rs::graphics_*`, `kitty_*`, `sixel_*` | `cargo test --locked --offline --test tui_shell live_` + `--test export graphics_` — green per whole-tree state; underline-style gap confirmed by grep (zero hits) |
+| M04 | 1-row/1-col static fixtures work (no PTY limits) | done | `src/screen.rs` dimension validation split (`b88d334`) | `tests/screen.rs::validate_1x1_ok`, `::validate_1col_and_1row_ok` | `cargo test --locked --offline --test screen validate_1` — green (spot-run suite) |
+| M05 | Direct Ratatui closure/buffer/TestBackend adapters, no round trip | done | `src/ratatui.rs` production adapters (`92be241`) | `tests/ratatui_views.rs::draw_closure_*`, `::widget_screen_renders_fullscreen`, `::buffer_*`, `::test_backend_capture_includes_cursor` | `cargo test --locked --offline --test ratatui_views` — green per whole-tree state |
+| M06 | Stateful views + explicit cursor without Widget bound | done | `src/ratatui.rs::draw_frame` (`92be241`) | `tests/ratatui_views.rs::stateful_screen_uses_production_render_fn`, `::draw_closure_supports_stateful_widget`, `::draw_closure_renders_content_and_places_cursor` | `cargo test --locked --offline --test ratatui_views stateful` — green per whole-tree state |
+| M07 | Region/mask policies; no silent wide-grapheme split | done | `src/screen.rs` region crop/mask API with explicit edge policy (`b88d334`, `92be241`) | `tests/screen.rs::region_refuses_left_edge_wide_split_naming_grapheme`, `::region_refuses_right_edge_wide_split_naming_grapheme`, `::region_mask_policy_recorded`, `tests/locate.rs::region_never_splits_wide_grapheme` | `cargo test --locked --offline --test screen region_` — green (spot-run suite) |
+| M08 | Stable identity separate from runtime metadata | done | `src/screen.rs::CaptureProvenance` excluded from `Observation` eq/hash (`b88d334`) | `tests/screen.rs::observation_identity_determinism_provenance_excluded`, `tests/cells.rs::provenance_excluded_from_digest` | `cargo test --locked --offline --test screen observation_identity` — green (spot-run suite) |
+| M09 | Pure-view consumer builds without pty/native deps | done | `Cargo.toml` `default = ["pty"]`, `pty = [portable-pty, alacritty_terminal, libc]`; `tests/fixtures/consumer` true pure-view proof (`35ea4d7`) | build-proof, not `#[test]`: `docs/CONFORMANCE.md` §2 records `cargo build` exit 0 in fixture, `cargo tree` free of portable-pty/alacritty_terminal, root `cargo check --no-default-features` exit 0 | commands in `docs/CONFORMANCE.md` §2 (recorded exit 0, 2026-09-28) |
 
 ## P2 — Insta lifecycle (M2)
 
-All missing. Baseline: `snapshot::Store` + `grouped::GroupedStore` (custom, to be superseded by native Insta).
+Baseline custom stores superseded by native Insta: projection + pixel Comparator + generation binding (`9ad39a9`),
+facade macros + frozen policy + 4-artifact export/import (`915be82`).
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| I01 | `assert_snapshot!` styled canonical state via native Insta | missing | facade macro + projection | none | no |
-| I02 | `assert_screenshot!` one sample: evidence before failure | missing | facade macro + generation binding | none | no |
-| I03 | Insta custom decoded-pixel Comparator (public API) | missing | comparator | none | no |
-| I04 | Compound lifecycle: partial acceptance can't mix generations | missing | needs integration spike first | none | no |
-| I05 | No vendored Insta internals; upstream hook if needed | missing | — | none | no |
-| I06 | Evolving (review) vs frozen (read-only, no self-heal) policies | missing | policy types | none | no |
-| I07 | 4-artifact export from one generation + read-only frozen importer | missing | exporter + importer | none | no |
+| I01 | `assert_snapshot!` styled canonical state via native Insta | done | `src/insta_proto.rs` projection + `src/assert.rs` facade (`9ad39a9`, `915be82`) | `tests/insta_spike.rs::projection_deterministic_and_complete`, `::compound_canonical_plus_png_green`, `tests/facade.rs::snapshot_macro_passes_on_identical_rerun` | `cargo test --locked --offline --test facade snapshot_macro` — green (spot-run suite) |
+| I02 | `assert_screenshot!` one sample: evidence before failure | done | `src/assert.rs` facade + generation binding (`915be82`) | `tests/facade.rs::screenshot_passes_when_consistent`, `::screenshot_evidence_present_before_failure`, `::screenshot_mixed_generation_fails`, `::generation_binding_roundtrip` | `cargo test --locked --offline --test facade screenshot_` — green (spot-run suite) |
+| I03 | Insta custom decoded-pixel Comparator (public API) | done | `src/insta_proto.rs` comparator (`9ad39a9`) | `tests/insta_spike.rs::comparator_matches_decoded_pixels` | `cargo test --locked --offline --test insta_spike comparator` — green per whole-tree state |
+| I04 | Compound lifecycle: partial acceptance can't mix generations | done | generation binding (`9ad39a9`, `915be82`) | `tests/insta_spike.rs::reject_one_artifact_breaks_compound`, `::partial_accept_breaks_compound`, `::interrupted_write_breaks_compound`, `tests/facade.rs::screenshot_mixed_generation_fails` | `cargo test --locked --offline --test insta_spike compound` + `--test facade screenshot_mixed` — green per whole-tree state |
+| I05 | No vendored Insta internals; upstream hook if needed | done | registry `insta 1.48` (`Cargo.toml:26` + `Cargo.lock`), `vendor/` absent, no vendored modules; no upstream hook needed | structural: `grep insta Cargo.toml` + `ls vendor` (fails) + whole-tree build green | observed 2026-09-28: `insta = { version = "1.48", ... }` from registry; `ls: vendor: No such file or directory` |
+| I06 | Evolving (review) vs frozen (read-only, no self-heal) policies | done | `src/assert.rs` frozen policy (`915be82`) | `tests/facade.rs::frozen_missing_fails`, `::frozen_corrupt_fails_and_never_heals`, `::frozen_accept_always_errors`, `::frozen_passes_when_matching` | `cargo test --locked --offline --test facade frozen_` — green (spot-run suite) |
+| I07 | 4-artifact export from one generation + read-only frozen importer | done | `src/assert.rs` exporter + importer (`915be82`) | `tests/facade.rs::emit_four_deterministic`, `::import_frozen_v1_roundtrip_and_unsupported`, `::import_frozen_v1_rejects_bad_trees`, `tests/import_compat.rs::frozen_four_file_tree_roundtrip_readonly` | `cargo test --locked --offline --test facade emit_four` — green (spot-run suite) |
 
 ## P2 — Nextest (M2)
 
+`src/runner.rs` context + adapter + journal + manifest (`939ade6`); matrix runs recorded in `docs/CONFORMANCE.md` §3
+(normal 379/379, filter, 2 shards, stress, archive+relocated; retry-after-failure and prompt-cancel documented NOT proven).
+
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| N01 | Plain `#[test]`, no custom harness | keep | already true; keep | suite itself | no |
-| N02 | Stable baseline identity + isolated attempt identity | missing | test-context + nextest adapter | none | no |
-| N03 | Prefer nextest-remapped executable paths | missing | resolver | none | no |
-| N04 | Relocated archive support | missing | resolver + path policy | none | no |
-| N05 | JUnit correlation without rewriting status | missing | reporter | none | no |
-| N06 | Required-scenario manifest; filtered = visibly partial | missing | manifest + gate | none | no |
-| N07 | No completion marker = incomplete; journal survives | missing | journal | none | no |
-| N08 | Failed-attempt artifacts survive retry/stress | missing | attempt isolation | none | no |
-| N09 | Parallel-safe: no shared env/session/ports/paths | missing | isolation | none | no |
-| N10 | Doc examples executed (tests or explicit doctest lane) | missing | harness | none | no |
+| N01 | Plain `#[test]`, no custom harness | done | already true; kept; suite runs under both `cargo test` and nextest | the suite itself: PERF rows 4–5 + CONFORMANCE §3 rows 1–4 | full `cargo test` exit 0 + `cargo nextest run` 379/379 (recorded) |
+| N02 | Stable baseline identity + isolated attempt identity | done | `src/runner.rs` test-context + nextest adapter (`939ade6`) | `tests/runner.rs::env_parsing_*`, `::live_runner_consistency`, `::isolation_two_contexts_distinct_dirs` | `cargo test --locked --offline --test runner` — green per whole-tree state |
+| N03 | Prefer nextest-remapped executable paths | done | `src/runner.rs` resolver (`939ade6`) | `tests/runner.rs::resolve_bin_prefers_nextest_and_dedupes_forms`, `::resolve_bin_ambiguity_errors_never_silent_pick`, `::resolve_bin_live_env_best_effort` | `cargo test --locked --offline --test runner resolve_bin` — green per whole-tree state |
+| N04 | Relocated archive support | done | `src/runner.rs` resolver + path policy (`939ade6`) | `tests/runner.rs::resolve_bin_*` + live relocated run: CONFORMANCE §3 row 8 (11/11 pass from `/tmp`, cwd outside workspace) | `cargo test --locked --offline --test runner resolve_bin` + CONFORMANCE §3 row 8 (recorded) |
+| N05 | JUnit correlation without rewriting status | done | `src/runner.rs` read-only reporter (`939ade6`) | `tests/runner.rs::junit_correlation_read_only` | `cargo test --locked --offline --test runner junit` — green per whole-tree state |
+| N06 | Required-scenario manifest; filtered = visibly partial | done | `src/runner.rs` manifest + gate (`939ade6`) | `tests/runner.rs::manifest_full_partial_incomplete` | `cargo test --locked --offline --test runner manifest` — green per whole-tree state |
+| N07 | No completion marker = incomplete; journal survives | done | `src/runner.rs` journal (`939ade6`) | `tests/runner.rs::journal_killed_attempt_incomplete_completed_is_complete` | `cargo test --locked --offline --test runner journal` — green per whole-tree state |
+| N08 | Failed-attempt artifacts survive retry/stress | done | `src/runner.rs` attempt isolation (`939ade6`) | `tests/runner.rs::retry_preserves_failed_attempt_evidence` | `cargo test --locked --offline --test runner retry` — green per whole-tree state |
+| N09 | Parallel-safe: no shared env/session/ports/paths | done | `src/runner.rs` isolation (`939ade6`); `src/command.rs`, `src/tui.rs` child-only envs | `tests/runner.rs::no_global_mutation`, `::child_env_and_home_isolation_are_child_only`, `::isolation_two_contexts_distinct_dirs`, `tests/piped.rs::env_is_child_only`, `tests/tui.rs::two_sessions_independent`, `::child_env_and_cwd_are_child_only` | `cargo test --locked --offline --test runner no_global_mutation` — green per whole-tree state; nextest shards §3 rows 3–4 |
+| N10 | Doc examples executed (tests or explicit doctest lane) | done | `tests/examples_lane.rs` executes all 8 `examples/0*` + `fixture_app.rs` (`c991d23`); 5 doctests via `cargo test --doc`; `docs/LEARNING.md` | `tests/examples_lane.rs::examples_lane_executes_everything` (+ 5 doctests recorded in file header and PERF suite-size note) | `cargo test --locked --offline --test examples_lane` + `cargo test --doc` — green per whole-tree state |
 
 ## P3 — CLI + PTY runtime (M3)
 
+Piped `Command` (`e740c5c`), backend qualification (`39bcda2`), owned PTY on portable-pty+alacritty (`8c71311`),
+vendor removal (`4d02e2e`), shell/state/replay/guardian (`5ada92a`).
+
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| R01 | Piped `Command`: separate stdio bytes, exit/signal/timeout | missing | new runtime API | none | no |
-| R02 | Deadlock-safe drain; limits/spooling; non-UTF-8 | missing | new runtime API | none | no |
-| R03 | Isolated envs (HOME/XDG/cwd, child-only env) | partial | `src/pty.rs:180` area | `tests/pty.rs` (partial) | no |
-| R04 | Upstream PTY/emulator crates; NO vendored termlens | open | REMOVE `vendor/termlens`; qualify upstream | n/a (deletion) | no |
-| R05 | Ghostty binding qualified first; no silent substitution | missing | backend qualification record | none | no |
-| R06 | Atomic revisioned observations | partial | `src/pty.rs:96` area | `tests/pty.rs` (partial) | no |
-| R07 | Waits don't block cancel/observe/other sessions | missing | scheduler rework | none | no |
-| R08 | Owned cleanup on return/error/panic/cancel; no double-panic Drop | partial | `src/pty.rs:171` area | `tests/pty.rs` (partial) | no |
-| R09 | Parent-hard-kill guardian/containment; escaping descendants explicit | missing | guardian | none | no |
-| R10 | Separate readiness/stability/frame/exit waits | partial | `src/pty.rs:217` area | `tests/pty.rs` (partial) | no |
-| R11 | Full input surface (chords/raw/paste/mouse/focus/resize/signal) | partial | `src/pty.rs` input | `tests/pty.rs` (partial) | no |
-| R12 | Explicit shell sessions; shell-cmd exit ≠ child exit | missing | shell integration | none | no |
-| R13 | Terminal-state assertions (palette/clipboard/bells/title/modes/scrollback/links) | missing | assertions | none | no |
-| R14 | Bounded raw replay invariant to chunk boundaries | partial | `src/ansi.rs:31` | `tests/tool_qualification.rs` (partial) | no |
+| R01 | Piped `Command`: separate stdio bytes, exit/signal/timeout | done | `src/command.rs` (`e740c5c`) | `tests/piped.rs::separate_stdout_stderr_bytes`, `::non_utf8_bytes_preserved`, `::stdin_*`, `::nonzero_exit_is_honest`, `::signal_death_is_distinct_from_exit` (unix), `::timeout_kills_and_reports_timeout`, `::no_shell_by_default`, `::spawn_error_reports_detail` | `cargo test --locked --offline --test piped` — green per whole-tree state |
+| R02 | Deadlock-safe drain; limits/spooling; non-UTF-8 | done | `src/command.rs` (`e740c5c`) | `tests/piped.rs::large_output_both_pipes_no_deadlock`, `::output_limit_truncates_with_truthful_flag`, `::late_output_bounded_by_drain_deadline`, `::non_utf8_bytes_preserved` | `cargo test --locked --offline --test piped large_output` — green per whole-tree state |
+| R03 | Isolated envs (HOME/XDG/cwd, child-only env) | done | `src/command.rs`, `src/tui.rs` (`e740c5c`, `8c71311`) | `tests/piped.rs::env_is_child_only`, `::isolated_home_is_respected`, `::isolated_env_scrubs_dylib_path_unless_preserved`, `tests/tui.rs::child_env_and_cwd_are_child_only` | `cargo test --locked --offline --test piped env_` — green per whole-tree state |
+| R04 | Upstream PTY/emulator crates; NO vendored termlens | done | `vendor/` + `termlens`/`termpane` engine REMOVED (`4d02e2e`); runtime is registry portable-pty 0.9 + alacritty_terminal 0.26 | structural + replacement-suite: `ls vendor` fails, zero `termlens\|termpane` hits in `src/`+`tests/` (grep observed), `tests/tui.rs` (25 tests) + `tests/tui_shell.rs` green on the new backend | `git show 4d02e2e --stat`; `cargo test --locked --offline --test tui` 25/25 (PERF row 6) |
+| R05 | Ghostty binding qualified first; no silent substitution | done | `docs/PTY-BACKENDS.md`: Ghostty (`libghostty-vt` 0.2.2) probe FAILED with recorded evidence (Zig/native build failure) → rejected; portable-pty+alacritty qualified; `src/tui.rs` refuses beyond-backend profiles | `tests/tui.rs::profile_beyond_backend_rejected` (+ 24 sibling qualification tests) | `cargo test --locked --offline --test tui profile_beyond` — green per whole-tree state; decision record `docs/PTY-BACKENDS.md` |
+| R06 | Atomic revisioned observations | done | `src/tui.rs` session runtime (`8c71311`), `src/screen.rs::Observation` | `tests/tui.rs::spawn_and_observe`, `tests/observe.rs::watcher_receives_revisions`, `::watcher_lag_counter_under_flood` | `cargo test --locked --offline --test tui spawn_and_observe` — green per whole-tree state |
+| R07 | Waits don't block cancel/observe/other sessions | done | `src/tui.rs` scheduler (`8c71311`) | `tests/tui.rs::cancel_mid_wait`, `::two_sessions_independent`, `tests/observe.rs::inject_while_watching_round_trip` | `cargo test --locked --offline --test tui cancel_mid_wait` — green per whole-tree state |
+| R08 | Owned cleanup on return/error/panic/cancel; no double-panic Drop | done | `src/tui.rs` owned session (`8c71311`) | `tests/tui.rs::close_reaps_child_no_leak`, `::drop_reaps_child_no_leak`, `::cancel_mid_wait` | `cargo test --locked --offline --test tui _no_leak` — green per whole-tree state |
+| R09 | Parent-hard-kill guardian/containment; escaping descendants explicit | done | `src/tui_shell.rs` guardian, unix process-group sweep; non-unix reports explicit `Containment::Unsupported` (`5ada92a`) | `tests/tui_shell.rs::guardian_contains_group`, `::guardian_escape_boundary_setsid_outlives`, `::guardian_drop_contains`, `::guardian_exited_child_degrades_without_killing` | `cargo test --locked --offline --test tui_shell guardian_` — green per whole-tree state |
+| R10 | Separate readiness/stability/frame/exit waits | done | `src/tui.rs` wait APIs (`8c71311`) | `tests/tui.rs::predicate_timeout_yields_evidence`, `::wait_stable_settles`, `::wait_frame_unsupported_with_evidence`, `::exit_codes_observed` | `cargo test --locked --offline --test tui wait_` — green per whole-tree state |
+| R11 | Full input surface (chords/raw/paste/mouse/focus/resize/signal) | done | `src/tui.rs` input (`8c71311`) | `tests/tui.rs::typed_input_echoes`, `::chord_*`, `::raw_bytes_and_enter_key`, `::paste_negotiated_and_delimiter_rejected`, `::mouse_*` (3), `::focus_roundtrip`, `::resize_changes_grid`, `::signal_terminates_child`, `::key_release_without_kitty_is_noop` | `cargo test --locked --offline --test tui` — 25/25 (PERF row 6) |
+| R12 | Explicit shell sessions; shell-cmd exit ≠ child exit | done | `src/tui_shell.rs` (`5ada92a`) | `tests/tui_shell.rs::shell_run_echo`, `::shell_cmd_exit_is_not_child_exit`, `::shell_rejects_bad_commands`, `::shell_unavailable_refuses_to_guess`, `::shell_truncation_flag`, `::shell_final_state_preserved_after_exit` | `cargo test --locked --offline --test tui_shell shell_` — green per whole-tree state |
+| R13 | Terminal-state assertions (palette/clipboard/bells/title/modes/scrollback/links) | done | `src/tui_shell.rs::assert_*` ×10 + `TermSnapshot` (`5ada92a`) | `tests/tui_shell.rs::live_title_bells_modes_palette`, `::live_unsupported_state_reported_not_fabricated`, `::replay_full_state_asserts`, `::replay_empty_state_known_not_guessed` | `cargo test --locked --offline --test tui_shell live_` — green per whole-tree state |
+| R14 | Bounded raw replay invariant to chunk boundaries | done | `src/tui_shell.rs` replay (`5ada92a`) | `tests/tui_shell.rs::replay_chunk_invariance_all_split_points`, `::replay_recorded_pty_bytes_chunk_invariant`, `::replay_input_never_fed_as_output`, `::replay_bounded`, `::replay_matches_live_session` | `cargo test --locked --offline --test tui_shell replay_` — green per whole-tree state |
 
-## P4 — Queries/assertions (M4): all missing (only Q10 primitives exist)
+## P4 — Queries/assertions (M4)
 
-| ID | Criterion | Status | Tests | Verified |
-|----|-----------|--------|-------|----------|
-| Q01 | Fresh text/regex/style/link/region locators on current revision | missing | none | no |
-| Q02 | Composition/scope (within/before/after/nth/and/or/filter) | missing | none | no |
-| Q03 | Strict actions; scrollback not clickable | missing | none | no |
-| Q04 | Retryable observational assertions, one deadline | missing | none | no |
-| Q05 | Actions execute once (no repeat of destructive ops) | missing | none | no |
-| Q06 | Optional semantic provider (never inferred from appearance) | missing | none | no |
-| Q07 | Semantics select real input, never call controllers | missing | none | no |
-| Q08 | not_present_now / eventually_absent / remains_absent | missing | none | no |
-| Q09 | Deterministic event/clock harness (caller hooks) | missing | none | no |
-| Q10 | Region/palette/cursor invariants | partial (prims) | `tests/cells.rs` partial | no |
+All in `src/locate.rs` + `src/semant.rs` (`d76c102`).
+
+| ID | Criterion | Status | Implementation | Tests | Verified |
+|----|-----------|--------|----------------|-------|----------|
+| Q01 | Fresh text/regex/style/link/region locators on current revision | done | `src/locate.rs` | `tests/locate.rs::text_*` (6), `::regex_*` (3), `::style_matches_*` (2), `::region_resolves_one_span_per_row`, `::region_screens_keep_origin_with_local_coords`, `::wide_cells_skipped_and_counted_as_two_columns` | `cargo test --locked --offline --test locate` — green per whole-tree state |
+| Q02 | Composition/scope (within/before/after/nth/and/or/filter) | done | `src/locate.rs` | `tests/locate.rs::within_before_after_scope_correctly`, `::nth_first_last_select_in_order`, `::and_or_filter_combine_sets`, `::resolve_unique_ok_not_found_and_ambiguous` | `cargo test --locked --offline --test locate within_` — green per whole-tree state |
+| Q03 | Strict actions; scrollback not clickable | done | `src/locate.rs` | `tests/locate.rs::scrollback_matches_flagged_and_ordered_first`, `::scrollback_target_is_never_clickable`, `::click_and_submit_deliver_exactly_once_with_coords` | `cargo test --locked --offline --test locate scrollback_` — green per whole-tree state |
+| Q04 | Retryable observational assertions, one deadline | done | `src/locate.rs` expect-API | `tests/locate.rs::expect_visible_succeeds_and_times_out`, `::expect_text_waits_for_exact_unique_text`, `::expect_count_waits_for_exact_count`, `::present_now_and_not_present_now_are_single_shot`, `::usage_and_unsupported_fail_immediately_without_waiting` | `cargo test --locked --offline --test locate expect_` — green per whole-tree state |
+| Q05 | Actions execute once (no repeat of destructive ops) | done | `src/locate.rs` | `tests/locate.rs::click_and_submit_deliver_exactly_once_with_coords` | `cargo test --locked --offline --test locate click_and_submit` — green per whole-tree state |
+| Q06 | Optional semantic provider (never inferred from appearance) | done | `src/semant.rs` adapter | `tests/semant.rs::roles_ids_labels_focus_disabled`, `::no_appearance_inference`, `::ambiguity_and_not_found`, `::stale_generation_refused` | `cargo test --locked --offline --test semant` — green per whole-tree state |
+| Q07 | Semantics select real input, never call controllers | done | `src/semant.rs` coords-only resolution | `tests/semant.rs::resolution_yields_coords_only`, `::hit_region_center_coords`, `::disabled_excluded_from_click` | `cargo test --locked --offline --test semant resolution_` — green per whole-tree state |
+| Q08 | not_present_now / eventually_absent / remains_absent | done | `src/locate.rs` absence API | `tests/locate.rs::present_now_and_not_present_now_are_single_shot`, `::eventually_absent_passes_and_times_out`, `::remains_absent_watches_full_window_and_catches_appearance` | `cargo test --locked --offline --test locate absent` — green per whole-tree state |
+| Q09 | Deterministic event/clock harness (caller hooks) | done | `src/semant.rs` update/render harness | `tests/semant.rs::harness_determinism`, `::harness_uses_update_render_not_view_capture`, `::tick_counter`, `::render_tick` | `cargo test --locked --offline --test semant harness_` — green per whole-tree state |
+| Q10 | Region/palette/cursor invariants | done | `src/screen.rs` regions, `src/tui_shell.rs` palette asserts, `src/frame.rs` cursor | `tests/screen.rs::region_*` (6), `tests/locate.rs::region_*` (5), `tests/tui_shell.rs::live_title_bells_modes_palette` (palette), `tests/ratatui_views.rs::buffer_cursor_*` + `tests/render.rs::cursor_styles_render` (cursor) | `cargo test --locked --offline --test screen region_` — green (spot-run suite); siblings green per whole-tree state |
 
 ## P5 — Rendering/evidence (M5)
 
+Pinned profile + qual corpus + cache + safe export (`2375cb2`); fonts pre-existing, hash-locked.
+
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| V01 | One renderer for direct/live/imported | partial | `src/render.rs` | `tests/render.rs`, `tests/visual.rs` | no |
-| V02 | Explicit hashed font packs; frozen | keep | `src/profile.rs` + `assets/fonts` | baseline doc | hash-locked; qualify in M5 |
-| V03 | Grapheme qualification corpus | partial | renderer | `tests/render.rs` partial | no |
-| V04 | Source widths control layout | keep | grid-first layout | `tests/render.rs` partial | no |
-| V05 | Missing glyph fails strict approval by default | partial | fidelity sidecar exists | `tests/render.rs` partial | no |
-| V06 | Source vs display vs safe export; concealment ≠ redaction | partial | exporter review needed | partial | no |
-| V07 | Blink intent in state; declared phase in stills | partial | cursor/model | partial | no |
-| V08 | Content-addressed caches; corrupt rejected; no-cache mode | partial | renderer cache | partial | no |
-| V09 | Portable offline reports | partial | report builder | `tests/visual.rs` partial | no |
-| V10 | Opt-in byte contracts for ANSI/TXT/HTML | partial | grouped gates | `tests/grouped.rs` partial | no |
+| V01 | One renderer for direct/live/imported | done | `src/render.rs` single engine | `tests/render_qual.rs::screen_and_frame_share_one_engine`, `::screen_adaptation_is_lossless_and_origin_free` | `cargo test --locked --offline --test render_qual screen_and_frame` — green per whole-tree state |
+| V02 | Explicit hashed font packs; frozen | done | `src/profile.rs` + `assets/fonts` (8 binaries + FONTS.md + 3 licenses), hashes in `docs/APPROVAL-BASELINE.md` + render tests | `tests/render.rs::font_hash_pinned_and_documented`, `::vendored_fallback_hashes_pinned_and_documented`, `::fallback_hash_mismatch_refuses_to_render`, `tests/render_qual.rs::vendored_pins_match_vendored_bytes`, `::strict_constructor_validates_every_pin`, `::face_swap_detected_at_construction_and_at_render` | `cargo test --locked --offline --test render font_hash` — green per whole-tree state |
+| V03 | Grapheme qualification corpus | done | `src/render.rs` + corpus (`2375cb2`) | `tests/render_qual.rs::grapheme_corpus_grids_match_hand_authored_expectations`, `::fallback_never_shifts_the_grid`, `::clipped_styles_draw_across_trailing_spaces`, `tests/render.rs::box_braille_icons_render_ink`, `::cjk_keeps_two_cell_geometry`, `::emoji_tofu_keeps_two_cell_advance` | `cargo test --locked --offline --test render_qual grapheme_corpus` — green per whole-tree state |
+| V04 | Source widths control layout | done | grid-first layout in `src/render.rs` | `tests/render.rs::cjk_keeps_two_cell_geometry`, `::clipping_and_wrapping_match_terminal`, `tests/render_qual.rs::fallback_never_shifts_the_grid`, `tests/ratatui_views.rs::wide_glyph_*` (3) | `cargo test --locked --offline --test render cjk_` — green per whole-tree state |
+| V05 | Missing glyph fails strict approval by default | done | strict constructor + fidelity sidecar | `tests/render_qual.rs::strict_missing_glyph_fails_with_exact_diagnostics`, `::strict_placeholder`, `tests/render.rs::fidelity_reports_missing_glyphs_exactly`, `::broken_styled_face_falls_back_and_is_recorded` | `cargo test --locked --offline --test render_qual strict_missing` — green per whole-tree state |
+| V06 | Source vs display vs safe export; concealment ≠ redaction | done | `src/render.rs` export policies (`2375cb2`) | `tests/render_qual.rs::export_escapes_untrusted_content`, `::concealment_hides_pixels_not_canonical_data`, `::redaction_destroys_content_and_validates` | `cargo test --locked --offline --test render_qual concealment_` — green per whole-tree state |
+| V07 | Blink intent in state; declared phase in stills | done | `src/frame.rs` blink intent + `src/render.rs` phase sampling | `tests/render_qual.rs::blink_intent_preserved_and_phases_sampled`, `tests/tool_qualification.rs::hidden_and_blink_are_canonical_and_hidden_does_not_paint` | `cargo test --locked --offline --test render_qual blink_` — green per whole-tree state |
+| V08 | Content-addressed caches; corrupt rejected; no-cache mode | done | `src/render.rs` cache (`2375cb2`) | `tests/render_qual.rs::cache_roundtrip_and_key_sensitivity`, `::corrupt_and_incompatible_entries_rejected_and_counted`, `::approved_roots_are_never_cache_dirs`, `::no_cache_mode_disables_reads_and_writes_but_not_renders`, `tests/render.rs::renderer_cache_matches_one_shot_and_stays_stable` | `cargo test --locked --offline --test render_qual cache_` — green per whole-tree state |
+| V09 | Portable offline reports | done | `src/render.rs` bundle builder (`2375cb2`) | `tests/render_qual.rs::bundle_is_offline_and_self_describing`, `tests/snapshot.rs::store_report_reverifies_actuals_and_rewrites_report_html`, `tests/grouped.rs::report_*` | `cargo test --locked --offline --test render_qual bundle_` — green per whole-tree state |
+| V10 | Opt-in byte contracts for ANSI/TXT/HTML | done | grouped gates + contract API (`2375cb2`) | `tests/render_qual.rs::contract_bytes_opt_in_and_exact`, `tests/grouped.rs::ansi_and_txt_and_html_are_byte_deterministic`, `::cell_change_fails_ansi_gate_as_cells_differ`, `::style_only_change_keeps_txt_equal`, `::html_artifact_is_a_standalone_colored_render` | `cargo test --locked --offline --test render_qual contract_bytes` — green per whole-tree state |
 
 ## P6 — Advanced (M6)
 
+Typed protocol + sessions + recordings (`61bfe51`), MCP + thin clients (`ee7d5b3`), media exports + graphics (`67213c3`),
+importers (`0304d72`), live/watch/replay-vs-rerun (`14f62de`).
+
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| A01 | One typed op/result/error protocol (Rust+CLI+machine) | missing | — | none | no |
-| A02 | Optional named sessions | missing | — | none | no |
-| A03 | Live human observe/interact, no multiplexer required | missing | — | none | no |
-| A04 | Trace journal + offline viewer | missing | — | none | no |
-| A05 | Replay-vs-rerun distinction | missing | — | none | no |
-| A06 | Bounded recordings; screenshot/cast/GIF/APNG; MP4 via external encoder | missing | — | none | no |
-| A07 | Graphics payload inspection; compositing only when qualified | missing | — | none | no |
-| A08 | Agent CLI + schema/capabilities + optional MCP | missing | — | none | no |
-| A09 | Thin JS/TS + Python clients, no second engine | missing | — | none | no |
-| A10 | Read-only importers (tui-snap stores + selected competitor traces) | partial | `tools/migrate` exists | partial | no |
-| A11 | Performance qualification (cold/warm/latency/memory/suite) | missing | — | none | no |
-| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | missing | — | none | no |
+| A01 | One typed op/result/error protocol (Rust+CLI+machine) | done | `src/proto.rs`, `src/main.rs` CLI (`61bfe51`) | `tests/agent_if.rs::initialize_reports_protocol_and_capabilities`, `::tools_*` (4), `::unknown_*`, `::bad_params_*`, `::malformed_input_*`, `::schema_snapshot_matches_committed_json` (+ `tests/agent_if_tools.json`), `tests/cli.rs::op_*` (6), `::machine_line_shapes`, `::cli_machine_mode` | `cargo test --locked --offline --test agent_if` — green per whole-tree state |
+| A02 | Optional named sessions | done | `src/proto.rs` sessions (`61bfe51`) | `tests/cli.rs::op_named_session_round_trip`, `::op_session_ops_via_execute`, `::cli_session_round_trip`, `tests/agent_if.rs::session_tools_present_and_callable` | `cargo test --locked --offline --test cli op_named_session` — green per whole-tree state |
+| A03 | Live human observe/interact, no multiplexer required | done | `src/observe.rs` Watcher + attach (`14f62de`) | `tests/observe.rs::watcher_receives_revisions`, `::watcher_lag_counter_under_flood`, `::inject_while_watching_round_trip`, `::attach_cli_smoke` | `cargo test --locked --offline --test observe watcher_` — green per whole-tree state |
+| A04 | Trace journal + offline viewer | done | `src/runner.rs` journal + `src/proto.rs` recordings + offline report bundle + `review`/`report` CLI (`61bfe51`, `939ade6`, `2375cb2`) | `tests/runner.rs::journal_killed_attempt_incomplete_completed_is_complete`, `tests/cli.rs::cli_record_and_trace`, `::cli_review_and_report`, `tests/render_qual.rs::bundle_is_offline_and_self_describing`, `tests/observe.rs::replay_determinism_no_spawn` | `cargo test --locked --offline --test cli cli_record_and_trace` — green per whole-tree state |
+| A05 | Replay-vs-rerun distinction | done | `src/observe.rs` (`14f62de`) | `tests/observe.rs::replay_determinism_no_spawn`, `::rerun_spawns_marker`, `::replay_vs_rerun_diff_report_on_nondeterministic_fixture` | `cargo test --locked --offline --test observe replay_vs_rerun` — green per whole-tree state |
+| A06 | Bounded recordings; screenshot/cast/GIF/APNG; MP4 via external encoder | done | `src/export.rs` (`67213c3`) | `tests/export.rs::cast_*` (3), `::gif_*` (2), `::apng_*` (2), `::mp4_policy_validated_without_encoder`, `::mp4_missing_encoder_or_real_encode`, `::export_policies_pin_defaults` | `cargo test --locked --offline --test export` — green per whole-tree state |
+| A07 | Graphics payload inspection; compositing only when qualified | done | `src/export.rs` kitty/sixel parsers (`67213c3`) | `tests/export.rs::sixel_*` (3), `::kitty_*` (4), `::placement_equality_semantics`, `::graphics_truncation_is_explicit_and_never_decodes`, `::graphics_unsupported_sequences_diagnosed_never_silent`, `::graphics_malformed_kitty_is_loud_but_lenient`, `::graphics_payload_count_bound` | `cargo test --locked --offline --test export kitty_` — green per whole-tree state |
+| A08 | Agent CLI + schema/capabilities + optional MCP | done | `src/main.rs` CLI + `src/mcp.rs` stdio server + `src/proto.rs` (`61bfe51`, `ee7d5b3`) | `tests/agent_if.rs` (12 protocol tests incl. `::schema_snapshot_matches_committed_json`), `tests/cli.rs` (21 CLI tests incl. `::cli_schema_and_doctor`, `::cli_help_and_version`) | `cargo test --locked --offline --test agent_if` + `--test cli` — green per whole-tree state |
+| A09 | Thin JS/TS + Python clients, no second engine | done | `clients/ts/index.js`, `clients/py/tuisnap_client.py` — transport only, engine stays in Rust (`ee7d5b3`) | `tests/agent_if.rs::ts_client_example_e2e`, `::py_client_example_e2e`, `::ts_client_propagates_op_errors_verbatim`, `::py_client_propagates_op_errors_verbatim` | `cargo test --locked --offline --test agent_if _client_` — green per whole-tree state |
+| A10 | Read-only importers (tui-snap stores + selected competitor traces) | done | `src/import_compat.rs` (`0304d72`); frozen-store importer in `src/assert.rs` | `tests/import_compat.rs` (12 tests: `cast_*` 5, `termctrl_*` 5, `imports_never_write_nor_execute_canary`, `frozen_four_file_tree_roundtrip_readonly`), `tests/facade.rs::import_frozen_v1_*` (2) | `cargo test --locked --offline --test import_compat` — green per whole-tree state |
+| A11 | Performance qualification (cold/warm/latency/memory/suite) | partial | `docs/PERF.md` (`35ea4d7`): cold/warm builds (11/7/4 s), single-test latency (63 ms PTY, 10 ms piped CLI), suite totals (129 s cargo test, 43 s nextest 379/379), artifact sizes; MISSING: runtime memory/RSS numbers | measurements, not `#[test]`; method + single-sample caveat in doc | `docs/PERF.md` rows 1–10 observed; no memory row (grep confirms) — needs RSS/peak measurement lane |
+| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | partial | `docs/CONFORMANCE.md` (`35ea4d7`): macOS TESTED (full green both runners); Linux CI-only, unexecuted locally; Windows compiles for `x86_64-pc-windows-gnu` (0 errors) but never runs, no Windows CI lane — truthful-subset part satisfied, Linux-green + Windows-runtime unproven | macOS: whole suite; Windows: `cargo check --target x86_64-pc-windows-gnu --tests` (0 errors, recorded) + `#[cfg]` exclusion ledger §1 | `docs/CONFORMANCE.md` §§1–4 observed; `gh` unavailable in ledger session so Linux CI-green on this branch unconfirmed — needs CI evidence link or Windows lane |
 
 ## Milestone gates (M0–M7)
 
-- M0: all C red tests green + C02/C10 tests added and green; unlawful states unrepresentable where cheap.
-- M1: `Screen`/`Observation`/policy types; ratatui adapters without ANSI round trip; M09 consumer check.
-- M2: native Insta review + nextest matrix (normal/filter/shard/retry/stress/remap/cancel) on vertical slice.
-- M3: piped `Command` + owned PTY + qualified backend + R04 vendor removal.
-- M4: locators/assertions/semantics/event helpers per Q.
-- M5: pinned rendering + full evidence + offline review per V.
-- M6: A01–A12 per rows above.
-- M7: old runtime/API removed; read-only import only; C09 re-verified; docs = implemented contracts.
+All SHAs on branch `redesign/rust-first-testing-platform` (`git log --oneline`):
 
-First vertical slice (early M2): pure settings view + piped CLI error + PTY settings-navigation journey,
-all under nextest with native Insta expectations, failure evidence, verified cleanup.
+- M0 ✅ (C01–C08 green; C09 pinned; C10 reconciled-then-drifted → now partial):
+  `adfda5e` P0 mutation tests + C09 baseline, `a8d7b22` C01/C03/C04, `45c0638` C06/C07/C08-classic,
+  `4fc1e23` C05/C08-grouped, `7bc8725` C02/C10.
+- M1 ✅ (M03 underline-style/color excepted → partial): `b88d334` M01/M02/M04/M07/M08, `92be241` M05/M06/M03/M07.
+- M2 ✅: `9ad39a9` I01–I05 spike, `915be82` I01/I02/I06/I07, `939ade6` N02–N10,
+  `08750b8` vertical slice (settings view + piped CLI error), `1742f2d` PTY settings-navigation journey.
+  Slice tests: `tests/vertical_slice.rs`, `tests/journey.rs::settings_navigation`.
+- M3 ✅: `e740c5c` R01–R03, `39bcda2` R04/R05 qualification, `8c71311` R06–R08/R10/R11,
+  `4d02e2e` R04 vendor removal, `5ada92a` R09/R12–R14.
+- M4 ✅: `d76c102` Q01–Q10.
+- M5 ✅: `2375cb2` V01/V03–V10 (V02 fonts pre-existing, hash-locked).
+- M6 ✅: `61bfe51` A01/A02/A04, `ee7d5b3` A08/A09 (`7f392b1` tool-schema snapshot), `67213c3` A06/A07,
+  `0304d72` A10, `14f62de` A03/A05.
+- M7 ⚠️ near-complete: `35ea4d7` A11/A12/M09 docs + C09 re-verify amendment (approvals UNCHANGED, consumer repinned);
+  `c991d23` LEARNING.md + 8 tutorials + examples lane (N10). Old runtime removed (`4d02e2e`),
+  import read-only (`0304d72`). Remaining: C10 re-reconciliation, M03 underline styles, A11 memory lane,
+  A12 Linux-CI/Windows-runtime evidence — this ledger refresh itself closes the "docs = implemented contracts" gap
+  except those four rows.
+
+First vertical slice (early M2) ✅: pure settings view + piped CLI error (`08750b8`, `tests/vertical_slice.rs`)
++ PTY settings-navigation journey (`1742f2d`, `tests/journey.rs`), all under nextest with native Insta
+expectations, failure evidence, verified cleanup.
