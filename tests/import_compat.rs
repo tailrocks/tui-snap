@@ -3,8 +3,7 @@
 
 use std::path::Path;
 use tuisnap::import_compat::{
-    CompatError, ImportLimits, import_cast, import_cast_with, import_termctrl,
-    import_termctrl_with,
+    import_cast, import_cast_with, import_termctrl, import_termctrl_with, CompatError, ImportLimits,
 };
 
 fn write_tmp(dir: &Path, name: &str, bytes: &[u8]) -> std::path::PathBuf {
@@ -24,16 +23,21 @@ fn cast_roundtrip_with_export_writer() {
         ("hello\x1b[1m!\n".to_string(), 0.5),
         ("second line\n".to_string(), 1.25),
     ];
-    let cast_path =
-        tuisnap::export::cast_v2(&frames, 80, 24, &tmp.path().join("out")).unwrap();
+    let cast_path = tuisnap::export::cast_v2(&frames, 80, 24, &tmp.path().join("out")).unwrap();
     let trace = import_cast(&cast_path).unwrap();
     assert_eq!(trace.header.version, 2);
     assert_eq!((trace.header.width, trace.header.height), (80, 24));
     assert!(trace.unsupported.is_empty());
     let deltas = trace.output_deltas();
     assert_eq!(deltas.len(), 2);
-    assert_eq!(String::from_utf8(deltas[0].1.clone()).unwrap(), "hello\x1b[1m!\n");
-    assert_eq!(String::from_utf8(deltas[1].1.clone()).unwrap(), "second line\n");
+    assert_eq!(
+        String::from_utf8(deltas[0].1.clone()).unwrap(),
+        "hello\x1b[1m!\n"
+    );
+    assert_eq!(
+        String::from_utf8(deltas[1].1.clone()).unwrap(),
+        "second line\n"
+    );
     assert!((deltas[0].0 - 0.5).abs() < 1e-6, "dt0 = {}", deltas[0].0);
     assert!((deltas[1].0 - 1.25).abs() < 1e-6, "dt1 = {}", deltas[1].0);
 }
@@ -113,7 +117,11 @@ fn cast_unknown_code_is_unsupported_not_fatal() {
     let trace = import_cast(&p).unwrap();
     assert_eq!(trace.events.len(), 1);
     assert_eq!(trace.unsupported.len(), 1);
-    assert!(trace.unsupported[0].contains("\"z\""), "{}", trace.unsupported[0]);
+    assert!(
+        trace.unsupported[0].contains("\"z\""),
+        "{}",
+        trace.unsupported[0]
+    );
 }
 
 #[test]
@@ -256,7 +264,10 @@ fn termctrl_version_and_content_errors() {
     // Byte out of range.
     let doc = format!("{header}{{\"type\":\"output\",\"at_ms\":1,\"bytes\":[999]}}\n");
     let p = write_tmp(tmp.path(), "bigr.termctrl", doc.as_bytes());
-    assert!(matches!(import_termctrl(&p), Err(CompatError::Content { .. })));
+    assert!(matches!(
+        import_termctrl(&p),
+        Err(CompatError::Content { .. })
+    ));
 }
 
 #[test]
@@ -333,10 +344,11 @@ fn frozen_four_file_tree_roundtrip_readonly() {
     for p in [&emitted.ansi, &emitted.txt, &emitted.png, &emitted.html] {
         assert!(p.exists(), "missing {}", p.display());
     }
-    let before: Vec<(std::path::PathBuf, Vec<u8>)> = [&emitted.ansi, &emitted.txt, &emitted.png, &emitted.html]
-        .into_iter()
-        .map(|p| (p.clone(), std::fs::read(p).unwrap()))
-        .collect();
+    let before: Vec<(std::path::PathBuf, Vec<u8>)> =
+        [&emitted.ansi, &emitted.txt, &emitted.png, &emitted.html]
+            .into_iter()
+            .map(|p| (p.clone(), std::fs::read(p).unwrap()))
+            .collect();
 
     let tree = import_frozen_v1(&dir).unwrap();
     assert_eq!(tree.scenarios.len(), 1);

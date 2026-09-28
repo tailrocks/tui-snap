@@ -274,7 +274,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let Some(method) = method else {
         // No method and no id: pure noise, stay silent.
-        let Some(id) = id else { return None };
+        let id = id?;
         return Some(error_response(
             id,
             -32600,
@@ -283,9 +283,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
         ));
     };
     // Notification (no id): only `notifications/*` is meaningful; never reply.
-    let Some(id) = id else {
-        return None;
-    };
+    let id = id?;
     match method {
         "initialize" => Some(success_response(id, initialize_result(&params))),
         "tools/list" => Some(success_response(id, tools_list_json())),

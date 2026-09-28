@@ -45,7 +45,10 @@ fn main() {
     // Pre-approve the compound sample: canonical text + tagged PNG bytes.
     let sample = render_sample(&screen).unwrap();
     let gen = generation_id(&sample.canonical);
-    assert_eq!(png_generation(&png_tag_generation(&sample.png, &gen)), Some(gen.clone()));
+    assert_eq!(
+        png_generation(&png_tag_generation(&sample.png, &gen)),
+        Some(gen.clone())
+    );
     std::fs::write(
         snaps.join("styled-shot.snap"),
         format!(

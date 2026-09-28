@@ -341,8 +341,8 @@ fn nth_first_last_select_in_order() {
 fn and_or_filter_combine_sets() {
     let mut cells = blank(9, 1);
     put(&mut cells, 9, 0, 0, "foo bar  ");
-    for x in 0..3 {
-        cells[x].mods.bold = true;
+    for cell in cells.iter_mut().take(3) {
+        cell.mods.bold = true;
     }
     let screen = finish(cells, 9, 1);
 

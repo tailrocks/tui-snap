@@ -119,11 +119,13 @@ fn gif_rejects_bad_input() {
     let other = png_solid(5, 4, [1, 2, 3, 255]);
     let out = dir.path().join("x.gif");
     assert!(gif(&[], &[], &out).is_err());
-    assert!(gif(&[good.clone()], &[10, 10], &out).is_err());
+    assert!(gif(std::slice::from_ref(&good), &[10, 10], &out).is_err());
     assert!(gif(&[good.clone(), other], &[10, 10], &out).is_err());
     assert!(gif(&[b"not a png".to_vec()], &[10], &out).is_err());
-    let mut bad_speed = GifPolicy::default();
-    bad_speed.speed = 99;
+    let bad_speed = GifPolicy {
+        speed: 99,
+        ..Default::default()
+    };
     assert!(gif_with(&[good], &[10], &out, &bad_speed).is_err());
 }
 
@@ -174,10 +176,12 @@ fn apng_rejects_bad_input() {
     let other = png_solid(4, 5, [1, 2, 3, 255]);
     let out = dir.path().join("x.png");
     assert!(apng(&[], &[], &out).is_err());
-    assert!(apng(&[good.clone()], &[10, 10], &out).is_err());
+    assert!(apng(std::slice::from_ref(&good), &[10, 10], &out).is_err());
     assert!(apng(&[good.clone(), other], &[10, 10], &out).is_err());
-    let mut bad_den = ApngPolicy::default();
-    bad_den.delay_den = 0;
+    let bad_den = ApngPolicy {
+        delay_den: 0,
+        ..Default::default()
+    };
     assert!(apng_with(&[good], &[10], &out, &bad_den).is_err());
 }
 
@@ -189,8 +193,10 @@ fn apng_rejects_bad_input() {
 fn mp4_policy_validated_without_encoder() {
     let dir = tempfile::tempdir().unwrap();
     let frames = vec![png_solid(4, 4, [9, 9, 9, 255])];
-    let mut bad = Mp4Policy::default();
-    bad.crf = 99;
+    let bad = Mp4Policy {
+        crf: 99,
+        ..Default::default()
+    };
     let err = mp4_with(&frames, &[100], &dir.path().join("x.mp4"), &bad).unwrap_err();
     assert!(!err.is_encoder_missing());
     let mut bad = Mp4Policy::default();
@@ -256,7 +262,8 @@ fn sixel_parse_and_exact_decode() {
     assert_eq!(p.placement.col, None);
     let img = p.decode_bounded(&GraphicsPolicy::default()).unwrap();
     assert_eq!((img.width, img.height), (2, 6));
-    assert!(img.rgba.chunks_exact(4).all(|px| px == [255, 0, 0, 255]));
+    let (pixels, _rest) = img.rgba.as_chunks::<4>();
+    assert!(pixels.iter().all(|px| *px == [255, 0, 0, 255]));
 }
 
 #[test]
@@ -364,7 +371,8 @@ fn kitty_png_and_rgb24_roundtrip() {
         .decode_bounded(&GraphicsPolicy::default())
         .unwrap();
     assert_eq!((img.width, img.height), (3, 2));
-    assert!(img.rgba.chunks_exact(4).all(|p| p == [10, 20, 30, 40]));
+    let (pixels, _rest) = img.rgba.as_chunks::<4>();
+    assert!(pixels.iter().all(|p| *p == [10, 20, 30, 40]));
     // f=24 RGB gains opaque alpha.
     let scan = scan_graphics_default(&kitty("a=T,f=24,s=1,v=1", &b64(&[7, 8, 9])));
     let img = scan.payloads[0]

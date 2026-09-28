@@ -73,7 +73,10 @@ pub struct ReplayRerunComparison {
 /// replay path); only the final screen is compared, the full prefix list is
 /// kept as the revision map. Equality is exact [`Screen`] equality.
 #[must_use]
-pub fn compare_replay_vs_rerun(replay_screens: &[Screen], rerun_screen: &Screen) -> ReplayRerunComparison {
+pub fn compare_replay_vs_rerun(
+    replay_screens: &[Screen],
+    rerun_screen: &Screen,
+) -> ReplayRerunComparison {
     let replay_hashes: Vec<u64> = replay_screens.iter().map(screen_hash).collect();
     let rerun_hash = screen_hash(rerun_screen);
     let same = replay_screens.last().is_some_and(|s| s == rerun_screen);
@@ -308,7 +311,9 @@ mod pty_paths {
             // `Recording` retains no per-event boundaries (only the
             // concatenated output), so the exact deterministic replay is the
             // single full-stream screen.
-            Ok(vec![replay_bytes(&output, self.cols(), self.rows())?.screen])
+            Ok(vec![
+                replay_bytes(&output, self.cols(), self.rows())?.screen,
+            ])
         }
     }
 
@@ -462,4 +467,4 @@ mod pty_paths {
 }
 
 #[cfg(feature = "pty")]
-pub use pty_paths::{Rerun, RerunError, RerunOutput, Replay, Watched, Watcher};
+pub use pty_paths::{Replay, Rerun, RerunError, RerunOutput, Watched, Watcher};

@@ -49,7 +49,11 @@ fn main() {
     let text = rows(&screen).join("\n");
     assert!(text.contains("menu: alpha") && text.contains("menu: beta"));
     s.close().unwrap();
-    println!("EXAMPLE-04-OK revision={} rows={}", obs.revision, screen.rows());
+    println!(
+        "EXAMPLE-04-OK revision={} rows={}",
+        obs.revision,
+        screen.rows()
+    );
 }
 
 /// Without the `pty` feature there is no PTY backend; stay green, say so.

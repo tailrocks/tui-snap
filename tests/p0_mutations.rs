@@ -141,7 +141,7 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     // Re-encoding identical pixels must pass.
     let re = compare_png_with_flags(&enc_default, &enc_best, false).unwrap();
     assert!(
-        !(re.score < 1.0),
+        re.score >= 1.0,
         "re-encoded identical pixels must pass strict gate, got score={}",
         re.score
     );
@@ -195,7 +195,7 @@ fn c04_similarity_score_must_not_establish_strict_equality() {
     let v = compare_png_with_flags(&png_a, &png_b, true).unwrap();
     let decoded_equal = decode_rgb(&png_a).as_raw() == decode_rgb(&png_b).as_raw();
     assert!(
-        !(v.score >= 1.0) || decoded_equal,
+        v.score < 1.0 || decoded_equal,
         "C04 gap: score={} establishes 'equality' for decoded-different pixels; \
          a rounded/perceptual score cannot prove strict equality",
         v.score
@@ -207,7 +207,8 @@ fn c04_similarity_score_must_not_establish_strict_equality() {
     // on the check/report path).
     let (_dir, st) = tmp_classic("c04");
     let frame = frame_with("tolerance");
-    st.check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
+    let _ = st
+        .check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
         .unwrap();
     st.accept("home").unwrap();
     let nan = st.check("home", &frame, &profile(), &VENDORED_FACES, f64::NAN);
@@ -230,7 +231,8 @@ fn c06_missing_approved_png_must_fail_not_regenerate_in_memory() {
     // is rendered to MEMORY and the gate can still return Matched).
     let (_dir, st) = tmp_classic("c06");
     let frame = frame_with("frozen pixels");
-    st.check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
+    let _ = st
+        .check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
         .unwrap();
     st.accept("home").unwrap();
     let matched = st
@@ -328,14 +330,15 @@ fn c05_report_verdict_must_equal_test_verdict_on_same_inputs() {
 #[test]
 fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
     let (_dir, st) = tmp_classic("c07");
-    st.check(
-        "home",
-        &frame_with("before"),
-        &profile(),
-        &VENDORED_FACES,
-        1.0,
-    )
-    .unwrap();
+    let _ = st
+        .check(
+            "home",
+            &frame_with("before"),
+            &profile(),
+            &VENDORED_FACES,
+            1.0,
+        )
+        .unwrap();
     st.accept("home").unwrap();
     let mismatch = st
         .check(
@@ -378,7 +381,8 @@ fn c08_interrupted_candidate_must_report_incomplete_not_match() {
     // candidate (frame present, PNG write lost) back to Matched.
     let (_dir, st) = tmp_classic("c08");
     let frame = frame_with("atomic candidate");
-    st.check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
+    let _ = st
+        .check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
         .unwrap();
     st.accept("home").unwrap();
     let matched = st

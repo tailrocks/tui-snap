@@ -5,9 +5,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tuisnap::observe::{
-    compare_replay_vs_rerun, screen_text, Replay, Rerun, Watcher,
-};
+use tuisnap::observe::{compare_replay_vs_rerun, screen_text, Replay, Rerun, Watcher};
 use tuisnap::screen::Screen;
 use tuisnap::tui::{CancelToken, Tui};
 use tuisnap::tui_shell::Recording;
@@ -72,10 +70,7 @@ fn watcher_lag_counter_under_flood() {
         count += 1;
     }
     assert!(count > 0);
-    assert!(contains(
-        &session.observe_now().unwrap().screen,
-        "tick-"
-    ));
+    assert!(contains(&session.observe_now().unwrap().screen, "tick-"));
     watcher.stop();
 }
 
@@ -83,7 +78,9 @@ fn watcher_lag_counter_under_flood() {
 fn inject_while_watching_round_trip() {
     let session = Arc::new(Tui::new(["/bin/cat"]).size(60, 12).spawn().unwrap());
     let watcher = Watcher::subscribe(Arc::clone(&session), 16, Duration::from_millis(5));
-    watcher.next_timeout(Duration::from_secs(5)).expect("initial");
+    watcher
+        .next_timeout(Duration::from_secs(5))
+        .expect("initial");
     watcher.inject(b"round-trip-1\n").unwrap();
     watcher.inject_text("round-trip-2\n").unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -121,12 +118,29 @@ fn attach_cli_smoke() {
         }
     };
     // Start a sleep session, then attach with piped stdin (immediate EOF).
-    let out = run(&["session", "start", "--name", "attach-smoke", "--", "/bin/sleep", "30"], None);
+    let out = run(
+        &[
+            "session",
+            "start",
+            "--name",
+            "attach-smoke",
+            "--",
+            "/bin/sleep",
+            "30",
+        ],
+        None,
+    );
     assert!(out.status.success(), "start failed: {out:?}");
-    let out = run(&["session", "attach", "--name", "attach-smoke"], Some(b"typed-input\n"));
+    let out = run(
+        &["session", "attach", "--name", "attach-smoke"],
+        Some(b"typed-input\n"),
+    );
     assert!(out.status.success(), "attach failed: {out:?}");
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("attached: attach-smoke"), "no header: {stdout}");
+    assert!(
+        stdout.contains("attached: attach-smoke"),
+        "no header: {stdout}"
+    );
     assert!(
         stdout.contains("best-effort human view"),
         "no doc line: {stdout}"
@@ -210,7 +224,11 @@ fn replay_vs_rerun_diff_report_on_nondeterministic_fixture() {
     rec.push_output(&probe.stdout).unwrap();
     let replayed = rec.replay_observations().unwrap();
     let rerun = Rerun::new(
-        vec!["/bin/sh".to_string(), "-c".to_string(), "date +%N".to_string()],
+        vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "date +%N".to_string(),
+        ],
         60,
         12,
     )

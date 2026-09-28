@@ -849,9 +849,8 @@ fn cmd_session_attach(name: &str) -> i32 {
         }
         let alive = tuisnap::proto::session_list()
             .map(|l| {
-                l.iter().any(|s| {
-                    s.name == *name && s.status == tuisnap::proto::SessionStatus::Running
-                })
+                l.iter()
+                    .any(|s| s.name == *name && s.status == tuisnap::proto::SessionStatus::Running)
             })
             .unwrap_or(false);
         if !alive {

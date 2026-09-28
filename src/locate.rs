@@ -639,7 +639,7 @@ impl MiniRegex {
             _ => {
                 let mut ends = vec![ci];
                 let mut j = ci;
-                while atom.max.map_or(true, |m| ends.len() - 1 < m)
+                while atom.max.is_none_or(|m| ends.len() - 1 < m)
                     && j < chars.len()
                     && Self::atom_matches(&atom.token, chars[j])
                 {
@@ -1040,17 +1040,17 @@ impl Locator {
             }
             LocatorKind::Nth { inner, index } => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by(|a, b| a.key().cmp(&b.key()));
+                spans.sort_by_key(|a| a.key());
                 Ok(spans.into_iter().nth(*index).into_iter().collect())
             }
             LocatorKind::First(inner) => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by(|a, b| a.key().cmp(&b.key()));
+                spans.sort_by_key(|a| a.key());
                 Ok(spans.into_iter().next().into_iter().collect())
             }
             LocatorKind::Last(inner) => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by(|a, b| a.key().cmp(&b.key()));
+                spans.sort_by_key(|a| a.key());
                 Ok(spans.into_iter().last().into_iter().collect())
             }
             LocatorKind::And { a, b } => {
@@ -1071,7 +1071,7 @@ impl Locator {
             }
             LocatorKind::Filter { inner, pred } => {
                 let spans = inner.resolve_core(screen, revision, scrollback)?;
-                Ok(spans.into_iter().filter(|s| pred(s)).collect())
+                Ok(spans.into_iter().filter(pred).collect())
             }
         }
     }

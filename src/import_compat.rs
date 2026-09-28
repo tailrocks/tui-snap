@@ -326,21 +326,21 @@ pub fn import_cast_with(path: &Path, lim: &ImportLimits) -> Result<CastTrace, Co
 }
 
 fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
-    let v: serde_json::Value =
-        serde_json::from_str(line).map_err(|e| CompatError::Version {
-            offset: 0,
-            msg: format!("header is not JSON: {e}"),
-        })?;
+    let v: serde_json::Value = serde_json::from_str(line).map_err(|e| CompatError::Version {
+        offset: 0,
+        msg: format!("header is not JSON: {e}"),
+    })?;
     let obj = v.as_object().ok_or_else(|| CompatError::Version {
         offset: 0,
         msg: "header must be a JSON object".to_string(),
     })?;
-    let version = obj.get("version").and_then(|v| v.as_u64()).ok_or_else(|| {
-        CompatError::Version {
-            offset: 0,
-            msg: "header lacks numeric \"version\"".to_string(),
-        }
-    })?;
+    let version =
+        obj.get("version")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| CompatError::Version {
+                offset: 0,
+                msg: "header lacks numeric \"version\"".to_string(),
+            })?;
     if version != 2 {
         return Err(CompatError::Version {
             offset: 0,
@@ -348,12 +348,13 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
         });
     }
     let dim = |key: &str| -> Result<u16, CompatError> {
-        let n = obj.get(key).and_then(|v| v.as_u64()).ok_or_else(|| {
-            CompatError::Version {
+        let n = obj
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| CompatError::Version {
                 offset: 0,
                 msg: format!("header lacks numeric {key:?}"),
-            }
-        })?;
+            })?;
         if n == 0 || n > u64::from(u16::MAX) {
             return Err(CompatError::Version {
                 offset: 0,
@@ -382,19 +383,33 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
 /// Parse one event line. `Ok(None)` = well-formed but unknown event code
 /// (caller reports it as unsupported, non-fatal).
 fn parse_cast_event(line: &str, off: u64) -> Result<Option<CastEvent>, CompatError> {
-    let bad = |m: String| CompatError::Content { offset: off, msg: m };
+    let bad = |m: String| CompatError::Content {
+        offset: off,
+        msg: m,
+    };
     let v: serde_json::Value =
         serde_json::from_str(line).map_err(|e| bad(format!("not JSON: {e}")))?;
-    let arr = v.as_array().ok_or_else(|| bad("event must be a JSON array".to_string()))?;
+    let arr = v
+        .as_array()
+        .ok_or_else(|| bad("event must be a JSON array".to_string()))?;
     if arr.len() != 3 {
-        return Err(bad(format!("event must have 3 elements, got {}", arr.len())));
+        return Err(bad(format!(
+            "event must have 3 elements, got {}",
+            arr.len()
+        )));
     }
-    let t = arr[0].as_f64().ok_or_else(|| bad("event time must be a number".to_string()))?;
+    let t = arr[0]
+        .as_f64()
+        .ok_or_else(|| bad("event time must be a number".to_string()))?;
     if !t.is_finite() || t < 0.0 {
         return Err(bad(format!("event time must be finite and >= 0, got {t}")));
     }
-    let code = arr[1].as_str().ok_or_else(|| bad("event code must be a string".to_string()))?;
-    let data = arr[2].as_str().ok_or_else(|| bad("event data must be a string".to_string()))?;
+    let code = arr[1]
+        .as_str()
+        .ok_or_else(|| bad("event code must be a string".to_string()))?;
+    let data = arr[2]
+        .as_str()
+        .ok_or_else(|| bad("event data must be a string".to_string()))?;
     match code {
         "o" => Ok(Some(CastEvent::Output {
             t,
@@ -612,7 +627,8 @@ pub fn import_termctrl_with(path: &Path, lim: &ImportLimits) -> Result<TermctrlT
                 .push(format!("line {lineno} (byte {off}): {reason}")),
             TermctrlParse::FieldNotes(mut notes, e) => {
                 for n in notes.drain(..) {
-                    loss.unsupported_fields.push(format!("line {lineno} (byte {off}): {n}"));
+                    loss.unsupported_fields
+                        .push(format!("line {lineno} (byte {off}): {n}"));
                 }
                 events.push(e);
             }
@@ -637,18 +653,20 @@ fn parse_termctrl_header(line: &str) -> Result<(u8, u16, u16), CompatError> {
     if obj.get("type").and_then(|v| v.as_str()) != Some("header") {
         return Err(verr("first line must be a \"header\" entry".to_string()));
     }
-    let version = obj.get("version").and_then(|v| v.as_u64()).ok_or_else(|| {
-        verr("header lacks numeric \"version\"".to_string())
-    })?;
+    let version = obj
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| verr("header lacks numeric \"version\"".to_string()))?;
     if version != 1 && version != 2 {
         return Err(verr(format!(
             "unsupported termctrl version {version} (want 1 or 2)"
         )));
     }
     let dim = |key: &str| -> Result<u16, CompatError> {
-        let n = obj.get(key).and_then(|v| v.as_u64()).ok_or_else(|| {
-            verr(format!("header lacks numeric {key:?}"))
-        })?;
+        let n = obj
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| verr(format!("header lacks numeric {key:?}")))?;
         if n == 0 || n > u64::from(u16::MAX) {
             return Err(verr(format!("header {key} out of range: {n}")));
         }
@@ -664,7 +682,10 @@ enum TermctrlParse {
 }
 
 fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlParse, CompatError> {
-    let bad = |m: String| CompatError::Content { offset: off, msg: m };
+    let bad = |m: String| CompatError::Content {
+        offset: off,
+        msg: m,
+    };
     let v: serde_json::Value =
         serde_json::from_str(line).map_err(|e| bad(format!("not JSON: {e}")))?;
     let obj = v
@@ -687,7 +708,9 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
                 .ok_or_else(|| bad("entry lacks \"bytes\" array".to_string()))?;
             let mut out = Vec::with_capacity(arr.len());
             for b in arr {
-                let n = b.as_u64().ok_or_else(|| bad("bytes must be integers".to_string()))?;
+                let n = b
+                    .as_u64()
+                    .ok_or_else(|| bad("bytes must be integers".to_string()))?;
                 if n > 255 {
                     return Err(bad(format!("byte out of range: {n}")));
                 }
@@ -701,11 +724,7 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
         "mouse" => &["type", "at_ms", "event", "bytes"],
         "resize" => &["type", "at_ms", "cols", "rows", "cell_width", "cell_height"],
         "marker" => &["type", "at_ms", "name"],
-        _ => {
-            return Ok(TermctrlParse::Dropped(format!(
-                "unknown entry type {ty:?}"
-            )))
-        }
+        _ => return Ok(TermctrlParse::Dropped(format!("unknown entry type {ty:?}"))),
     };
     if ty == "mouse" && version < 2 {
         return Ok(TermctrlParse::Dropped(
@@ -743,9 +762,10 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
         },
         "resize" => {
             let dim = |key: &str| -> Result<u16, CompatError> {
-                let n = obj.get(key).and_then(|v| v.as_u64()).ok_or_else(|| {
-                    bad(format!("resize lacks numeric {key:?}"))
-                })?;
+                let n = obj
+                    .get(key)
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| bad(format!("resize lacks numeric {key:?}")))?;
                 if n == 0 || n > u64::from(u16::MAX) {
                     return Err(bad(format!("resize {key} out of range: {n}")));
                 }

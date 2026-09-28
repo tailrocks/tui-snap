@@ -308,7 +308,7 @@ fn convert_buffer(
                 .cell((ax, ay))
                 .ok_or_else(|| ScreenError(format!("buffer missing cell at global ({ax},{ay})")))?;
             let symbol = rc.symbol().to_string();
-            let width = UnicodeWidthStr::width(symbol.as_str()).min(2).max(1) as u8;
+            let width = UnicodeWidthStr::width(symbol.as_str()).clamp(1, 2) as u8;
             if width == 2 && gx + 1 >= cols {
                 match policy {
                     EdgePolicy::Error => {

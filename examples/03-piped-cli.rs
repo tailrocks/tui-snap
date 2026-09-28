@@ -16,7 +16,10 @@ fn main() {
 
     // Failing child: exit code + split streams, byte-exact.
     let failed = Command::new("/bin/sh")
-        .args(["-c", "printf 'out-line\\n'; printf 'err-line\\n' >&2; exit 3"])
+        .args([
+            "-c",
+            "printf 'out-line\\n'; printf 'err-line\\n' >&2; exit 3",
+        ])
         .run();
     assert_eq!(failed.status, Termination::Exit(3));
     assert_eq!(failed.code(), Some(3));

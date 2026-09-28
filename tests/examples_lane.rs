@@ -60,9 +60,7 @@ fn examples_lane_executes_everything() {
         .parent()
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned());
-    let exe = |name: &str| {
-        dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
-    };
+    let exe = |name: &str| dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     if CASES.iter().any(|(n, _)| !exe(n).is_file()) {
         build_examples(profile_name.as_deref());
     }

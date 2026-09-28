@@ -8,10 +8,9 @@
 //! (a bad pin is rejected at construction, never rendered).
 
 use tuisnap::profile::{
-    BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RenderProfile,
-    RENDERER_VERSION, VENDORED_FACES, VENDORED_FALLBACK_FACES,
-    VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256,
-    VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256,
+    BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RenderProfile, RENDERER_VERSION,
+    VENDORED_FACES, VENDORED_FALLBACK_FACES, VENDORED_FONT_BOLD_ITALIC_SHA256,
+    VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256,
 };
 use tuisnap::ratatui::{render_screen, EdgePolicy};
 use tuisnap::render::Renderer;
@@ -72,9 +71,18 @@ fn main() {
     let bad = RenderProfile::strict(
         "bad".to_string(),
         VENDORED_FACES,
-        [zero.as_str(), VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_BOLD_ITALIC_SHA256],
+        [
+            zero.as_str(),
+            VENDORED_FONT_BOLD_SHA256,
+            VENDORED_FONT_ITALIC_SHA256,
+            VENDORED_FONT_BOLD_ITALIC_SHA256,
+        ],
         Vec::new(),
-        16.0, 10, 21, 12, 2,
+        16.0,
+        10,
+        21,
+        12,
+        2,
         PalettePolicy::xterm(),
         CursorPolicy::Show,
         BlinkPhase::On,

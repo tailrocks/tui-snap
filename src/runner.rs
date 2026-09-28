@@ -809,7 +809,7 @@ impl Journal {
                 }
             }
         };
-        match text.lines().filter(|l| !l.trim().is_empty()).last() {
+        match text.lines().rfind(|l| !l.trim().is_empty()) {
             Some(last) if is_complete_event(last) => JournalStatus::Complete {
                 status: extract_field(last, "detail").unwrap_or_default(),
             },
@@ -859,7 +859,7 @@ fn is_complete_event(line: &str) -> bool {
 /// Extract a top-level string field from a flat JSON object line (handles escapes).
 fn extract_field(line: &str, field: &str) -> Option<String> {
     let key = format!("\"{field}\"");
-    let mut rest = line.splitn(2, &key).nth(1)?.trim_start();
+    let mut rest = line.split_once(&key)?.1.trim_start();
     rest = rest.strip_prefix(':')?.trim_start().strip_prefix('"')?;
     let mut out = String::new();
     let mut chars = rest.chars();

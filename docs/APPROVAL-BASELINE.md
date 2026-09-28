@@ -112,6 +112,25 @@ root; `src/main.rs` asserts the public API surface
 (`Provenance::now`, `ansi::replay_raw`, `pty::Session::spawn`,
 `termlens::Screen`) compiles for an ordinary consumer.
 
+### Amendment 2026-09-28 (M7 re-verification): consumer fixture contract change
+
+Re-verification at M7 found all 24 `tests/visual/approved/*.frame.json`,
+all 8 `tests/fixtures/render-baseline`, and all 12 `assets/fonts/*` hashes
+UNCHANGED. The 3 consumer-fixture files below changed deliberately as part
+of the redesign contract (PTY engine swap `fc4b5f4`, lockfile re-pin
+`bc30f39`, M09 clean-consumer `35ea4d7`): the consumer now proves the new
+public facade (`Screen`/`Observation`, `Command`, `Tui`) instead of the
+removed legacy runtime. This is an intended contract change, not approval
+drift — the frozen *approvals* above are intact.
+
+New pinned hashes:
+
+```
+af83680070fc9478cf15821c51d93084f7529440df1aeefa8bf9075d1e785575  tests/fixtures/consumer/Cargo.lock
+f995f0064b505c495291e9c9dadaae68128def851094179e68d4cbf85dc336e9  tests/fixtures/consumer/Cargo.toml
+623279ce04a1a18d0b398b0f3ac2b2ef2e45b4a608b73ca5de4e1d0003becb9e  tests/fixtures/consumer/src/main.rs
+```
+
 ## Font identity table
 
 SHA-256 of each file under `assets/fonts`:

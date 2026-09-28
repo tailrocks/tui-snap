@@ -7,8 +7,8 @@
 //! errors, frozen paths never write). All in temp dirs.
 
 use tuisnap::assert::{
-    assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept,
-    generation_id, import_frozen_v1, png_tag_generation, render_sample, FrozenError,
+    assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept, generation_id,
+    import_frozen_v1, png_tag_generation, render_sample, FrozenError,
 };
 use tuisnap::insta_proto::insta_string;
 use tuisnap::ratatui::{render_screen, EdgePolicy};
@@ -60,5 +60,9 @@ fn main() {
         Err(FrozenError::AcceptRejected { .. }) => {}
         other => panic!("frozen_accept must reject, got {other:?}"),
     }
-    println!("EXAMPLE-06-OK scenarios={} gen={}", tree.scenarios.len(), &gen[..12]);
+    println!(
+        "EXAMPLE-06-OK scenarios={} gen={}",
+        tree.scenarios.len(),
+        &gen[..12]
+    );
 }
