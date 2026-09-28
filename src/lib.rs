@@ -37,6 +37,8 @@ pub mod snapshot;
 pub mod ansi;
 #[cfg(feature = "pty")]
 pub mod pty;
+#[cfg(feature = "pty")]
+pub mod tui;
 
 /// The pinned PTY engine, re-exported for callers constructing screens for
 /// [`pty::frame_from_screen`]. Git/path consumers need no Cargo patches.

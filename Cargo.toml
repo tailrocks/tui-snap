@@ -18,7 +18,7 @@ path = "src/lib.rs"
 default = ["pty"]
 # PTY engine + raw-stream replay. Pure view tests build and run with
 # `--no-default-features` (no termlens/termpane in that closure).
-pty = ["dep:termlens", "dep:termpane"]
+pty = ["dep:termlens", "dep:termpane", "dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -35,6 +35,9 @@ ratatui = { version = "0.30", default-features = false, features = ["crossterm"]
 unicode-width = "0.2"
 termlens = { version = "0.9", path = "vendor/termlens", optional = true }
 termpane = { git = "https://github.com/tailrocks/termpane", tag = "v0.1.0", optional = true }
+portable-pty = { version = "0.9", optional = true }
+alacritty_terminal = { version = "0.26", optional = true }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
