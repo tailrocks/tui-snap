@@ -210,8 +210,9 @@ fn first_difference(approved: &[u8], actual: &[u8]) -> String {
 /// Options for [`GroupedStore::check_with`].
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GroupedCheckOptions {
-    /// When true, always rasterize PNG/HTML even if the ansi/txt gates pass.
-    /// Default tiered mode skips expensive renders when cell gates match.
+    /// Retained for source compatibility only. Every check renders PNG/HTML
+    /// fresh from the candidate frame (C02); this flag no longer changes
+    /// behavior.
     pub full_render: bool,
 }
 
@@ -374,8 +375,9 @@ impl GroupedStore {
         )
     }
 
-    /// [`Self::check_with`] with explicit options (e.g. force full PNG/HTML
-    /// render even when ansi/txt gates pass).
+    /// [`Self::check_with`] with explicit options. PNG/HTML always render
+    /// fresh from the candidate frame (C02); the options currently change
+    /// nothing and exist for source compatibility.
     pub fn check_with_options(
         &self,
         renderer: &mut Renderer,
@@ -508,25 +510,23 @@ impl GroupedStore {
         }
 
         let cell_gates_match = ansi_equal && txt_equal;
-        let need_full_render = options.full_render || !cell_gates_match;
 
-        let (actual_html_bytes, actual_png_bytes) = if need_full_render {
-            let artifacts = renderer
-                .render_artifacts(actual, name)
-                .map_err(SnapshotError::from)?;
-            write_atomic(&grouped.actual.png, &artifacts.png)?;
-            write_atomic(&grouped.actual.html, artifacts.html.as_bytes())?;
-            write_atomic(
-                &fidelity_sidecar(&grouped.actual.png),
-                artifacts.fidelity.to_json().as_bytes(),
-            )?;
-            (artifacts.html.into_bytes(), artifacts.png)
-        } else {
-            // Tiered fast path: cell gates passed — reuse approved render bytes.
-            write_atomic(&grouped.actual.png, &approved_png)?;
-            write_atomic(&grouped.actual.html, &approved_html)?;
-            (approved_html.clone(), approved_png.clone())
-        };
+        // C02: actual evidence always renders fresh from the candidate frame.
+        // The old tiered fast path copied approved PNG/HTML bytes into
+        // actual/ when the cell gates passed — fabricating html_match=true
+        // and a pixel score of 1.0 without rendering, and masking
+        // approved-side tamper. There is no skip-render path anymore, so
+        // there is nothing to mark not-checked: every tier renders.
+        let artifacts = renderer
+            .render_artifacts(actual, name)
+            .map_err(SnapshotError::from)?;
+        write_atomic(&grouped.actual.png, &artifacts.png)?;
+        write_atomic(&grouped.actual.html, artifacts.html.as_bytes())?;
+        write_atomic(
+            &fidelity_sidecar(&grouped.actual.png),
+            artifacts.fidelity.to_json().as_bytes(),
+        )?;
+        let (actual_html_bytes, actual_png_bytes) = (artifacts.html.into_bytes(), artifacts.png);
 
         // HTML byte gate: identical cells with a changed renderer/font fail
         // here — a render-level event, reported as PixelsDiffer.

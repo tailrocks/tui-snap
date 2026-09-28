@@ -104,14 +104,20 @@ python3 tools/test_migration.py
 ## Layout of a store
 
 ```text
-<store>/approved/<name>.frame.json   # the only committed artifact (compact JSON)
+<store>/approved/<name>.frame.json   # committed: canonical cells + approved PNG below
+<store>/approved/<name>.png          # + <name>.png.fidelity.json (missing/fallback glyphs)
 <store>/actual/<name>.frame.json     # local evidence (gitignored)
-<store>/actual/<name>.png            # + <name>.png.fidelity.json (missing/fallback glyphs)
+<store>/actual/<name>.png            # + <name>.png.fidelity.json + <name>.manifest.json (candidate seal)
 <store>/diff/<name>.png              # red-overlay diff, on mismatch
-<store>/report.html                  # portable: embedded PNGs + frame JSON
+<store>/report.html                  # review index: links PNGs/frames on disk, never embeds
 ```
 
-Approved PNGs regenerate deterministically and are not committed.
+A missing approved PNG fails closed (`missing-approval`); nothing
+regenerates approvals except explicit `accept`. The PNG gate compares exact
+decoded pixels (re-encoding passes, one changed channel fails); review
+leniency lives only on a validated threshold (`PerceptualPolicy` rejects
+NaN/out-of-range). Outcomes are `#[must_use]` — dropping one without
+`ensure_matched()` warns instead of silently passing.
 
 ## Grouped multi-artifact store
 
@@ -140,9 +146,10 @@ Actuals (`snapshots.actual/`), diff PNGs (`snapshots.diff/`) and the report
 — override with `with_actual_root` / `with_diff_root` / `with_report_path`
 (e.g. under `target/`). Gates: `.ansi`/`.txt`/`.html` byte-compares (the
 ansi dump is the cell-exact gate; html catches renderer changes) plus the
-same decoded-pixel PNG gate as the classic store. Missing approvals fail
-closed; names with absolute paths, `..`, empty segments or backslashes are
-rejected. Bless recursively from the CLI:
+same exact decoded-pixel PNG gate as the classic store. Actual PNG/HTML
+always render fresh from the candidate frame — never copied from approved.
+Missing approvals fail closed; names with absolute paths, `..`, empty
+segments or backslashes are rejected. Bless recursively from the CLI:
 
 ```text
 tuisnap accept --grouped --store snapshots --all
