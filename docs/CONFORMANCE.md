@@ -162,10 +162,23 @@ head at clippy); the Linux test suite has never executed to green:
 `36474898948` @ `1503a60`, killed by `cancel-in-progress` when a newer
 run queued.)
 
-### Gap note
+### Gap note — CLOSED 2026-09-28 ~22:35 UTC
 
-Linux A12 conformance is UNPROVEN: the only Linux executor is CI and
-CI is red. To close: `cargo fmt` the tree (starting at
-`src/grouped.rs:236`), fix the Policy `generated-tree` drift or
-re-pin the generator, then re-run and record the first green
-`CI / PR` run URL here.
+Linux A12 conformance is PROVEN. First green `CI / PR` run:
+<https://github.com/tailrocks/tui-snap/actions/runs/36490156051>
+(head `4530e07`, conclusion `success`, attempt 2 of the same run):
+Rust lane (fmt + clippy + `nextest run --locked --all-features`
+415/415 + doctests), `ci-required`, Control lanes green; Policy green
+(<https://github.com/tailrocks/tui-snap/actions/runs/36490150940>);
+DCO green. Fixes since the red table above: fmt (`f6064a4`), pinned
+velnor regen (`c5bcd7a` + state `5b2a6fb`/`4530e07`), committed
+approved PNGs (`e52b804`), bounded `capture_raw` + POSIX-octal printf
+(`197f1e4`), `tuisnap accept` (`13df8b7`).
+
+Attempt-1 record (honesty): 414/415 with one
+`tui_shell::shell_cmd_exit_is_not_child_exit` failure — `Shell::sh()`
+setup hit its 10 s timeout while two sibling `Shell::sh()` tests on
+the same runner passed in ~0.06 s; 6/6 local stress runs green;
+`wait_loop` reviewed (checks-latest-before-wait, no lost-wakeup);
+rerun green. Recorded as a single under-load flake; no code change.
+Reopen if it recurs.

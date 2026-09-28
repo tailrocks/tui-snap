@@ -16,7 +16,7 @@ full `cargo nextest run --locked --offline` 379/379 pass (43 s) — see `docs/PE
 `--test p0_mutations` 8/8, `--test screen` 26/26, `--test facade` 12/12, all green.
 Per-row "Verified" commands below use `cargo test --locked --offline --test <suite> <filter>`.
 
-Tally: **81 done / 1 partial (A12: awaiting first green Linux CI run) / 0 missing**.
+Tally: **82 done / 0 partial / 0 missing**.
 
 ## P0 — Verification correctness (M0)
 
@@ -154,7 +154,7 @@ importers (`0304d72`), live/watch/replay-vs-rerun (`14f62de`).
 | A09 | Thin JS/TS + Python clients, no second engine | done | `clients/ts/index.js`, `clients/py/tuisnap_client.py` — transport only, engine stays in Rust (`ee7d5b3`) | `tests/agent_if.rs::ts_client_example_e2e`, `::py_client_example_e2e`, `::ts_client_propagates_op_errors_verbatim`, `::py_client_propagates_op_errors_verbatim` | `cargo test --locked --offline --test agent_if _client_` — green per whole-tree state |
 | A10 | Read-only importers (tui-snap stores + selected competitor traces) | done | `src/import_compat.rs` (`0304d72`); frozen-store importer in `src/assert.rs` | `tests/import_compat.rs` (12 tests: `cast_*` 5, `termctrl_*` 5, `imports_never_write_nor_execute_canary`, `frozen_four_file_tree_roundtrip_readonly`), `tests/facade.rs::import_frozen_v1_*` (2) | `cargo test --locked --offline --test import_compat` — green per whole-tree state |
 | A11 | Performance qualification (cold/warm/latency/memory/suite) | done | `docs/PERF.md`: builds, latency, suite totals (129 s cargo test, 43 s nextest 407/407), artifact sizes + (`8d41440`) Peak RSS section M1–M4 (333/6.2/4.1/380 MiB, `/usr/bin/time -l`, single-sample caveats) | measurements, not `#[test]`; method + caveats in doc | `docs/PERF.md` Peak RSS rows observed; nextest fast lane 43 s < 120 s target |
-| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | partial | `docs/CONFORMANCE.md` (`35ea4d7`): macOS TESTED (full green both runners); Linux CI-only, unexecuted locally; Windows compiles for `x86_64-pc-windows-gnu` (0 errors) but never runs, no Windows CI lane — truthful-subset part satisfied, Linux-green + Windows-runtime unproven | macOS: whole suite; Windows: `cargo check --target x86_64-pc-windows-gnu --tests` (0 errors, recorded) + `#[cfg]` exclusion ledger §1 | `docs/CONFORMANCE.md` §§1–4 observed; `gh` unavailable in ledger session so Linux CI-green on this branch unconfirmed — needs CI evidence link or Windows lane |
+| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | done | `docs/CONFORMANCE.md` §5: Linux CI green on `4530e07` (run 36490156051, attempt 2; attempt 1: 1 flake `shell_cmd_exit_is_not_child_exit` setup-timeout, siblings green, 6x local stress green, rerun green — recorded as single load flake); macOS 420/420 local; Windows compiles, runtime unclaimed | CI `Rust` lane (fmt+clippy+nextest 415/415+doctests) + Policy green | `gh run view 36490156051` conclusion=success |
 
 ## Milestone gates (M0–M7)
 
@@ -176,7 +176,7 @@ All SHAs on branch `redesign/rust-first-testing-platform` (`git log --oneline`):
 - M7 ⚠️ near-complete: `35ea4d7` A11/A12/M09 docs + C09 re-verify amendment (approvals UNCHANGED, consumer repinned);
   `c991d23` LEARNING.md + 8 tutorials + examples lane (N10). Old runtime removed (`4d02e2e`),
   import read-only (`0304d72`). Closed since: C10 (`9f64196`), M03 (`f6064a4`), A11 memory lane (`8d41440`),
-  `.config/nextest.toml` (`aa74aa7`), CI regen (`c5bcd7a` + state `5b2a6fb`). Remaining: A12 first green Linux CI run.
+  `.config/nextest.toml` (`aa74aa7`), CI regen (`c5bcd7a` + state `5b2a6fb`). Remaining: none — A12 closed by green Linux CI run 36490156051 on `4530e07`.
 
 First vertical slice (early M2) ✅: pure settings view + piped CLI error (`08750b8`, `tests/vertical_slice.rs`)
 + PTY settings-navigation journey (`1742f2d`, `tests/journey.rs`), all under nextest with native Insta
