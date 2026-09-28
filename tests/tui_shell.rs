@@ -63,6 +63,15 @@ fn pkill(token: &str) {
         .output();
 }
 
+/// Process group of `pid` (`None` when the pid is gone/unresolvable).
+fn pgid_of(pid: u32) -> Option<i32> {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "pgid=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+}
+
 fn wait_gone(token: &str, secs: u64) {
     let dl = deadline(secs);
     while Instant::now() < dl {
@@ -525,9 +534,29 @@ fn guardian_escape_boundary_setsid_outlives() {
         .size(40, 10)
         .spawn()
         .unwrap();
-    let escaped = wait_found("29372", 10);
-    assert!(!escaped.is_empty(), "escapee never started");
+    let child_pgid = pgid_of(session.pid().unwrap()).expect("child pgid resolvable");
+    let found = wait_found("29372", 10);
+    assert!(!found.is_empty(), "escapee never started");
     assert!(!wait_found("29373", 5).is_empty());
+    // A pgrep match is NOT the escape: it also fires for the pre-setsid
+    // python (and the pre-exec `sh -c`, whose script text holds the token).
+    // Teardown legitimately kills anything still in the group (kernel SIGHUP
+    // to the foreground group on session-leader exit, then the sweep), so
+    // finishing before setsid() completes kills the "escapee" and flakes the
+    // boundary assert. Wait for the escape itself: a token-matching pid
+    // outside the child's process group.
+    let escape_dl = deadline(10);
+    let escaped = loop {
+        let outside: Vec<u32> = pgrep("29372")
+            .into_iter()
+            .filter(|p| pgid_of(*p).is_some_and(|g| g != child_pgid))
+            .collect();
+        if !outside.is_empty() || Instant::now() >= escape_dl {
+            break outside;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert!(!escaped.is_empty(), "escapee never left the process group");
     let report = Guardian::wrap(session).finish(deadline(10)).unwrap();
     // Same-group child contained...
     assert!(pgrep("29373").is_empty());
@@ -536,11 +565,7 @@ fn guardian_escape_boundary_setsid_outlives() {
     assert_eq!(still, escaped);
     assert!(!GuardianReport::escape_boundary_note().is_empty());
     // Prove the mechanism: the escapee is in a different process group.
-    let out = std::process::Command::new("ps")
-        .args(["-o", "pgid=", "-p", &still[0].to_string()])
-        .output()
-        .unwrap();
-    let escapee_pgid: i32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
+    let escapee_pgid = pgid_of(still[0]).unwrap();
     assert_ne!(Some(escapee_pgid), report.pgid);
     // Bounded cleanup of the deliberate escapee.
     pkill("29372");

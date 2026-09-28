@@ -1041,6 +1041,13 @@ impl Shell {
         let session = Tui::new(["/bin/sh"])
             .size(cols, rows)
             .env("ENV", "/dev/null")
+            // Prompt-silence: an interactive shell prints PS1 before reading
+            // each line. Under load that prompt can land on an attestation
+            // row (observed: `# __TUISNAP_SETUP_OK__`), breaking the exact
+            // protocol match. Empty prompts remove the interleaving
+            // structurally; boundaries stay strict.
+            .env("PS1", "")
+            .env("PS2", "")
             .spawn()?;
         let mut shell = Self::wrap(session);
         shell.setup(Instant::now() + SHELL_SETUP_TIMEOUT)?;
