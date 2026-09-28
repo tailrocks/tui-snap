@@ -9,6 +9,7 @@
 //! tuisnap render --input shot.frame.json --format png --out shot
 //! tuisnap diff --expected a.png --actual b.png
 //! tuisnap review --dir verdicts          # list verdicts; fails on any fail
+//! tuisnap accept --store shots home      # approve one snapshot (explicit, per-name)
 //! tuisnap report --dir verdicts --out report.html
 //! tuisnap import --dir frozen           # read-only frozen-tree import
 //! tuisnap session start --name demo -- ./my-tui
@@ -104,6 +105,15 @@ enum Cmd {
     Review {
         #[arg(long)]
         dir: PathBuf,
+    },
+    /// Approve one snapshot: actual → approved (explicit, per-name only;
+    /// frozen roots reject).
+    Accept {
+        /// Snapshot name (e.g. `home`, `pages/overview`).
+        name: String,
+        /// Snapshot store root (holds `approved/` + `actual/`).
+        #[arg(long, default_value = ".")]
+        store: PathBuf,
     },
     /// Write a standalone offline HTML report from verdicts.
     Report {
@@ -238,6 +248,7 @@ fn run(cli: Cli) -> i32 {
         } => cmd_render(&input, &formats, &out, font_file.as_deref()),
         Cmd::Diff { expected, actual } => cmd_diff(&expected, &actual),
         Cmd::Review { dir } => cmd_review(&dir),
+        Cmd::Accept { name, store } => cmd_accept(&store, &name),
         Cmd::Report { dir, out, title } => cmd_report(&dir, &out, &title),
         Cmd::Import { dir } => cmd_import(&dir),
         Cmd::Session { cmd } => cmd_session(cmd),
@@ -682,6 +693,47 @@ fn cmd_review(dir: &Path) -> i32 {
     } else {
         0
     }
+}
+
+fn cmd_accept(store: &Path, name: &str) -> i32 {
+    // Frozen roots (`Policy::Frozen` layout: `<name>.canonical.txt` approvals
+    // directly in the root) reject acceptance unconditionally — route through
+    // `frozen_accept` so the refusal stays in one place. Checked before
+    // `Store::accept` so a planted `actual/` tree inside a frozen root can
+    // never bless into it.
+    if is_frozen_root(store) {
+        return match tuisnap::assert::frozen_accept(store, name) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("error: {e}");
+                EXIT_OP_ERROR
+            }
+        };
+    }
+    match tuisnap::snapshot::Store::new(store).accept(name) {
+        Ok(()) => {
+            println!("accepted `{name}` in {}", store.display());
+            0
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            EXIT_OP_ERROR
+        }
+    }
+}
+
+/// A frozen root holds `<name>.canonical.txt` approvals directly in the root
+/// (see `Policy::Frozen`); a classic store holds `approved/`/`actual/`/`diff/`
+/// subdirs instead, so the marker never collides.
+fn is_frozen_root(store: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(store) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        e.file_name()
+            .to_str()
+            .is_some_and(|n| n.ends_with(".canonical.txt"))
+    })
 }
 
 fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {

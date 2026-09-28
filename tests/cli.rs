@@ -46,6 +46,13 @@ fn stdout(out: &Output) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+fn run_cli_cwd(cwd: &Path, args: &[&str]) -> Output {
+    let mut cmd = Command::new(bin());
+    cmd.args(args).current_dir(cwd);
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.output().expect("run tuisnap")
+}
+
 fn code(out: &Output) -> i32 {
     out.status.code().expect("exit code")
 }
@@ -497,8 +504,8 @@ fn cli_help_and_version() {
     assert_eq!(code(&out), 0);
     let h = stdout(&out);
     for cmd in [
-        "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "report",
-        "import", "session", "record", "trace",
+        "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
+        "report", "import", "session", "record", "trace",
     ] {
         assert!(h.contains(cmd), "help lists {cmd}:\n{h}");
     }
@@ -947,4 +954,191 @@ fn cli_machine_mode() {
     assert_eq!(lines.len(), 2);
     let second: Envelope = serde_json::from_str(lines[1]).expect("envelope");
     assert!(!second.ok);
+}
+
+// ---------------------------------------------------------------------------
+// CLI: accept (explicit per-name approval; frozen roots reject)
+// ---------------------------------------------------------------------------
+
+fn accept_frame() -> tuisnap::Frame {
+    let screen = tuisnap::Screen::blank(30, 6);
+    tuisnap::assert::frame_from_screen(&screen)
+}
+
+#[test]
+fn cli_accept_round_trip() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let store_dir = tmp.path().join("shots");
+    let store = tuisnap::snapshot::Store::new(&store_dir);
+    let profile = tuisnap::Profile::default_profile();
+    let frame = accept_frame();
+
+    // Missing approval fails closed and advertises the exact CLI invocation.
+    let o1 = store
+        .check("home", &frame, &profile, &tuisnap::VENDORED_FACES, 1.0)
+        .expect("check");
+    assert!(!o1.status.matched());
+    let err = o1.ensure_matched().unwrap_err().to_string();
+    assert!(err.contains("tuisnap accept home"), "{err}");
+
+    // The CLI blesses exactly one name; the gate then matches.
+    let out = run_cli(
+        &["accept", "--store", store_dir.to_str().unwrap(), "home"],
+        &[],
+        None,
+    );
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(store_dir.join("approved").join("home.frame.json").is_file());
+    assert!(store_dir.join("approved").join("home.png").is_file());
+    let o2 = store
+        .check("home", &frame, &profile, &tuisnap::VENDORED_FACES, 1.0)
+        .expect("re-check");
+    assert!(o2.status.matched());
+    o2.ensure_matched().unwrap();
+
+    // The message's exact invocation (`tuisnap accept <name>`, no --store)
+    // works from the store root.
+    let o3 = store
+        .check("away", &frame, &profile, &tuisnap::VENDORED_FACES, 1.0)
+        .expect("check");
+    assert!(!o3.status.matched());
+    let out = run_cli_cwd(&store_dir, &["accept", "away"]);
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let o4 = store
+        .check("away", &frame, &profile, &tuisnap::VENDORED_FACES, 1.0)
+        .expect("re-check");
+    assert!(o4.status.matched());
+
+    // Nested names bless through the same per-name path.
+    let o5 = store
+        .check(
+            "pages/overview",
+            &frame,
+            &profile,
+            &tuisnap::VENDORED_FACES,
+            1.0,
+        )
+        .expect("check");
+    assert!(!o5.status.matched());
+    let out = run_cli(
+        &[
+            "accept",
+            "--store",
+            store_dir.to_str().unwrap(),
+            "pages/overview",
+        ],
+        &[],
+        None,
+    );
+    assert_eq!(
+        code(&out),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let o6 = store
+        .check(
+            "pages/overview",
+            &frame,
+            &profile,
+            &tuisnap::VENDORED_FACES,
+            1.0,
+        )
+        .expect("re-check");
+    assert!(o6.status.matched());
+
+    // Nothing to accept is an op error, never a silent pass.
+    let out = run_cli(
+        &[
+            "accept",
+            "--store",
+            store_dir.to_str().unwrap(),
+            "never-checked",
+        ],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), EXIT_OP_ERROR);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("nothing to accept"),
+        "{:?}",
+        out.stderr
+    );
+
+    // Name escapes are rejected before any copy.
+    let out = run_cli(
+        &["accept", "--store", store_dir.to_str().unwrap(), "../evil"],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), EXIT_OP_ERROR);
+
+    // No bulk/auto flags: --all is a usage error.
+    let out = run_cli(
+        &[
+            "accept",
+            "--store",
+            store_dir.to_str().unwrap(),
+            "--all",
+            "home",
+        ],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), 2);
+}
+
+#[test]
+fn cli_accept_rejects_frozen() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    // Genuine frozen root: canonical approval the frozen gate accepts.
+    let screen = tuisnap::Screen::blank(30, 6);
+    let frozen = tmp.path().join("frozen");
+    std::fs::create_dir(&frozen).expect("mkdir");
+    std::fs::write(
+        frozen.join("home.canonical.txt"),
+        tuisnap::insta_proto::insta_string(&screen),
+    )
+    .expect("canonical");
+    tuisnap::assert::check_frozen_snapshot(&frozen, "home", &screen).expect("genuine frozen root");
+    // Decoy actuals: even with blessings available, a frozen root must refuse.
+    let scratch = tuisnap::snapshot::Store::new(&tmp.path().join("scratch"));
+    let profile = tuisnap::Profile::default_profile();
+    let frame = tuisnap::assert::frame_from_screen(&screen);
+    let outcome = scratch
+        .check("home", &frame, &profile, &tuisnap::VENDORED_FACES, 1.0)
+        .expect("check");
+    let actual_dir = frozen.join("actual");
+    std::fs::create_dir(&actual_dir).expect("mkdir");
+    std::fs::copy(&outcome.actual_frame, actual_dir.join("home.frame.json")).expect("copy frame");
+    std::fs::copy(&outcome.actual_png, actual_dir.join("home.png")).expect("copy png");
+    let before = std::fs::read(frozen.join("home.canonical.txt")).expect("read");
+
+    let out = run_cli(
+        &["accept", "--store", frozen.to_str().unwrap(), "home"],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), EXIT_OP_ERROR);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("rejects acceptance"),
+        "{:?}",
+        out.stderr
+    );
+    // Frozen roots are never written: no approved tree, approvals untouched.
+    assert!(!frozen.join("approved").exists());
+    assert_eq!(
+        std::fs::read(frozen.join("home.canonical.txt")).expect("read"),
+        before
+    );
 }
