@@ -1,6 +1,6 @@
 //! Raw ANSI stream replay through an established emulator (feature `pty`).
 //!
-//! Contract (see RESEARCH.md §6):
+//! Contract (see docs/RESEARCH.md §6):
 //! - **raw streams** (recorded PTY bytes, tmux `capture-pane -e` output)
 //!   replay through `termpane` with explicit dimensions — cursor motion,
 //!   alternate screen, and scrolling are interpreted, not discarded;

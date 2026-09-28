@@ -109,8 +109,11 @@ matrix in `tests/pty.rs`, all green on new engine.
 
 # Migration: v0.1 → v0.2
 
-v0.2 is a redesign implementing `RESEARCH.md`. Breaking changes are
-intentional; the old APIs are gone, not deprecated.
+v0.2 records the breaking migration that removed the old APIs; it is not the
+current redesign plan. The current implementation review is in
+[docs/RESEARCH.md](RESEARCH.md), and the proposed Rust-first direction is in
+[docs/REDESIGN-PLAN.md](REDESIGN-PLAN.md). Breaking changes remain intentional;
+the old APIs are gone, not deprecated.
 
 ## Removed (no shims)
 

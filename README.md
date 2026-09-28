@@ -217,8 +217,8 @@ re-subsets, and prints the new hashes to pin — see `assets/fonts/FONTS.md`.
 - `docs/MIGRATION.md` — v0.1 → v0.2 (breaking), BLESS removal
 - `docs/CI.md` — CI wiring that cannot auto-accept
 - `assets/fonts/FONTS.md` — font licensing and coverage
-- `RESEARCH.md` — historical v0.2 architecture analysis
-- `ALTERNATIVES-REVIEW.md`, `SIMILAR-PROJECTS.md` — competitor landscape
+- `docs/RESEARCH.md` — current implementation review and proposed direction
+- `docs/ALTERNATIVES-REVIEW.md`, `docs/SIMILAR-PROJECTS.md` — verified competitor landscape
 
 - [docs/REDESIGN-PLAN.md](docs/REDESIGN-PLAN.md) — proposed next direction; not shipped behavior
 - [docs/REDESIGN-BACKLOG.md](docs/REDESIGN-BACKLOG.md) — work items and acceptance criteria
