@@ -8,7 +8,7 @@ rustc 1.98.1, nextest 0.9.143).
 
 | Platform | Status | Evidence |
 |----------|--------|----------|
-| macOS (aarch64) | TESTED here | Full `cargo test` green (129 s wall); full `cargo nextest run --locked --all-features` 415/415 green (46 s, head `1911433`). Details in §3. |
+| macOS (aarch64) | TESTED here | Full `cargo test` green (129 s wall); full `cargo nextest run --locked --offline --all-features` 415/415 green (52 s). Details in §3. |
 | Linux (x86_64) | GREEN in CI (ubuntu-24.04) | CI lanes run `ubuntu-24.04` (`platform = "linux-x64"` in `.github/ci/project.toml`). Latest `CI / PR` run <https://github.com/tailrocks/tui-snap/actions/runs/36497138111> (head `1911433`, conclusion `success`): Rust lane (fmt + clippy + nextest 415/415 + doctests), `ci-required`, Control lanes, Policy, DCO all green. History + flake post-mortem in §5. |
 | Windows (ConPTY) | NOT RUN anywhere; compiles only | `cargo check --target x86_64-pc-windows-gnu --tests`: **0 errors** (lib + all test targets). `portable-pty 0.9.0` ships a ConPTY backend (`NativePtySystem = win::conpty::ConPtySystem`, Win10 1809+), but no Windows test process has ever executed here: no local run, and **no Windows CI lane exists** (every workflow is `runs-on: ubuntu-24.04`). Windows is never green until a CI lane runs it. |
 
@@ -81,31 +81,35 @@ Verification (this machine):
 
 ## 3. Nextest matrix (N03/N04/N09-class evidence)
 
-Runner: `cargo-nextest 0.9.143`. No `.config/nextest.toml` in repo
-(default profile). All runs `--locked --offline` on the macOS machine
-above; 379 tests listed at measure time.
+Runner: `cargo-nextest 0.9.143`. Repo `.config/nextest.toml` is
+present (default profile + `ci` profile; `terminal-e2e` group caps
+the `tui`/`journey`/`runner` binaries at 4 threads). All runs
+`--locked --offline` on the macOS machine above; 415 tests listed
+at measure time (re-measured 2026-09-28 on the post-`c3f578b`
+tree; prior 379-test matrix superseded). Row 8 cannot take
+`--locked --offline` (nextest rejects `--archive-file` combined
+with those flags); row 9 sends SIGINT to the cargo-shim parent.
 
 | # | Run | Result |
 |---|-----|--------|
-| 1 | Normal: `cargo nextest run` | 379 run, 379 pass, 0 skipped, 43.13 s |
+| 1 | Normal: `cargo nextest run --locked --offline --all-features` | 415 run, 415 pass (1 leaky), 0 skipped, 51.86 s |
 | 2 | Filtered: `-E 'binary(cells)'` | 9 run, 9 pass |
-| 3 | Sharded: `--partition hash:1/2` | 186 run, 186 pass (1 leaky), 193 skipped, 31.6 s |
-| 4 | Sharded: `--partition hash:2/2` | 193 run, 193 pass (4 leaky), 186 skipped, 17.5 s |
+| 3 | Sharded: `--partition hash:1/2` | 203 run, 203 pass, 212 skipped, 37.77 s |
+| 4 | Sharded: `--partition hash:2/2` | 212 run, 212 pass, 203 skipped, 20.73 s |
 | 5 | Retry flag: `-E 'binary(cells)' --retries 1` | 9 run, 9 pass; flag accepted, 0 retries needed — the retry-after-failure path was NOT exercised (no failing test available) |
-| 6 | Stress: `-E 'binary(vertical_slice)' --stress-count 2` | 2/2 iterations pass, 3.17 s |
-| 7 | Archive: `cargo nextest archive --archive-file /tmp/nx-arch/tests.tar.zst` | 28 binaries + std, 270 M, archived in 0.23 s (note: `p0_mutations` test target emitted 4 build warnings during archive) |
-| 8 | Relocated run: `cargo nextest run --archive-file … --extract-to /tmp/nx-extract -E 'binary(cells) + binary(vertical_slice)'`, cwd `/tmp` (outside workspace) | 11 run, 11 pass (2 leaky) — N04 relocated-remap path works (requires pre-created `--extract-to` dir; nextest does not mkdir it) |
-| 9 | Cancel: SIGINT to the `cargo nextest` parent 4 s into the ~16 s `render_qual` suite | Did NOT stop the run: all 21 tests completed and passed (signal observed by the cargo shim, exit -2 on the parent). Single-SIGINT cancel is not prompt through this wrapper; no claim made about direct nextest cancel. |
+| 6 | Stress: `-E 'binary(vertical_slice)' --stress-count 2` | 2/2 iterations pass, 3.18 s |
+| 7 | Archive: `cargo nextest archive --archive-file /tmp/nx-arch/tests.tar.zst` | 31 binaries (incl. 1 non-test) + std, 34 files, 310 M, archived in 0.27 s |
+| 8 | Relocated run: `cargo nextest run --archive-file … --extract-to /tmp/nx-extract -E 'binary(cells) + binary(vertical_slice)'`, cwd `/tmp` (outside workspace) | 11 run, 11 pass (2 leaky), 1.59 s — N04 relocated-remap path works (requires pre-created `--extract-to` dir; nextest does not mkdir it) |
+| 9 | Cancel: SIGINT to the `cargo nextest` parent 4 s into the `render_qual` suite | Parent exits 130 promptly; no Summary line — the run stops mid-suite (20 results logged, suite incomplete), and no orphaned test processes remain. Supersedes the earlier "did not stop" observation. No claim about graceful-cancel summaries or direct-nextest cancel. |
 
 Shard flag note: this nextest has no `--shard-count`/`--shard-index`
 (`error: unexpected argument '--shard-count'`); the supported spelling
 is `--partition hash:<i>/<n>`. Rows 3–4 are that spelling.
 
 Leak-detection note: nextest flagged a few "leaky" tests
-(1 + 4 across the two shards; `cells::json_round_trip_…` and
-`cells::corrupt_imports_…` in the archive run) while still passing
-them. The flagged set varies run to run; recorded as an observation,
-not a verdict — leak triage belongs to the owning suites, not this file.
+(1 in row 1, 2 in row 8 this round) while still passing them. The
+flagged set varies run to run; recorded as an observation, not a
+verdict — leak triage belongs to the owning suites, not this file.
 
 ## 4. Open gaps
 
@@ -122,8 +126,10 @@ not a verdict — leak triage belongs to the owning suites, not this file.
   guardian tests pass via that path. Linux sweep works as
   designed. Fix sketch: resolve per-pid sid via
   `libc::getsid(pid)` instead of the ps-parsed `sess` column.
-- Retry-after-failure (row 5) and prompt-cancel (row 9) paths are
-  documented as not-proven, not green.
+- Retry-after-failure (row 5) is documented as not-proven, not
+  green. Prompt-cancel (row 9) now stops the run (parent exit
+  130, no strays) but yields no Summary — observed, not a
+  graceful-cancel guarantee.
 - Leaky-test flags (§3 note) are untriaged.
 - All timings are single samples from a concurrently-edited tree;
   re-run on a quiet tree for quotable numbers.

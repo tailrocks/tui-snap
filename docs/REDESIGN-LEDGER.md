@@ -5,15 +5,15 @@ Status key: `done` = implemented + qualifying test green; `red` = failing regres
 `missing` = no implementation; `keep` = current behavior is the target, needs qualification lock-in.
 A checkbox without a qualifying test is not completion. Evidence = test names + commands.
 
-Refreshed: 2026-09-28, branch `redesign/rust-first-testing-platform` @ `c991d23`.
-Discovery frozen at `d6b2574`; implementation spans `adfda5e`..`c991d23` (see Milestone gates).
+Refreshed: 2026-09-28, branch `redesign/rust-first-testing-platform` (this commit; prior refresh @ `c991d23`).
+Discovery frozen at `d6b2574`; implementation spans `adfda5e`..HEAD (see Milestone gates).
 Competitor deltas (unchanged): tui-test writes missing snapshot even when update=false (do not copy);
 terminal-control extractor resolves RGB / swaps inverse / skips continuations / collapses underlines (presentation, not source contract).
 
 Whole-tree green state (recorded, not re-run here): full `cargo test --locked --offline` exit 0 (129 s wall),
-full `cargo nextest run --locked --offline` 379/379 pass (43 s) — see `docs/PERF.md` rows 4–5,
-`docs/CONFORMANCE.md` §3. Spot-runs by the ledger refresher (2026-09-28):
-`--test p0_mutations` 8/8, `--test screen` 26/26, `--test facade` 12/12, all green.
+full `cargo nextest run --locked --offline --all-features` 415/415 pass (52 s, macOS) — see `docs/PERF.md`,
+`docs/CONFORMANCE.md` §1/§5 (Linux CI green too). Spot-runs by the ledger refresher (2026-09-28):
+`--test p0_mutations` 8/8, `--test screen` 26/26, `--test facade` 13/13, `--test readme_lock` 12/12, all green.
 Per-row "Verified" commands below use `cargo test --locked --offline --test <suite> <filter>`.
 
 Tally: **82 done / 0 partial / 0 missing**.
@@ -31,7 +31,7 @@ Tally: **82 done / 0 partial / 0 missing**.
 | C07 | Outcomes `#[must_use]`; mismatch fails | done | `src/snapshot.rs` outcome type (`45c0638`); `#[must_use]` throughout `src/` | `tests/p0_mutations.rs::c07_dropped_mismatch_outcome_must_not_silently_pass` | `cargo test --locked --offline --test p0_mutations c07_` — green (spot-run) |
 | C08 | Completion manifest; interrupted/partial never matched | done | `src/snapshot.rs` candidate manifest + `src/grouped.rs` manifest (`45c0638`, `4fc1e23`) | `tests/p0_mutations.rs::c08_interrupted_candidate_must_report_incomplete_not_match`, `tests/snapshot.rs::check_seals_candidate_manifest_and_verify_accepts_it`, `::interrupted_candidate_reports_capture_incomplete_not_match`, `tests/grouped.rs::interrupted_candidate_reports_missing_approval_never_pixel_verdict` | `cargo test --locked --offline --test p0_mutations c08_` — green (spot-run) |
 | C09 | Original approval hashes unchanged | done | `docs/APPROVAL-BASELINE.md` (24 frame JSON + 8 render-baseline + 12 fonts); M7 amendment re-verified all UNCHANGED, consumer fixture repinned deliberately | re-hash commands in doc | `adfda5e` baseline; M7 re-verify recorded in doc amendment (2026-09-28) |
-| C10 | README matches actual behavior | done | `README.md` re-reconciled at `9f64196` (quickstart/bulk/accept fences compile; no CLI accept — `Store::accept`/`accept_all`/`cargo insta review` documented) + `tests/readme_lock.rs` lock test | `tests/readme_lock.rs` (12 tests: fences compile, CLI subcommands in `--help`, API map, macro gates) | `cargo test --test readme_lock` — 12/12 green |
+| C10 | README matches actual behavior | done | `README.md` re-reconciled at `9f64196` (quickstart/bulk/accept fences compile) + live `tuisnap accept <NAME> --store` added `13df8b7`, README:133, locked by `tests/readme_lock.rs` (accept in `--help` + `--store` flag loop; stale `check`/`run` still usage-error) | `tests/readme_lock.rs` (12 tests: fences compile, CLI subcommands in `--help`, API map, macro gates) | `cargo test --test readme_lock` — 12/12 green (spot-run) |
 
 ## P1 — Model, API, direct views (M1)
 
@@ -65,11 +65,12 @@ facade macros + frozen policy + 4-artifact export/import (`915be82`).
 ## P2 — Nextest (M2)
 
 `src/runner.rs` context + adapter + journal + manifest (`939ade6`); matrix runs recorded in `docs/CONFORMANCE.md` §3
-(normal 379/379, filter, 2 shards, stress, archive+relocated; retry-after-failure and prompt-cancel documented NOT proven).
+(normal 415/415, filter, 2 shards, stress, archive+relocated; retry-after-failure documented NOT proven,
+prompt-cancel observed working — parent exit 130, no strays, no Summary).
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| N01 | Plain `#[test]`, no custom harness | done | already true; kept; suite runs under both `cargo test` and nextest | the suite itself: PERF rows 4–5 + CONFORMANCE §3 rows 1–4 | full `cargo test` exit 0 + `cargo nextest run` 379/379 (recorded) |
+| N01 | Plain `#[test]`, no custom harness | done | already true; kept; suite runs under both `cargo test` and nextest | the suite itself: PERF rows 4–5 + CONFORMANCE §3 rows 1–4 | full `cargo test` exit 0 + `cargo nextest run` 415/415 (recorded) |
 | N02 | Stable baseline identity + isolated attempt identity | done | `src/runner.rs` test-context + nextest adapter (`939ade6`) | `tests/runner.rs::env_parsing_*`, `::live_runner_consistency`, `::isolation_two_contexts_distinct_dirs` | `cargo test --locked --offline --test runner` — green per whole-tree state |
 | N03 | Prefer nextest-remapped executable paths | done | `src/runner.rs` resolver (`939ade6`) | `tests/runner.rs::resolve_bin_prefers_nextest_and_dedupes_forms`, `::resolve_bin_ambiguity_errors_never_silent_pick`, `::resolve_bin_live_env_best_effort` | `cargo test --locked --offline --test runner resolve_bin` — green per whole-tree state |
 | N04 | Relocated archive support | done | `src/runner.rs` resolver + path policy (`939ade6`) | `tests/runner.rs::resolve_bin_*` + live relocated run: CONFORMANCE §3 row 8 (11/11 pass from `/tmp`, cwd outside workspace) | `cargo test --locked --offline --test runner resolve_bin` + CONFORMANCE §3 row 8 (recorded) |
@@ -108,7 +109,7 @@ All in `src/locate.rs` + `src/semant.rs` (`d76c102`).
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| Q01 | Fresh text/regex/style/link/region locators on current revision | done | `src/locate.rs` | `tests/locate.rs::text_*` (6), `::regex_*` (3), `::style_matches_*` (2), `::region_resolves_one_span_per_row`, `::region_screens_keep_origin_with_local_coords`, `::wide_cells_skipped_and_counted_as_two_columns` | `cargo test --locked --offline --test locate` — green per whole-tree state |
+| Q01 | Fresh text/regex/style/link/region locators on current revision | done | `src/locate.rs` | `tests/locate.rs::text_*` (6), `::regex_*` (4), `::style_matches_*` (2), `::region_resolves_one_span_per_row`, `::region_screens_keep_origin_with_local_coords`, `::wide_cells_skipped_and_counted_as_two_columns` | `cargo test --locked --offline --test locate` — green per whole-tree state |
 | Q02 | Composition/scope (within/before/after/nth/and/or/filter) | done | `src/locate.rs` | `tests/locate.rs::within_before_after_scope_correctly`, `::nth_first_last_select_in_order`, `::and_or_filter_combine_sets`, `::resolve_unique_ok_not_found_and_ambiguous` | `cargo test --locked --offline --test locate within_` — green per whole-tree state |
 | Q03 | Strict actions; scrollback not clickable | done | `src/locate.rs` | `tests/locate.rs::scrollback_matches_flagged_and_ordered_first`, `::scrollback_target_is_never_clickable`, `::click_and_submit_deliver_exactly_once_with_coords` | `cargo test --locked --offline --test locate scrollback_` — green per whole-tree state |
 | Q04 | Retryable observational assertions, one deadline | done | `src/locate.rs` expect-API | `tests/locate.rs::expect_visible_succeeds_and_times_out`, `::expect_text_waits_for_exact_unique_text`, `::expect_count_waits_for_exact_count`, `::present_now_and_not_present_now_are_single_shot`, `::usage_and_unsupported_fail_immediately_without_waiting` | `cargo test --locked --offline --test locate expect_` — green per whole-tree state |
@@ -117,7 +118,7 @@ All in `src/locate.rs` + `src/semant.rs` (`d76c102`).
 | Q07 | Semantics select real input, never call controllers | done | `src/semant.rs` coords-only resolution | `tests/semant.rs::resolution_yields_coords_only`, `::hit_region_center_coords`, `::disabled_excluded_from_click` | `cargo test --locked --offline --test semant resolution_` — green per whole-tree state |
 | Q08 | not_present_now / eventually_absent / remains_absent | done | `src/locate.rs` absence API | `tests/locate.rs::present_now_and_not_present_now_are_single_shot`, `::eventually_absent_passes_and_times_out`, `::remains_absent_watches_full_window_and_catches_appearance` | `cargo test --locked --offline --test locate absent` — green per whole-tree state |
 | Q09 | Deterministic event/clock harness (caller hooks) | done | `src/semant.rs` update/render harness | `tests/semant.rs::harness_determinism`, `::harness_uses_update_render_not_view_capture`, `::tick_counter`, `::render_tick` | `cargo test --locked --offline --test semant harness_` — green per whole-tree state |
-| Q10 | Region/palette/cursor invariants | done | `src/screen.rs` regions, `src/tui_shell.rs` palette asserts, `src/frame.rs` cursor | `tests/screen.rs::region_*` (6), `tests/locate.rs::region_*` (5), `tests/tui_shell.rs::live_title_bells_modes_palette` (palette), `tests/ratatui_views.rs::buffer_cursor_*` + `tests/render.rs::cursor_styles_render` (cursor) | `cargo test --locked --offline --test screen region_` — green (spot-run suite); siblings green per whole-tree state |
+| Q10 | Region/palette/cursor invariants | done | `src/screen.rs` regions, `src/tui_shell.rs` palette asserts, `src/frame.rs` cursor | `tests/screen.rs::region_*` (6), `tests/locate.rs::region_*` (4), `tests/tui_shell.rs::live_title_bells_modes_palette` (palette), `tests/ratatui_views.rs::buffer_cursor_*` + `tests/render.rs::cursor_styles_render` (cursor) | `cargo test --locked --offline --test screen region_` — green (spot-run suite); siblings green per whole-tree state |
 
 ## P5 — Rendering/evidence (M5)
 
@@ -143,18 +144,18 @@ importers (`0304d72`), live/watch/replay-vs-rerun (`14f62de`).
 
 | ID | Criterion | Status | Implementation | Tests | Verified |
 |----|-----------|--------|----------------|-------|----------|
-| A01 | One typed op/result/error protocol (Rust+CLI+machine) | done | `src/proto.rs`, `src/main.rs` CLI (`61bfe51`) | `tests/agent_if.rs::initialize_reports_protocol_and_capabilities`, `::tools_*` (4), `::unknown_*`, `::bad_params_*`, `::malformed_input_*`, `::schema_snapshot_matches_committed_json` (+ `tests/agent_if_tools.json`), `tests/cli.rs::op_*` (6), `::machine_line_shapes`, `::cli_machine_mode` | `cargo test --locked --offline --test agent_if` — green per whole-tree state |
+| A01 | One typed op/result/error protocol (Rust+CLI+machine) | done | `src/proto.rs`, `src/main.rs` CLI (`61bfe51`) | `tests/agent_if.rs::initialize_reports_protocol_and_capabilities`, `::tools_*` (3), `::unknown_*`, `::bad_params_*`, `::malformed_input_*`, `::schema_snapshot_matches_committed_json` (+ `tests/agent_if_tools.json`), `tests/cli.rs::op_*` (6), `::machine_line_shapes`, `::cli_machine_mode` | `cargo test --locked --offline --test agent_if` — green per whole-tree state |
 | A02 | Optional named sessions | done | `src/proto.rs` sessions (`61bfe51`) | `tests/cli.rs::op_named_session_round_trip`, `::op_session_ops_via_execute`, `::cli_session_round_trip`, `tests/agent_if.rs::session_tools_present_and_callable` | `cargo test --locked --offline --test cli op_named_session` — green per whole-tree state |
 | A03 | Live human observe/interact, no multiplexer required | done | `src/observe.rs` Watcher + attach (`14f62de`) | `tests/observe.rs::watcher_receives_revisions`, `::watcher_lag_counter_under_flood`, `::inject_while_watching_round_trip`, `::attach_cli_smoke` | `cargo test --locked --offline --test observe watcher_` — green per whole-tree state |
 | A04 | Trace journal + offline viewer | done | `src/runner.rs` journal + `src/proto.rs` recordings + offline report bundle + `review`/`report` CLI (`61bfe51`, `939ade6`, `2375cb2`) | `tests/runner.rs::journal_killed_attempt_incomplete_completed_is_complete`, `tests/cli.rs::cli_record_and_trace`, `::cli_review_and_report`, `tests/render_qual.rs::bundle_is_offline_and_self_describing`, `tests/observe.rs::replay_determinism_no_spawn` | `cargo test --locked --offline --test cli cli_record_and_trace` — green per whole-tree state |
 | A05 | Replay-vs-rerun distinction | done | `src/observe.rs` (`14f62de`) | `tests/observe.rs::replay_determinism_no_spawn`, `::rerun_spawns_marker`, `::replay_vs_rerun_diff_report_on_nondeterministic_fixture` | `cargo test --locked --offline --test observe replay_vs_rerun` — green per whole-tree state |
 | A06 | Bounded recordings; screenshot/cast/GIF/APNG; MP4 via external encoder | done | `src/export.rs` (`67213c3`) | `tests/export.rs::cast_*` (3), `::gif_*` (2), `::apng_*` (2), `::mp4_policy_validated_without_encoder`, `::mp4_missing_encoder_or_real_encode`, `::export_policies_pin_defaults` | `cargo test --locked --offline --test export` — green per whole-tree state |
 | A07 | Graphics payload inspection; compositing only when qualified | done | `src/export.rs` kitty/sixel parsers (`67213c3`) | `tests/export.rs::sixel_*` (3), `::kitty_*` (4), `::placement_equality_semantics`, `::graphics_truncation_is_explicit_and_never_decodes`, `::graphics_unsupported_sequences_diagnosed_never_silent`, `::graphics_malformed_kitty_is_loud_but_lenient`, `::graphics_payload_count_bound` | `cargo test --locked --offline --test export kitty_` — green per whole-tree state |
-| A08 | Agent CLI + schema/capabilities + optional MCP | done | `src/main.rs` CLI + `src/mcp.rs` stdio server + `src/proto.rs` (`61bfe51`, `ee7d5b3`) | `tests/agent_if.rs` (12 protocol tests incl. `::schema_snapshot_matches_committed_json`), `tests/cli.rs` (21 CLI tests incl. `::cli_schema_and_doctor`, `::cli_help_and_version`) | `cargo test --locked --offline --test agent_if` + `--test cli` — green per whole-tree state |
+| A08 | Agent CLI + schema/capabilities + optional MCP | done | `src/main.rs` CLI + `src/mcp.rs` stdio server + `src/proto.rs` (`61bfe51`, `ee7d5b3`) | `tests/agent_if.rs` (15 protocol tests incl. `::schema_snapshot_matches_committed_json`), `tests/cli.rs` (22 CLI tests incl. `::cli_schema_and_doctor`, `::cli_help_and_version`) | `cargo test --locked --offline --test agent_if` + `--test cli` — green per whole-tree state |
 | A09 | Thin JS/TS + Python clients, no second engine | done | `clients/ts/index.js`, `clients/py/tuisnap_client.py` — transport only, engine stays in Rust (`ee7d5b3`) | `tests/agent_if.rs::ts_client_example_e2e`, `::py_client_example_e2e`, `::ts_client_propagates_op_errors_verbatim`, `::py_client_propagates_op_errors_verbatim` | `cargo test --locked --offline --test agent_if _client_` — green per whole-tree state |
 | A10 | Read-only importers (tui-snap stores + selected competitor traces) | done | `src/import_compat.rs` (`0304d72`); frozen-store importer in `src/assert.rs` | `tests/import_compat.rs` (12 tests: `cast_*` 5, `termctrl_*` 5, `imports_never_write_nor_execute_canary`, `frozen_four_file_tree_roundtrip_readonly`), `tests/facade.rs::import_frozen_v1_*` (2) | `cargo test --locked --offline --test import_compat` — green per whole-tree state |
-| A11 | Performance qualification (cold/warm/latency/memory/suite) | done | `docs/PERF.md`: builds, latency, suite totals (129 s cargo test, 43 s nextest 407/407), artifact sizes + (`8d41440`) Peak RSS section M1–M4 (333/6.2/4.1/380 MiB, `/usr/bin/time -l`, single-sample caveats) | measurements, not `#[test]`; method + caveats in doc | `docs/PERF.md` Peak RSS rows observed; nextest fast lane 43 s < 120 s target |
-| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | done | `docs/CONFORMANCE.md` §5: Linux CI green on `4530e07` (run 36490156051, attempt 2; attempt 1: 1 flake `shell_cmd_exit_is_not_child_exit` setup-timeout, siblings green, 6x local stress green, rerun green — recorded as single load flake); macOS 420/420 local; Windows compiles, runtime unclaimed | CI `Rust` lane (fmt+clippy+nextest 415/415+doctests) + Policy green | `gh run view 36490156051` conclusion=success |
+| A11 | Performance qualification (cold/warm/latency/memory/suite) | done | `docs/PERF.md`: builds, latency, suite totals (129 s cargo test, 52 s nextest 415/415), artifact sizes + (`8d41440`) Peak RSS section M1–M4 (333/6.2/4.1/380 MiB, `/usr/bin/time -l`, single-sample caveats) | measurements, not `#[test]`; method + caveats in doc | `docs/PERF.md` Peak RSS rows observed; nextest fast lane 52 s < 120 s target |
+| A12 | macOS/Linux conformance; truthful Windows ConPTY subset | done | `docs/CONFORMANCE.md` §1/§5: Linux CI green, latest run 36498041474 @ `c3f578b` (first green 36490156051 @ `4530e07`); both Linux flakes root-caused + fixed `1911433` (prompt-on-attestation-row → empty PS1/PS2; pre-setsid test race → pgid-escape wait); macOS 415/415 local; Windows compiles, runtime unclaimed | CI `Rust` lane (fmt+clippy+nextest 415/415+doctests) + Policy green | `gh run view 36498041474` conclusion=success |
 
 ## Milestone gates (M0–M7)
 
@@ -176,7 +177,9 @@ All SHAs on branch `redesign/rust-first-testing-platform` (`git log --oneline`):
 - M7 ⚠️ near-complete: `35ea4d7` A11/A12/M09 docs + C09 re-verify amendment (approvals UNCHANGED, consumer repinned);
   `c991d23` LEARNING.md + 8 tutorials + examples lane (N10). Old runtime removed (`4d02e2e`),
   import read-only (`0304d72`). Closed since: C10 (`9f64196`), M03 (`f6064a4`), A11 memory lane (`8d41440`),
-  `.config/nextest.toml` (`aa74aa7`), CI regen (`c5bcd7a` + state `5b2a6fb`). Remaining: none — A12 closed by green Linux CI run 36490156051 on `4530e07`.
+  `.config/nextest.toml` (`aa74aa7`), CI regen (`c5bcd7a` + state `5b2a6fb`), Linux flake fixes (`1911433`),
+  conformance refresh (`c3f578b`), C10 accept-lock + ledger counts (this commit). Remaining: none —
+  A12 closed by green Linux CI (latest run 36498041474 on `c3f578b`; first green 36490156051 on `4530e07`).
 
 First vertical slice (early M2) ✅: pure settings view + piped CLI error (`08750b8`, `tests/vertical_slice.rs`)
 + PTY settings-navigation journey (`1742f2d`, `tests/journey.rs`), all under nextest with native Insta

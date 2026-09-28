@@ -474,20 +474,20 @@ fn readme_fallback_chain() {
 
 // ---------------------------------------------------------------------------
 // CLI section: every documented subcommand appears in --help; removed ones
-// (accept/check/run) fail with usage error; flags match.
+// (check/run) fail with usage error; flags match.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn readme_cli_help_lists_documented_subcommands() {
     let top = help(&["--help"]);
     for cmd in [
-        "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "report",
-        "import", "session", "record", "trace",
+        "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
+        "report", "import", "session", "record", "trace",
     ] {
         assert!(top.contains(cmd), "--help missing {cmd}:\n{top}");
     }
     // Stale README commands must stay gone (usage error, exit 2).
-    for stale in ["accept", "check", "run"] {
+    for stale in ["check", "run"] {
         let out = Command::new(bin())
             .arg(stale)
             .output()
@@ -516,6 +516,7 @@ fn readme_cli_help_lists_documented_subcommands() {
         ("inspect", &["--dir"]),
         ("diff", &["--expected", "--actual"]),
         ("review", &["--dir"]),
+        ("accept", &["--store"]),
         ("import", &["--dir"]),
         ("record", &["--out", "--max-events", "--max-bytes"]),
         ("trace", &["--input", "--kind"]),

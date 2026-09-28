@@ -31,16 +31,16 @@ Local-only measurements. Not CI results, not a fast-lane proof.
 | 2 | Cold target dir, warm mbx cache (`cargo build`) | 7 s | cargo: 6.35 s (257 mbx hits) |
 | 3 | Warm no-op build, mbx-managed target (`cargo build`) | 4 s | cargo: 3.15 s |
 | 4 | Full `cargo test --locked --offline`, exit 0 | 129 s | per-suite sum; slowest single test-time: `visual` 17.73 s |
-| 5 | Full `cargo nextest run --locked --offline`: 379/379 pass | 43 s | nextest summary: 43.13 s |
+| 5 | Full `cargo nextest run --locked --offline --all-features`: 415/415 pass (1 leaky) | 52 s | nextest summary: 51.86 s |
 | 6 | `cargo test --test tui`: 25 pass | 2 s | test-time 1.12 s → ~45 ms/test avg |
 | 7 | Single PTY test, binary-direct (`tui-*/chord_press_sends_key --exact`) | 63 ms | test-time 0.06 s |
 | 8 | Single CLI piped capture (`tuisnap capture --out /tmp/perf-cap -- echo hello`) | 10 ms | child `Exit(0)`; manifest + stdout/stderr artifacts written |
 | 9 | `cargo test --test render_qual`: 21 pass (render throughput) | 17 s | test-time 15.93 s → ~760 ms/test avg (font rasterization heavy) |
 | 10 | `cargo test --test render`: 29 pass | 13 s | test-time 11.09 s |
 
-Suite size at measure time: 379 tests per `cargo nextest list`
-(~371 `#[test]` in `tests/*.rs` + lib + 5 doc-tests; moving target,
-see caveat).
+Suite size at measure time: 415 tests per `cargo nextest run`
+(moving target, see caveat; row 5 re-measured 2026-09-28,
+other rows as originally measured).
 
 ## Artifact sizes
 
@@ -49,7 +49,7 @@ see caveat).
 | `tests/snapshots` (committed insta snapshots + PNGs) | 388 K |
 | `target/debug/tuisnap` (debug CLI) | 69 M |
 | Full debug target dir, true-cold build (`/tmp/perf-truecold/debug`) | 1.4 G |
-| nextest archive (`tests.tar.zst`, 28 binaries + std) | 270 M |
+| nextest archive (`tests.tar.zst`, 31 binaries + std) | 310 M |
 
 ## Peak RSS (memory)
 
@@ -77,10 +77,10 @@ encode of debug builds, not a release profile.
 - Full `cargo test`: **129 s — misses** the 120 s CI fast-lane target
   on this machine by ~9 s. The `cargo test` runner executes test
   binaries serially; render/visual suites dominate.
-- Full `cargo nextest run`: **43 s — passes** with 77 s of headroom.
-  Same 379 tests, parallel across binaries.
+- Full `cargo nextest run`: **52 s — passes** with 68 s of headroom.
+  Same 415 tests, parallel across binaries.
 - Verdict: the fast lane must run nextest (optionally sharded —
-  see `docs/CONFORMANCE.md`, partitions split 186/193), not
+  see `docs/CONFORMANCE.md`, partitions split 203/212), not
   `cargo test`. These are local Apple-silicon numbers; CI runs
   `linux-x64` GitHub-hosted runners (see `.github/ci/project.toml`),
   so the 120 s budget must be re-proven with CI timings, not this file.
