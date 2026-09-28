@@ -24,6 +24,7 @@ pub mod grouped;
 pub mod profile;
 pub mod ratatui;
 pub mod render;
+pub mod screen;
 pub mod snapshot;
 
 #[cfg(feature = "pty")]
@@ -45,3 +46,7 @@ pub use profile::{
     VENDORED_SYMBOLS_FONT, VENDORED_SYMBOLS_FONT_SHA256,
 };
 pub use render::Renderer;
+pub use screen::{
+    CaptureProvenance, CaptureReason, Maybe, Observation, Region, RegionPolicy, Screen,
+    ScreenError, TermState,
+};
