@@ -225,7 +225,6 @@ fn c04_similarity_score_must_not_establish_strict_equality() {
 // ----------------- C06: missing/corrupt reference artifacts must fail
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c06_missing_approved_png_must_fail_not_regenerate_in_memory() {
     // Classic store gap (src/snapshot.rs `check_with`: missing approved PNG
     // is rendered to MEMORY and the gate can still return Matched).
@@ -328,7 +327,6 @@ fn c05_report_verdict_must_equal_test_verdict_on_same_inputs() {
 // ------------------------------- C07: assertions hard to ignore
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
     let (_dir, st) = tmp_classic("c07");
     st.check(
@@ -351,12 +349,12 @@ fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
         .unwrap();
     assert_eq!(mismatch.status, Status::CellsDiffer, "setup: must mismatch");
 
-    // The gap: `CompareOutcome` is NOT #[must_use] (src/snapshot.rs), so a
-    // caller that forgets `ensure_matched()` gets a green test despite a
-    // mismatch. This line compiles and runs with no failure today.
+    // `CompareOutcome`/`Status` are #[must_use] (src/snapshot.rs), so a
+    // caller that forgets `ensure_matched()` gets an `unused_must_use`
+    // warning; `drop` here documents the previously silent scenario.
     drop(mismatch);
 
-    // Guard: `ensure_matched` itself reports mismatches correctly.
+    // Runtime half: `ensure_matched` fails loudly on mismatch.
     let fresh = st
         .check(
             "home",
@@ -368,13 +366,7 @@ fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
         .unwrap();
     assert!(
         fresh.ensure_matched().is_err(),
-        "guard: ensure_matched must error on mismatch"
-    );
-
-    panic!(
-        "C07 gap proven: a CellsDiffer CompareOutcome was dropped above with \
-         no failure — outcomes must be #[must_use] (and examples must not \
-         merely unwrap I/O success)"
+        "ensure_matched must error on mismatch"
     );
 }
 

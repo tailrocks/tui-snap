@@ -59,6 +59,7 @@ impl From<crate::diff::DiffError> for SnapshotError {
 }
 
 /// Gate status for one named snapshot.
+#[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Matched,
@@ -67,6 +68,11 @@ pub enum Status {
     DimensionMismatch,
     MissingApproval,
     CorruptApproval,
+    /// Actual candidate trio (frame/PNG/manifest) is inconsistent — an
+    /// interrupted write, never a pass.
+    CaptureIncomplete,
+    /// Candidate trio is complete and consistent; no gate verdict yet.
+    NotChecked,
 }
 
 impl Status {
@@ -79,6 +85,8 @@ impl Status {
             Status::DimensionMismatch => "dimension-mismatch",
             Status::MissingApproval => "missing-approval",
             Status::CorruptApproval => "corrupt-approval",
+            Status::CaptureIncomplete => "capture-incomplete",
+            Status::NotChecked => "not-checked",
         }
     }
 
@@ -101,6 +109,10 @@ pub struct CellDiff {
 pub const MAX_CELL_DIFFS: usize = 100;
 
 /// Outcome of one `check`. Artifacts on disk even when unmatched.
+///
+/// Dropping this without [`Self::ensure_matched`] (or otherwise asserting on
+/// [`Self::status`]) is a silent pass — hence `#[must_use]`.
+#[must_use]
 #[derive(Debug, Clone)]
 pub struct CompareOutcome {
     pub name: String,
@@ -108,6 +120,9 @@ pub struct CompareOutcome {
     pub cell_diffs: Vec<CellDiff>,
     pub cell_diff_total: usize,
     pub pixel_score: Option<f64>,
+    /// C06 removed in-memory regeneration of missing approved PNGs: the gate
+    /// fails closed instead, so this is always `false`. Kept so existing
+    /// readers (`expected_png_bytes` consumers, report sidecars) keep compiling.
     pub approved_png_regenerated: bool,
     pub digest_expected: Option<String>,
     pub digest_actual: String,
@@ -115,15 +130,12 @@ pub struct CompareOutcome {
     pub actual_frame: PathBuf,
     pub actual_png: PathBuf,
     pub expected_frame: PathBuf,
-    /// The approved PNG path, but only when it actually exists on disk
-    /// (when it was regenerated in memory this is `None` — see
-    /// [`Self::expected_png_bytes`] for the image either way).
+    /// The approved PNG path, but only when it actually exists on disk.
     pub expected_png: Option<PathBuf>,
-    /// The exact expected image the pixel gate compared against — the
-    /// approved PNG's bytes when on disk, the regenerated render otherwise.
-    /// `None` only when there is no usable approved frame (missing/corrupt
-    /// approval). Reports embed this so the expected panel always shows the
-    /// gated image.
+    /// The exact expected image the pixel gate compared against: the
+    /// approved PNG's bytes from disk. `None` whenever the gate did not run
+    /// (missing/corrupt approval, missing approved PNG). Reports fall back
+    /// to sidecar bytes when present, else a "missing approval" panel.
     pub expected_png_bytes: Option<Vec<u8>>,
     pub diff_png: Option<PathBuf>,
     pub note: String,
@@ -220,6 +232,17 @@ fn summarize(cell: &crate::frame::Cell) -> String {
     )
 }
 
+/// Lowercase hex SHA-256 of `bytes` (manifest integrity, not gating).
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(bytes);
+    let mut s = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
 /// Atomic file write (tmp in same dir + rename). Tmp names carry pid, a
 /// process-wide counter, and the thread id, so same-name writers from
 /// different threads never share a tmp file.
@@ -280,6 +303,14 @@ impl Store {
 
     fn actual_png(&self, name: &str) -> PathBuf {
         self.root.join("actual").join(format!("{name}.png"))
+    }
+
+    /// Completion manifest sealing one actual candidate trio
+    /// (`<name>.frame.json` + `<name>.png` + fidelity sidecar).
+    fn actual_manifest(&self, name: &str) -> PathBuf {
+        self.root
+            .join("actual")
+            .join(format!("{name}.manifest.json"))
     }
 
     /// Missing-glyph sidecar next to a PNG (`<name>.png.fidelity.json`).
@@ -343,16 +374,41 @@ impl Store {
         actual: &Frame,
         pixel_threshold: f64,
     ) -> Result<CompareOutcome, SnapshotError> {
+        // C04: invalid tolerances are rejected, never silently applied — a
+        // NaN threshold would make every `score < threshold` false and fake
+        // a match. The strict gate itself takes no threshold; review
+        // leniency lives only on this validated perceptual policy.
+        let perceptual = diff::PerceptualPolicy::new(pixel_threshold)?;
         actual.validate().map_err(SnapshotError::from)?;
         let rendered = renderer.render(actual).map_err(SnapshotError::from)?;
         let actual_png_bytes = &rendered.png;
         let actual_frame_path = self.actual_frame(name);
         let actual_png_path = self.actual_png(name);
-        write_atomic(&actual_frame_path, actual.to_json().as_bytes())?;
+        let frame_bytes = actual.to_json();
+        let fidelity_bytes = rendered.fidelity.to_json();
+        write_atomic(&actual_frame_path, frame_bytes.as_bytes())?;
         write_atomic(&actual_png_path, actual_png_bytes)?;
         write_atomic(
             &Self::fidelity_sidecar(&actual_png_path),
-            rendered.fidelity.to_json().as_bytes(),
+            fidelity_bytes.as_bytes(),
+        )?;
+        // C08: seal the candidate trio last. A crash between the writes
+        // above leaves a manifest that is absent or disagrees with the
+        // artifacts, and `verify_candidate` reports CaptureIncomplete
+        // instead of letting a later report silently re-render the gap.
+        let manifest = serde_json::json!({
+            "name": name,
+            "frame_sha256": sha256_hex(frame_bytes.as_bytes()),
+            "png_sha256": sha256_hex(actual_png_bytes),
+            "fidelity_sha256": sha256_hex(fidelity_bytes.as_bytes()),
+            "profile": renderer.profile().name,
+            "complete": true,
+        });
+        write_atomic(
+            &self.actual_manifest(name),
+            serde_json::to_string_pretty(&manifest)
+                .expect("manifest JSON serializes")
+                .as_bytes(),
         )?;
 
         let approved_frame_path = self.approved_frame(name);
@@ -443,22 +499,21 @@ impl Store {
             }
         }
 
-        // Pixel comparison over decoded PNGs. A missing approved PNG is
-        // rendered to MEMORY only: `check` never writes under `approved/`
-        // (approvals change solely through explicit `accept`), so parallel
-        // gates cannot race on approval files and renderer upgrades cannot
-        // silently heal them. The gated bytes are kept on the outcome
-        // (`expected_png_bytes`) so reports show the expected image even
-        // though nothing exists at `expected_png`'s former disk path.
-        let (approved_png_bytes, png_on_disk) = match std::fs::read(&approved_png_path) {
-            Ok(b) => (b, true),
+        // Pixel comparison over decoded PNGs. C06: expected bytes come
+        // from disk or the check fails — a missing approved PNG is
+        // MissingApproval, never regenerated in memory (frozen visual
+        // mode: a renderer upgrade must fail loudly, not silently
+        // re-render the expectation it is supposed to gate).
+        let approved_png_bytes = match std::fs::read(&approved_png_path) {
+            Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let rendered = renderer.render(&approved)?;
-                outcome.approved_png_regenerated = true;
-                outcome.note = "approved PNG not on disk; expected image regenerated in memory \
-                                from the approved frame"
-                    .to_string();
-                (rendered.png, false)
+                outcome.status = Status::MissingApproval;
+                outcome.note = format!(
+                    "approved PNG missing on disk: {}; expected bytes come from \
+                     disk or the check fails",
+                    approved_png_path.display()
+                );
+                return Ok(outcome);
             }
             Err(e) => {
                 return Err(SnapshotError(format!(
@@ -467,9 +522,7 @@ impl Store {
                 )));
             }
         };
-        if png_on_disk {
-            outcome.expected_png = Some(approved_png_path);
-        }
+        outcome.expected_png = Some(approved_png_path);
         let cells_match = matches!(outcome.status, Status::MissingApproval);
         let verdict =
             diff::compare_png_with_flags(&approved_png_bytes, actual_png_bytes, cells_match)?;
@@ -478,7 +531,7 @@ impl Store {
             outcome.status = Status::DimensionMismatch;
         } else {
             outcome.pixel_score = Some(verdict.score);
-            if verdict.score < pixel_threshold
+            if !perceptual.allows(verdict.score)
                 && !matches!(
                     outcome.status,
                     Status::CellsDiffer | Status::DimensionMismatch
@@ -497,6 +550,97 @@ impl Store {
             outcome.status = Status::Matched;
         }
         Ok(outcome)
+    }
+
+    /// Verify one actual candidate trio (frame + PNG + fidelity sidecar
+    /// against the completion manifest `check` seals last). Returns
+    /// [`Status::NotChecked`] when the trio is complete and consistent —
+    /// the candidate is intact but no gate verdict exists yet — and
+    /// [`Status::CaptureIncomplete`] when anything is missing, unparsable,
+    /// unsealed (`complete != true`), or hash-mismatched. Never errors:
+    /// every failure mode IS the incomplete verdict.
+    pub fn verify_candidate(&self, name: &str) -> Status {
+        match self.candidate_problem(name) {
+            None => Status::NotChecked,
+            Some(_) => Status::CaptureIncomplete,
+        }
+    }
+
+    /// `None` when the candidate trio is intact, else a human reason.
+    fn candidate_problem(&self, name: &str) -> Option<String> {
+        let frame_path = self.actual_frame(name);
+        let png_path = self.actual_png(name);
+        let manifest_path = self.actual_manifest(name);
+        let frame_bytes = match std::fs::read(&frame_path) {
+            Ok(b) if !b.is_empty() => b,
+            _ => {
+                return Some(format!(
+                    "candidate `{name}` incomplete: {} missing or empty",
+                    frame_path.display()
+                ));
+            }
+        };
+        let png_bytes = match std::fs::read(&png_path) {
+            Ok(b) if !b.is_empty() => b,
+            _ => {
+                return Some(format!(
+                    "candidate `{name}` incomplete: {} missing or empty",
+                    png_path.display()
+                ));
+            }
+        };
+        let fidelity_bytes = match std::fs::read(Self::fidelity_sidecar(&png_path)) {
+            Ok(b) if !b.is_empty() => b,
+            _ => {
+                return Some(format!(
+                    "candidate `{name}` incomplete: fidelity sidecar for {} missing or empty",
+                    png_path.display()
+                ));
+            }
+        };
+        let manifest_text = match std::fs::read_to_string(&manifest_path) {
+            Ok(t) => t,
+            Err(_) => {
+                return Some(format!(
+                    "candidate `{name}` incomplete: {} missing (interrupted write?)",
+                    manifest_path.display()
+                ));
+            }
+        };
+        let manifest: serde_json::Value = match serde_json::from_str(&manifest_text) {
+            Ok(v) => v,
+            Err(e) => {
+                return Some(format!(
+                    "candidate `{name}` incomplete: {} unparsable: {e}",
+                    manifest_path.display()
+                ));
+            }
+        };
+        if manifest.get("complete").and_then(|v| v.as_bool()) != Some(true) {
+            return Some(format!(
+                "candidate `{name}` incomplete: {} not sealed (complete != true)",
+                manifest_path.display()
+            ));
+        }
+        if manifest.get("name").and_then(|v| v.as_str()) != Some(name) {
+            return Some(format!(
+                "candidate `{name}` incomplete: {} names a different snapshot",
+                manifest_path.display()
+            ));
+        }
+        for (key, bytes) in [
+            ("frame_sha256", frame_bytes.as_slice()),
+            ("png_sha256", png_bytes.as_slice()),
+            ("fidelity_sha256", fidelity_bytes.as_slice()),
+        ] {
+            let want = manifest.get(key).and_then(|v| v.as_str()).unwrap_or("");
+            if sha256_hex(bytes) != want {
+                return Some(format!(
+                    "candidate `{name}` incomplete: {key} disagrees with the artifact on disk"
+                ));
+            }
+        }
+        None
     }
 
     /// Explicitly approve one snapshot: actual → approved (atomic).
@@ -536,8 +680,8 @@ impl Store {
     }
 
     /// Assemble one report row from a check outcome. The HTML report links
-    /// PNGs on disk (no base64). Regenerated expected images with no disk
-    /// path are written next to the report under `report-media/`.
+    /// PNGs on disk (no base64). Expected bytes with no disk path are
+    /// written next to the report under `report-media/`.
     pub fn report_entry(
         &self,
         outcome: &CompareOutcome,
@@ -580,6 +724,38 @@ impl Store {
         let mut entries = Vec::new();
         let mut outcomes = Vec::new();
         for name in names {
+            // C08: an interrupted candidate (frame without PNG, lost
+            // manifest, hash drift) must report CaptureIncomplete — never
+            // re-render through `check_with`, which would silently heal the
+            // missing artifact back to Matched.
+            if let Some(problem) = self.candidate_problem(&name) {
+                let actual_frame_path = self.actual_frame(&name);
+                let digest_actual = std::fs::read_to_string(&actual_frame_path)
+                    .ok()
+                    .and_then(|t| Frame::from_json(&t).ok())
+                    .map(|f| format!("{:016x}", f.digest()))
+                    .unwrap_or_default();
+                let outcome = CompareOutcome {
+                    name: name.clone(),
+                    status: Status::CaptureIncomplete,
+                    cell_diffs: Vec::new(),
+                    cell_diff_total: 0,
+                    pixel_score: None,
+                    approved_png_regenerated: false,
+                    digest_expected: None,
+                    digest_actual,
+                    actual_frame: actual_frame_path,
+                    actual_png: self.actual_png(&name),
+                    expected_frame: self.approved_frame(&name),
+                    expected_png: None,
+                    expected_png_bytes: None,
+                    diff_png: None,
+                    note: problem,
+                };
+                entries.push(self.report_entry(&outcome, renderer.profile())?);
+                outcomes.push(outcome);
+                continue;
+            }
             let text = std::fs::read_to_string(self.actual_frame(&name)).map_err(|e| {
                 SnapshotError(format!("cannot read actual frame for `{name}`: {e}"))
             })?;
