@@ -61,7 +61,12 @@ fn gradient_rgb() -> RgbImage {
 fn encode_rgb(img: &RgbImage, c: CompressionType, f: FilterType) -> Vec<u8> {
     let mut buf = Vec::new();
     PngEncoder::new_with_quality(&mut buf, c, f)
-        .write_image(img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgb8)
+        .write_image(
+            img.as_raw(),
+            img.width(),
+            img.height(),
+            image::ExtendedColorType::Rgb8,
+        )
         .unwrap();
     buf
 }
@@ -86,7 +91,6 @@ fn decode_rgb(png: &[u8]) -> RgbImage {
 // ------------------------------------------------- C01: cell-equality bypass
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
     // Two PNGs, identical dimensions, different decoded pixels.
     let mut a = gradient_rgb();
@@ -125,7 +129,6 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
 // --------------------------------- C03: exact RGBA / opaque-policy comparison
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     let img = gradient_rgb();
     let enc_default = encode_rgb(&img, CompressionType::Default, FilterType::Adaptive);
@@ -180,7 +183,6 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
 // -------------------- C04: perceptual diagnostics vs exact verdicts
 
 #[test]
-#[ignore = "M0 red: fails until fix lands"]
 fn c04_similarity_score_must_not_establish_strict_equality() {
     // Part 1: score >= 1.0 must imply decoded-pixel identity. The
     // ansi_matched bypass breaks this: score 1.0 with differing pixels.
@@ -329,8 +331,14 @@ fn c05_report_verdict_must_equal_test_verdict_on_same_inputs() {
 #[ignore = "M0 red: fails until fix lands"]
 fn c07_dropped_mismatch_outcome_must_not_silently_pass() {
     let (_dir, st) = tmp_classic("c07");
-    st.check("home", &frame_with("before"), &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+    st.check(
+        "home",
+        &frame_with("before"),
+        &profile(),
+        &VENDORED_FACES,
+        1.0,
+    )
+    .unwrap();
     st.accept("home").unwrap();
     let mismatch = st
         .check(
@@ -415,7 +423,11 @@ fn c08_interrupted_candidate_must_report_incomplete_not_match() {
     let gmatched = gst
         .check("s", &frame, &profile(), &VENDORED_FACES, 1.0)
         .unwrap();
-    assert_eq!(gmatched.status(), Status::Matched, "setup: must match first");
+    assert_eq!(
+        gmatched.status(),
+        Status::Matched,
+        "setup: must match first"
+    );
     std::fs::remove_file(&gmatched.actual.png).unwrap();
     let mut grenderer = tuisnap::render::Renderer::new(&profile(), &VENDORED_FACES).unwrap();
     let greport = gst.report_with(&mut grenderer, 1.0, "c08g").unwrap();
