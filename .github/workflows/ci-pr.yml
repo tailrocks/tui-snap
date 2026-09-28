@@ -127,7 +127,7 @@ jobs:
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
       mbx_enabled: true
-      mbx_compat: ee26bfc4fbf6
+      mbx_compat: b25572231dad
       mbx_dependency_files: |
         .cargo/**
         Cargo.lock
@@ -148,6 +148,8 @@ jobs:
         mise.lock
         src/**
         tests/**
+        tests/agent_if_tools.json
+      cargo_bin_tools: cargo-nextest
       cache_paths: |
         ~/.cargo/registry
         ~/.cargo/git
@@ -161,7 +163,7 @@ jobs:
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
-      validation_phases: "fmt,clippy,test"
+      validation_phases: "fmt,clippy,test,doctest"
   ci-required:
     name: ci-required
     if: ${{ !cancelled() }}

@@ -10,8 +10,8 @@ default_dispatch_providers = ["github-hosted"]
 
 [analysis]
 method = "static-filesystem-and-manifest-inspection"
-detected = ["cargo-lockfile", "rust-binaries:tuisnap:1", "rust-features:tuisnap:2", "rust-package", "rust-test-targets:tuisnap:1"]
-limitations = ["Manifests nested under tests/ or benches/ directories are treated as test fixtures and ignored.", "Project code, build scripts, task runners, and commands are never executed during analysis.", "Release, signing, registry, deployment, branch-protection, and runner-capability contracts remain explicit manual inputs."]
+detected = ["cargo-lockfile", "cargo-nextest-policy", "rust-binaries:tuisnap:1", "rust-features:tuisnap:2", "rust-package", "rust-test-targets:tuisnap:1"]
+limitations = ["Manifests nested under tests/ or benches/ directories are treated as test fixtures and ignored.", "Project code, build scripts, task runners, and commands are never executed during analysis.", "Release, signing, registry, deployment, branch-protection, and runner-capability contracts remain explicit manual inputs.", "Skipped clients/ts/package.json: package manager is unsupported or unresolved; supported package managers are Bun and npm."]
 
 [workflow]
 files = ["ci-main.yml", "ci-policy.yml", "ci-pr.yml", "ci-unit-rust.yml", "maintenance.yml", "nightly.yml"]
@@ -26,10 +26,10 @@ id = "rust-tuisnap"
 label = "Rust crate (tuisnap)"
 kind = "rust"
 root = "."
-watch = ["**/*.rs", ".cargo/**", "Cargo.lock", "Cargo.toml", "assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf", "assets/fonts/NotoSansCJKjp-subset.otf", "assets/fonts/NotoSansSymbols-subset.ttf", "assets/fonts/NotoSansSymbols2-subset.ttf", "benches/**", "examples/**", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml", "src/**", "tests/**"]
-pr_commands = ["mbx fmt --manifest-path 'Cargo.toml' -- --check", "mbx clippy --locked --profile test --all-targets --all-features --package 'tuisnap' -- -D warnings", "mbx test --locked --all-features --package 'tuisnap'"]
-full_commands = ["mbx fmt --manifest-path 'Cargo.toml' -- --check", "mbx clippy --locked --profile test --all-targets --all-features --package 'tuisnap' -- -D warnings", "mbx test --locked --all-features --package 'tuisnap'"]
-phases = ["fmt", "clippy", "test"]
+watch = ["**/*.rs", ".cargo/**", "Cargo.lock", "Cargo.toml", "assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf", "assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf", "assets/fonts/NotoSansCJKjp-subset.otf", "assets/fonts/NotoSansSymbols-subset.ttf", "assets/fonts/NotoSansSymbols2-subset.ttf", "benches/**", "examples/**", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml", "src/**", "tests/**", "tests/agent_if_tools.json"]
+pr_commands = ["mbx fmt --manifest-path 'Cargo.toml' -- --check", "mbx clippy --locked --profile test --all-targets --all-features --package 'tuisnap' -- -D warnings", "mbx nextest run --locked --all-features --package 'tuisnap' --no-tests pass", "mbx test --locked --doc --all-features --package 'tuisnap'"]
+full_commands = ["mbx fmt --manifest-path 'Cargo.toml' -- --check", "mbx clippy --locked --profile test --all-targets --all-features --package 'tuisnap' -- -D warnings", "mbx nextest run --locked --all-features --package 'tuisnap' --no-tests pass", "mbx test --locked --doc --all-features --package 'tuisnap'"]
+phases = ["fmt", "clippy", "test", "doctest"]
 check_commands = ["mbx check --locked --profile test --all-targets --all-features --package 'tuisnap'"]
 platform = "linux-x64"
 trust = "untrusted-ok"

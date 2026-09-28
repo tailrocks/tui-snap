@@ -290,6 +290,55 @@ jobs:
             velnor-mbx-v3-${{ inputs.mbx_compat }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.provider }}-${{ inputs.unit_platform }}-${{ inputs.unit_trust }}-${{ inputs.unit }}-${{ hashFiles(inputs.mbx_dependency_files) }}-
             velnor-mbx-v3-${{ inputs.mbx_compat }}-${{ runner.os }}-${{ runner.arch }}-${{ inputs.provider }}-${{ inputs.unit_platform }}-${{ inputs.unit_trust }}-${{ inputs.unit }}-
           save-on-workflow-dispatch: true
+      - name: Restore cargo bin toolchain
+        id: cargo-bin-toolchain
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin
+          key: velnor-cargo-bin-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.lock', 'mise.toml') }}
+      - name: Verify cargo bin tools
+        if: ${{ steps.cargo-bin-toolchain.outputs.cache-hit == 'true' }}
+        id: cargo-bin-verify
+        shell: bash
+        env:
+          CARGO_BIN_TOOLS: ${{ inputs.cargo_bin_tools }}
+        run: |
+          set -euo pipefail
+          missing=0
+          IFS=',' read -ra tools <<< "$CARGO_BIN_TOOLS"
+          for tool in "${tools[@]}"; do
+            tool="${tool#"${tool%%[![:space:]]*}"}"
+            tool="${tool%"${tool##*[![:space:]]}"}"
+            [[ -z "$tool" ]] && continue
+            if ! command -v "$tool" >/dev/null; then
+              missing=1
+              break
+            fi
+            if ! "$tool" --version >/dev/null 2>&1; then
+              missing=1
+              break
+            fi
+            if [[ "$tool" == cargo-* ]]; then
+              subcommand="${tool#cargo-}"
+              if ! cargo "$subcommand" --version >/dev/null 2>&1; then
+                missing=1
+                break
+              fi
+            fi
+          done
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+      - name: Set up cargo bin tools
+        if: ${{ steps.cargo-bin-toolchain.outputs.cache-hit != 'true' || steps.cargo-bin-verify.outputs.missing == 'true' }}
+        uses: taiki-e/install-action@0758d235715de2f3551eacc980d9ae8fce9342c3 # v2.87.3
+        with:
+          tool: ${{ inputs.cargo_bin_tools }}
+          fallback: none
+      - name: Save cargo bin toolchain
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && (steps.cargo-bin-toolchain.outputs.cache-hit != 'true' || steps.cargo-bin-verify.outputs.missing == 'true')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin
+          key: velnor-cargo-bin-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.lock', 'mise.toml') }}
       - name: Restore mold 2.42.0 cache
         id: mold-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -452,6 +501,23 @@ jobs:
           set -o pipefail
           rc=0
           velnor-workflow run --config .github/ci/project.toml --scope "$CI_SCOPE" --unit "$CI_UNIT_ID" --phase test 2>&1 | tee -a "$RUNNER_TEMP/velnor-unit-log.txt" || rc=$?
+          exit $rc
+      - name: Doctests
+        env:
+          CI_SCOPE: ${{ inputs.scope }}
+          CI_UNIT_ID: ${{ inputs.unit }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          VELNOR_SELECTION_FILE: .velnor-ci-selection/velnor-ci-selection
+          CARGO_NET_OFFLINE: "true"
+          MISE_AUTO_INSTALL: "false"
+          MISE_EXEC_AUTO_INSTALL: "false"
+          MISE_NOT_FOUND_AUTO_INSTALL: "false"
+        run: |
+          set -o pipefail
+          rc=0
+          velnor-workflow run --config .github/ci/project.toml --scope "$CI_SCOPE" --unit "$CI_UNIT_ID" --phase doctest 2>&1 | tee -a "$RUNNER_TEMP/velnor-unit-log.txt" || rc=$?
           timing_dir="$RUNNER_TEMP/velnor-ci-timing-${GITHUB_RUN_ID:-unknown}-${GITHUB_RUN_ATTEMPT:-0}-${GITHUB_JOB:-unknown}"
           umask 077
           mkdir -p "$timing_dir"

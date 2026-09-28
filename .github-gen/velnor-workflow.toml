@@ -6,13 +6,12 @@ revision = "be61acbbbfb71db6b51337e547e39de049d4fc15"
 
 # Public repo: GitHub-hosted singleton (no velnor lanes).
 # (donbeave/tui-snap is a redirect; the repo lives in tailrocks.)
-# vendor/ excluded by evidence: vendor/termlens is standalone (no
-# workspace membership, no lockfile), so `cargo --locked` run from
-# that dir fails; it still compiles as a path dependency of the root
-# unit. tools/*.py carry no project markers, so the scan derives no
-# unit from them and no exclude is needed.
+# No scan excludes: vendor/termlens was removed in 4d02e2e (R04), so
+# the former vendor/** exclude is dead. tools/*.py carry no project
+# markers, so the scan derives no unit from them and no exclude is
+# needed.
 [scan]
-exclude = ["vendor/**"]
+exclude = []
 
 [workflow]
 providers = ["github-hosted"]
