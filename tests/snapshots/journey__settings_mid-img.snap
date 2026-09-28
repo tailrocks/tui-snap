@@ -1,0 +1,7 @@
+---
+source: src/assert.rs
+description: "tuisnap generation f98cebfba11dfbb227910600536dc406d7259b7662ed4d888cac1eb144ae5390 at tests/journey.rs:129"
+expression: png
+extension: png
+snapshot_kind: binary
+---
