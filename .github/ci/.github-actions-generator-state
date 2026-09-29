@@ -2,16 +2,16 @@
 schema = 2
 [inputs]
 config	285b1871d8bfd677
-scan	60e6120574baac4f
+scan	293cc8860062c06e
 generator	69
 [outputs]
 .github/AGENTS.md	02ebb7198c435e9b
 .github/actionlint.yaml	c642e98fce5b1906
-.github/ci/project.toml	ad7ffa0b33a91e73
-.github/workflows/ci-main.yml	a2c9fc678adf9de8
+.github/ci/project.toml	fd7d62a69ce7ffbf
+.github/workflows/ci-main.yml	dc5b5ea4f96b30c0
 .github/workflows/ci-policy.yml	f58d3e5e1827497e
-.github/workflows/ci-pr.yml	88d58f86b6ad09d7
-.github/workflows/ci-unit-rust.yml	bb3632c49589d97b
+.github/workflows/ci-pr.yml	e50607571c2c214d
+.github/workflows/ci-unit-rust.yml	7e2d6ced480ac06d
 .github/workflows/maintenance.yml	ff88945f34f71efd
 .github/workflows/nightly.yml	0659fbb3d6af2359
 config/fleet/velnor-host.env	d14b419216449423
