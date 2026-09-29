@@ -147,39 +147,31 @@ pub(crate) mod guardian_unix {
         deadline: Option<Instant>,
         teardown_error: Option<String>,
     ) -> GuardianReport {
-        let mk = |child_pid, pgid, containment| GuardianReport {
-            child_pid,
-            pgid,
-            sid_verified: false,
-            start_verified: None,
-            signalled: Vec::new(),
-            survivors: Vec::new(),
-            containment,
-            teardown_error: teardown_error.clone(),
-        };
         let Some(child) = child.as_ref() else {
-            return mk(
+            return empty_report(
                 None,
                 None,
                 Containment::Unknown {
                     reason: "child identity unavailable (no pid, exited early, or shared group)"
                         .to_string(),
                 },
+                teardown_error,
             );
         };
         let own = std::process::id();
         let Some(rows) = snapshot() else {
-            return mk(
+            return empty_report(
                 Some(child.pid),
                 Some(child.pgid),
                 Containment::Unknown {
                     reason: "process-table snapshot failed".to_string(),
                 },
+                teardown_error,
             );
         };
         let members: Vec<&ProcRow> = rows.iter().filter(|r| r.pgid == child.pgid).collect();
         if members.iter().any(|m| m.sid != child.sid) {
-            return mk(
+            return empty_report(
                 Some(child.pid),
                 Some(child.pgid),
                 Containment::Refused {
@@ -188,8 +180,62 @@ pub(crate) mod guardian_unix {
                         child.pgid
                     ),
                 },
+                teardown_error,
             );
         }
+        let signals = signal_sweep_targets(child, &members, own);
+        let survivors = settle_survivors(child, deadline, own);
+        let containment = if survivors.is_empty() {
+            Containment::Full
+        } else {
+            Containment::Partial
+        };
+        GuardianReport {
+            child_pid: Some(child.pid),
+            pgid: Some(child.pgid),
+            sid_verified: signals.sid_verified,
+            start_verified: signals.start_verified,
+            signalled: signals.signalled,
+            survivors,
+            containment,
+            teardown_error,
+        }
+    }
+
+    /// Report for a sweep that signalled nothing (refused/unknown).
+    fn empty_report(
+        child_pid: Option<u32>,
+        pgid: Option<i32>,
+        containment: Containment,
+        teardown_error: Option<String>,
+    ) -> GuardianReport {
+        GuardianReport {
+            child_pid,
+            pgid,
+            sid_verified: false,
+            start_verified: None,
+            signalled: Vec::new(),
+            survivors: Vec::new(),
+            containment,
+            teardown_error,
+        }
+    }
+
+    /// What the signal pass did, pid by pid.
+    struct SweepSignals {
+        signalled: Vec<u32>,
+        sid_verified: bool,
+        start_verified: Option<bool>,
+    }
+
+    /// Signal each group member (bounded): never pid 0/1/self, the direct
+    /// child pid only when its start time still matches, every other
+    /// target re-verified (pgid+sid) immediately before the signal.
+    fn signal_sweep_targets(
+        child: &crate::tui_shell::ChildIds,
+        members: &[&ProcRow],
+        own: u32,
+    ) -> SweepSignals {
         let mut signalled = Vec::new();
         let mut sid_verified = true;
         let mut start_verified = None;
@@ -220,7 +266,19 @@ pub(crate) mod guardian_unix {
                 signalled.push(m.pid);
             }
         }
-        // Settle: bounded rescan for survivors.
+        SweepSignals {
+            signalled,
+            sid_verified,
+            start_verified,
+        }
+    }
+
+    /// Settle: bounded rescan for survivors (capped at `MAX_SURVIVORS`).
+    fn settle_survivors(
+        child: &crate::tui_shell::ChildIds,
+        deadline: Option<Instant>,
+        own: u32,
+    ) -> Vec<u32> {
         let settle = deadline
             .map(|d| {
                 d.saturating_duration_since(Instant::now())
@@ -248,20 +306,6 @@ pub(crate) mod guardian_unix {
             std::thread::sleep(Duration::from_millis(25));
         }
         survivors.truncate(MAX_SURVIVORS);
-        let containment = if survivors.is_empty() {
-            Containment::Full
-        } else {
-            Containment::Partial
-        };
-        GuardianReport {
-            child_pid: Some(child.pid),
-            pgid: Some(child.pgid),
-            sid_verified,
-            start_verified,
-            signalled,
-            survivors,
-            containment,
-            teardown_error,
-        }
+        survivors
     }
 }

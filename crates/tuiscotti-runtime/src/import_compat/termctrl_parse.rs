@@ -123,36 +123,8 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
         .get("type")
         .and_then(|v| v.as_str())
         .ok_or_else(|| bad("entry lacks string \"type\"".to_string()))?;
-    let at_ms = |obj: &serde_json::Map<String, serde_json::Value>| -> Result<u64, CompatError> {
-        obj.get("at_ms")
-            .and_then(|v| v.as_u64())
-            .ok_or_else(|| bad("entry lacks numeric \"at_ms\"".to_string()))
-    };
-    let byte_array =
-        |obj: &serde_json::Map<String, serde_json::Value>| -> Result<Vec<u8>, CompatError> {
-            let arr = obj
-                .get("bytes")
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| bad("entry lacks \"bytes\" array".to_string()))?;
-            let mut out = Vec::with_capacity(arr.len());
-            for b in arr {
-                let n = b
-                    .as_u64()
-                    .ok_or_else(|| bad("bytes must be integers".to_string()))?;
-                if n > 255 {
-                    return Err(bad(format!("byte out of range: {n}")));
-                }
-                out.push(n as u8);
-            }
-            Ok(out)
-        };
-    let known: &[&str] = match ty {
-        "output" => &["type", "at_ms", "bytes"],
-        "input" => &["type", "at_ms", "origin", "bytes"],
-        "mouse" => &["type", "at_ms", "event", "bytes"],
-        "resize" => &["type", "at_ms", "cols", "rows", "cell_width", "cell_height"],
-        "marker" => &["type", "at_ms", "name"],
-        _ => return Ok(TermctrlParse::Dropped(format!("unknown entry type {ty:?}"))),
+    let Some(known) = known_entry_fields(ty) else {
+        return Ok(TermctrlParse::Dropped(format!("unknown entry type {ty:?}")));
     };
     if ty == "mouse" && version < 2 {
         return Ok(TermctrlParse::Dropped(
@@ -165,11 +137,80 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
             notes.push(format!("{ty}.{k}"));
         }
     }
-    let event = match ty {
-        "output" => TermctrlEvent::Output {
-            at_ms: at_ms(obj)?,
-            bytes: byte_array(obj)?,
-        },
+    let event = build_termctrl_event(ty, obj, off)?;
+    if notes.is_empty() {
+        Ok(TermctrlParse::Event(event))
+    } else {
+        Ok(TermctrlParse::FieldNotes(notes, event))
+    }
+}
+
+/// Known fields per entry type (`None` = unknown type, reported as dropped).
+fn known_entry_fields(ty: &str) -> Option<&'static [&'static str]> {
+    match ty {
+        "output" => Some(&["type", "at_ms", "bytes"][..]),
+        "input" => Some(&["type", "at_ms", "origin", "bytes"][..]),
+        "mouse" => Some(&["type", "at_ms", "event", "bytes"][..]),
+        "resize" => Some(&["type", "at_ms", "cols", "rows", "cell_width", "cell_height"][..]),
+        "marker" => Some(&["type", "at_ms", "name"][..]),
+        _ => None,
+    }
+}
+
+/// Required numeric `at_ms` of one entry object.
+fn entry_at_ms(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    off: u64,
+) -> Result<u64, CompatError> {
+    obj.get("at_ms")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| CompatError::Content {
+            offset: off,
+            msg: "entry lacks numeric \"at_ms\"".to_string(),
+        })
+}
+
+/// Required `bytes` integer array of one entry object.
+fn entry_byte_array(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    off: u64,
+) -> Result<Vec<u8>, CompatError> {
+    let bad = |m: String| CompatError::Content {
+        offset: off,
+        msg: m,
+    };
+    let arr = obj
+        .get("bytes")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| bad("entry lacks \"bytes\" array".to_string()))?;
+    let mut out = Vec::with_capacity(arr.len());
+    for b in arr {
+        let n = b
+            .as_u64()
+            .ok_or_else(|| bad("bytes must be integers".to_string()))?;
+        if n > 255 {
+            return Err(bad(format!("byte out of range: {n}")));
+        }
+        out.push(n as u8);
+    }
+    Ok(out)
+}
+
+/// Build the typed event for a known `type` (gated by the caller).
+fn build_termctrl_event(
+    ty: &str,
+    obj: &serde_json::Map<String, serde_json::Value>,
+    off: u64,
+) -> Result<TermctrlEvent, CompatError> {
+    let bad = |m: String| CompatError::Content {
+        offset: off,
+        msg: m,
+    };
+    match ty {
+        "output" => Ok(TermctrlEvent::Output {
+            at_ms: entry_at_ms(obj, off)?,
+            bytes: entry_byte_array(obj, off)?,
+        }),
         "input" => {
             let origin = obj
                 .get("origin")
@@ -178,16 +219,16 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
             if origin != "client" && origin != "host" {
                 return Err(bad(format!("bad input origin {origin:?}")));
             }
-            TermctrlEvent::Input {
-                at_ms: at_ms(obj)?,
+            Ok(TermctrlEvent::Input {
+                at_ms: entry_at_ms(obj, off)?,
                 origin: origin.to_string(),
-                bytes: byte_array(obj)?,
-            }
+                bytes: entry_byte_array(obj, off)?,
+            })
         }
-        "mouse" => TermctrlEvent::Mouse {
-            at_ms: at_ms(obj)?,
-            bytes: byte_array(obj)?,
-        },
+        "mouse" => Ok(TermctrlEvent::Mouse {
+            at_ms: entry_at_ms(obj, off)?,
+            bytes: entry_byte_array(obj, off)?,
+        }),
         "resize" => {
             let dim = |key: &str| -> Result<u16, CompatError> {
                 let n = obj
@@ -199,11 +240,11 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
                 }
                 Ok(n as u16)
             };
-            TermctrlEvent::Resize {
-                at_ms: at_ms(obj)?,
+            Ok(TermctrlEvent::Resize {
+                at_ms: entry_at_ms(obj, off)?,
                 cols: dim("cols")?,
                 rows: dim("rows")?,
-            }
+            })
         }
         "marker" => {
             let name = obj
@@ -213,16 +254,11 @@ fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlPar
             if name.is_empty() {
                 return Err(bad("marker name must be nonempty".to_string()));
             }
-            TermctrlEvent::Marker {
-                at_ms: at_ms(obj)?,
+            Ok(TermctrlEvent::Marker {
+                at_ms: entry_at_ms(obj, off)?,
                 name: name.to_string(),
-            }
+            })
         }
         _ => unreachable!("type gated above"),
-    };
-    if notes.is_empty() {
-        Ok(TermctrlParse::Event(event))
-    } else {
-        Ok(TermctrlParse::FieldNotes(notes, event))
     }
 }

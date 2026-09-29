@@ -147,7 +147,11 @@ impl Guardian {
 impl Drop for Guardian {
     fn drop(&mut self) {
         if let Some(mut s) = self.session.take() {
-            let _ = s.close();
+            // Drop-time teardown is best-effort: the group sweep below
+            // still runs even when the session close fails.
+            if s.close().is_err() {
+                // Session close failed in Drop; the sweep still runs.
+            }
         }
         if !self.swept {
             self.swept = true;

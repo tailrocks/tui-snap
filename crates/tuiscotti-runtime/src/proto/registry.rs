@@ -284,7 +284,11 @@ pub(crate) mod pty_registry {
         let cancel = crate::tui::CancelToken::new();
         match s.wait_exit(deadline, &cancel) {
             Ok(ew) => {
-                let _ = s.close();
+                // Teardown is best-effort once the session left the registry:
+                // the observed exit verdict stays authoritative.
+                if s.close().is_err() {
+                    // Close failed after exit; the exit evidence stands.
+                }
                 Ok(OpResult::Exited {
                     session: session.to_string(),
                     code: ew.status.code(),
@@ -293,7 +297,11 @@ pub(crate) mod pty_registry {
                 })
             }
             Err(crate::tui::WaitError::Timeout { evidence, .. }) => {
-                let _ = s.close();
+                // Teardown is best-effort: the timeout verdict below stays
+                // authoritative even when the forced close also fails.
+                if s.close().is_err() {
+                    // Close failed during timeout teardown; timeout stands.
+                }
                 Err(OpError::new(
                     "timeout",
                     format!(
@@ -304,7 +312,11 @@ pub(crate) mod pty_registry {
                 .with_session(session))
             }
             Err(e) => {
-                let _ = s.close();
+                // Teardown is best-effort: the wait error below stays
+                // authoritative even when the close also fails.
+                if s.close().is_err() {
+                    // Close failed during error teardown; wait error stands.
+                }
                 Err(wait_err(e).with_session(session))
             }
         }

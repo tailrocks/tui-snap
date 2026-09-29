@@ -209,6 +209,27 @@ impl GroupedStore {
         name: &str,
         pixel_threshold: f64,
     ) -> Result<Option<CompareOutcome>, SnapshotError> {
+        let Some((verdict, status)) = self.load_verdict_doc(name, pixel_threshold)? else {
+            return Ok(None);
+        };
+        if !self.verdict_hashes_match(name, &verdict)? {
+            return Ok(None);
+        }
+        let actual = artifact_paths(&self.actual_root, name);
+        let approved = artifact_paths(&self.approved_root, name);
+        Ok(Some(self.verdict_outcome(
+            name, &verdict, status, &actual, &approved,
+        )))
+    }
+
+    /// Load the persisted verdict doc plus its status, when the scalar
+    /// freshness checks pass: same name, same pixel threshold, and a
+    /// `checks_performed` array. Anything else is `None` (stale).
+    fn load_verdict_doc(
+        &self,
+        name: &str,
+        pixel_threshold: f64,
+    ) -> Result<Option<(serde_json::Value, Status)>, SnapshotError> {
         let text = match read_optional(&verdict_path(&self.actual_root, name))? {
             Some(bytes) => match String::from_utf8(bytes) {
                 Ok(t) => t,
@@ -240,6 +261,16 @@ impl GroupedStore {
         {
             return Ok(None);
         }
+        Ok(Some((verdict, status)))
+    }
+
+    /// Hash freshness: every actual artifact still matches the sealed hash,
+    /// and the approved side still matches in presence + hashes.
+    fn verdict_hashes_match(
+        &self,
+        name: &str,
+        verdict: &serde_json::Value,
+    ) -> Result<bool, SnapshotError> {
         let actual = artifact_paths(&self.actual_root, name);
         let approved = artifact_paths(&self.approved_root, name);
         let actual_sealed = verdict.get("actual").cloned().unwrap_or_default();
@@ -252,10 +283,10 @@ impl GroupedStore {
         ] {
             let current = match read_optional(path)? {
                 Some(bytes) => sha256_hex(&bytes),
-                None => return Ok(None),
+                None => return Ok(false),
             };
             if actual_sealed.get(key).and_then(|v| v.as_str()) != Some(current.as_str()) {
-                return Ok(None);
+                return Ok(false);
             }
         }
         let approved_sealed = verdict.get("approved").cloned().unwrap_or_default();
@@ -268,14 +299,27 @@ impl GroupedStore {
             let current = read_optional(path)?.map(|bytes| sha256_hex(&bytes));
             let sealed = approved_sealed.get(key).and_then(|v| v.as_str());
             if current.as_deref() != sealed {
-                return Ok(None);
+                return Ok(false);
             }
         }
+        Ok(true)
+    }
+
+    /// Rebuild the sealed verdict as a report row. No PNG bytes are loaded;
+    /// the report links images from disk.
+    fn verdict_outcome(
+        &self,
+        name: &str,
+        verdict: &serde_json::Value,
+        status: Status,
+        actual: &ArtifactPaths,
+        approved: &ArtifactPaths,
+    ) -> CompareOutcome {
         let diff = {
             let p = sibling_diff(&self.diff_root, name);
             p.exists().then_some(p)
         };
-        Ok(Some(CompareOutcome {
+        CompareOutcome {
             name: name.to_string(),
             status,
             cell_diffs: Vec::new(),
@@ -299,7 +343,7 @@ impl GroupedStore {
                 .and_then(|v| v.as_str())
                 .unwrap_or_default()
                 .to_string(),
-        }))
+        }
     }
 
     /// Report row for incomplete evidence (C08-grouped).

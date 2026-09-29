@@ -81,7 +81,12 @@ pub fn session_start_os(
     // process exits it is still ours — without a wait it would linger as a
     // zombie and `pid_alive` would misreport it. The thread only reaps.
     std::thread::spawn(move || {
-        let _ = child.wait();
+        // Reap only: the detached child's exit status is unobserved by
+        // design (liveness comes from `pid_alive`), so a wait failure
+        // changes nothing.
+        if child.wait().is_err() {
+            // Reap failed; the zombie (if any) outlives us.
+        }
     });
     Ok(SessionInfo {
         name: ep.name,
@@ -110,11 +115,16 @@ pub fn session_stop(name: &str) -> Result<SessionInfo, OpError> {
         #[cfg(all(unix, feature = "pty"))]
         if pid_alive(ep.pid) {
             // No libc: best-effort `kill -KILL` (the workspace forbids
-            // `unsafe`).
-            let _ = std::process::Command::new("kill")
+            // `unsafe`). Endpoint removal below proceeds regardless: a
+            // surviving pid simply reappears as live on the next list.
+            let killed = std::process::Command::new("kill")
                 .arg("-KILL")
                 .arg(ep.pid.to_string())
-                .status();
+                .status()
+                .is_ok_and(|s| s.success());
+            if !killed {
+                // SIGKILL delivery failed; the endpoint still goes away.
+            }
         }
     }
     std::fs::remove_file(endpoint_path(&dir, name))

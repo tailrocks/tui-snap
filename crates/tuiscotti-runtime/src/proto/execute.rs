@@ -210,28 +210,13 @@ fn execute_diff(expected_b64: &str, actual_b64: &str) -> Result<OpResult, OpErro
 // ---------------------------------------------------------------------------
 
 /// Plain-text projection of a screen: symbols row by row, continuations
-/// skipped, trailing whitespace trimmed per row.
+/// skipped, trailing whitespace trimmed per row (`trim_end` semantics).
+///
+/// Single implementation lives in [`crate::observe::screen_text`]; this is
+/// the proto-namespace alias so machine-view callers keep one path.
 #[must_use]
 pub fn screen_text(screen: &tuiscotti_core::screen::Screen) -> String {
-    let mut out = String::new();
-    for y in 0..screen.rows() {
-        if y > 0 {
-            out.push('\n');
-        }
-        let mut row = String::new();
-        for x in 0..screen.cols() {
-            if let Some(c) = screen.get(x, y) {
-                if !c.continuation {
-                    row.push_str(&c.symbol);
-                }
-            }
-        }
-        while row.ends_with([' ', '\t']) {
-            row.pop();
-        }
-        out.push_str(&row);
-    }
-    out
+    crate::observe::screen_text(screen)
 }
 
 #[must_use]

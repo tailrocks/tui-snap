@@ -92,6 +92,32 @@ impl Store {
         actual: &Frame,
         pixel_threshold: f64,
     ) -> Result<CompareOutcome, SnapshotError> {
+        let candidate = self.write_candidate(renderer, name, actual, pixel_threshold)?;
+        let approved_frame_path = self.approved_frame(name);
+        let mut outcome = fresh_outcome(name, actual, &candidate, &approved_frame_path);
+        let Some(approved) = self.load_approved_frame(&approved_frame_path, &mut outcome)? else {
+            return Ok(outcome);
+        };
+        outcome.digest_expected = Some(format!("{:016x}", approved.digest()));
+        compare_cells(actual, &approved, &mut outcome);
+        if self.compare_pixels(name, &candidate, &mut outcome)? {
+            return Ok(outcome);
+        }
+        if matches!(outcome.status, Status::MissingApproval) {
+            outcome.status = Status::Matched;
+        }
+        Ok(outcome)
+    }
+
+    /// Validate, render, and write the actual candidate trio (frame/PNG/
+    /// fidelity) plus its sealing manifest. Returns what the gates need.
+    fn write_candidate(
+        &self,
+        renderer: &mut render::Renderer,
+        name: &str,
+        actual: &Frame,
+        pixel_threshold: f64,
+    ) -> Result<CandidateWrites, SnapshotError> {
         // F1: every path below joins `name` — reject escapes before any write.
         crate::grouped::validate_name(name)?;
         // C04: invalid tolerances are rejected, never silently applied — a
@@ -101,13 +127,12 @@ impl Store {
         let perceptual = diff::PerceptualPolicy::new(pixel_threshold)?;
         actual.validate().map_err(SnapshotError::from)?;
         let rendered = renderer.render(actual).map_err(SnapshotError::from)?;
-        let actual_png_bytes = &rendered.png;
         let actual_frame_path = self.actual_frame(name);
         let actual_png_path = self.actual_png(name);
         let frame_bytes = actual.to_json();
         let fidelity_bytes = rendered.fidelity.to_json();
         write_atomic(&actual_frame_path, frame_bytes.as_bytes())?;
-        write_atomic(&actual_png_path, actual_png_bytes)?;
+        write_atomic(&actual_png_path, &rendered.png)?;
         write_atomic(
             &Self::fidelity_sidecar(&actual_png_path),
             fidelity_bytes.as_bytes(),
@@ -119,7 +144,7 @@ impl Store {
         let manifest = serde_json::json!({
             "name": name,
             "frame_sha256": sha256_hex(frame_bytes.as_bytes()),
-            "png_sha256": sha256_hex(actual_png_bytes),
+            "png_sha256": sha256_hex(&rendered.png),
             "fidelity_sha256": sha256_hex(fidelity_bytes.as_bytes()),
             "profile": renderer.profile().name,
             "complete": true,
@@ -127,31 +152,24 @@ impl Store {
         let manifest_json = serde_json::to_string_pretty(&manifest)
             .map_err(|e| SnapshotError(format!("candidate manifest failed to serialize: {e}")))?;
         write_atomic(&self.actual_manifest(name), manifest_json.as_bytes())?;
-
-        let approved_frame_path = self.approved_frame(name);
-        let approved_png_path = self.approved_png(name);
-        let digest_actual = format!("{:016x}", actual.digest());
-        let mut outcome = CompareOutcome {
-            name: name.to_string(),
-            status: Status::MissingApproval,
-            cell_diffs: Vec::new(),
-            cell_diff_total: 0,
-            pixel_score: None,
-            approved_png_regenerated: false,
-            digest_expected: None,
-            digest_actual,
-            actual_frame: actual_frame_path.clone(),
+        Ok(CandidateWrites {
+            png_bytes: rendered.png,
+            actual_frame: actual_frame_path,
             actual_png: actual_png_path,
-            expected_frame: approved_frame_path.clone(),
-            expected_png: None,
-            expected_png_bytes: None,
-            diff_png: None,
-            note: String::new(),
-        };
+            perceptual,
+        })
+    }
 
-        let approved_text = match std::fs::read_to_string(&approved_frame_path) {
+    /// Load the approved frame. `None` (missing file, or a corrupt file
+    /// recorded on the outcome) ends the check with the outcome as-is.
+    fn load_approved_frame(
+        &self,
+        approved_frame_path: &Path,
+        outcome: &mut CompareOutcome,
+    ) -> Result<Option<Frame>, SnapshotError> {
+        let approved_text = match std::fs::read_to_string(approved_frame_path) {
             Ok(t) => t,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(outcome),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => {
                 return Err(SnapshotError(format!(
                     "cannot read {}: {e}",
@@ -159,68 +177,32 @@ impl Store {
                 )));
             }
         };
-        let approved = match Frame::from_json(&approved_text) {
-            Ok(f) => f,
+        match Frame::from_json(&approved_text) {
+            Ok(f) => Ok(Some(f)),
             Err(e) => {
                 outcome.status = Status::CorruptApproval;
                 outcome.note = format!(
                     "approved file {} is corrupt: {e}",
                     approved_frame_path.display()
                 );
-                return Ok(outcome);
-            }
-        };
-        outcome.digest_expected = Some(format!("{:016x}", approved.digest()));
-
-        // Cell comparison (exact; dimension mismatch is a status, not a diff).
-        match actual.diff_cells(&approved) {
-            Err(_) => {
-                outcome.status = Status::DimensionMismatch;
-            }
-            Ok(positions) => {
-                outcome.cell_diff_total = positions.len();
-                // Cursor-only change: every reported position holds equal
-                // cells, so cell summaries would print identical text twice.
-                // Say what actually changed instead.
-                let cells_equal = positions.iter().all(|(x, y)| {
-                    approved.get(*x, *y).map(summarize) == actual.get(*x, *y).map(summarize)
-                });
-                if cells_equal && outcome.cell_diff_total > 0 {
-                    outcome.cell_diffs.push(CellDiff {
-                        x: actual.cursor.x,
-                        y: actual.cursor.y,
-                        expected: Frame::summarize_cursor(&approved.cursor),
-                        actual: Frame::summarize_cursor(&actual.cursor),
-                    });
-                } else {
-                    for (x, y) in positions.into_iter().take(MAX_CELL_DIFFS) {
-                        let e = approved
-                            .get(x, y)
-                            .map(summarize)
-                            .unwrap_or_else(|| "∅".into());
-                        let a = actual
-                            .get(x, y)
-                            .map(summarize)
-                            .unwrap_or_else(|| "∅".into());
-                        outcome.cell_diffs.push(CellDiff {
-                            x,
-                            y,
-                            expected: e,
-                            actual: a,
-                        });
-                    }
-                }
-                if outcome.cell_diff_total > 0 {
-                    outcome.status = Status::CellsDiffer;
-                }
+                Ok(None)
             }
         }
+    }
 
-        // Pixel comparison over decoded PNGs. C06: expected bytes come
-        // from disk or the check fails — a missing approved PNG is
-        // MissingApproval, never regenerated in memory (frozen visual
-        // mode: a renderer upgrade must fail loudly, not silently
-        // re-render the expectation it is supposed to gate).
+    /// Pixel comparison over decoded PNGs. C06: expected bytes come
+    /// from disk or the check fails — a missing approved PNG is
+    /// MissingApproval, never regenerated in memory (frozen visual
+    /// mode: a renderer upgrade must fail loudly, not silently
+    /// re-render the expectation it is supposed to gate).
+    /// Returns `true` when the outcome is final (missing approved PNG).
+    fn compare_pixels(
+        &self,
+        name: &str,
+        candidate: &CandidateWrites,
+        outcome: &mut CompareOutcome,
+    ) -> Result<bool, SnapshotError> {
+        let approved_png_path = self.approved_png(name);
         let approved_png_bytes = match std::fs::read(&approved_png_path) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -230,7 +212,7 @@ impl Store {
                      disk or the check fails",
                     approved_png_path.display()
                 );
-                return Ok(outcome);
+                return Ok(true);
             }
             Err(e) => {
                 return Err(SnapshotError(format!(
@@ -240,13 +222,13 @@ impl Store {
             }
         };
         outcome.expected_png = Some(approved_png_path);
-        let verdict = diff::compare_png(&approved_png_bytes, actual_png_bytes)?;
+        let verdict = diff::compare_png(&approved_png_bytes, &candidate.png_bytes)?;
         outcome.expected_png_bytes = Some(approved_png_bytes);
         if !verdict.dims_equal {
             outcome.status = Status::DimensionMismatch;
         } else {
             outcome.pixel_score = Some(verdict.score);
-            if !perceptual.allows(verdict.score)
+            if !candidate.perceptual.allows(verdict.score)
                 && !matches!(
                     outcome.status,
                     Status::CellsDiffer | Status::DimensionMismatch
@@ -260,10 +242,86 @@ impl Store {
                 outcome.diff_png = Some(path);
             }
         }
+        Ok(false)
+    }
+}
 
-        if matches!(outcome.status, Status::MissingApproval) {
-            outcome.status = Status::Matched;
+/// What the gates need from the written candidate.
+struct CandidateWrites {
+    png_bytes: Vec<u8>,
+    actual_frame: PathBuf,
+    actual_png: PathBuf,
+    perceptual: diff::PerceptualPolicy,
+}
+
+/// Fresh outcome skeleton: `MissingApproval` until a gate says otherwise.
+fn fresh_outcome(
+    name: &str,
+    actual: &Frame,
+    candidate: &CandidateWrites,
+    approved_frame_path: &Path,
+) -> CompareOutcome {
+    CompareOutcome {
+        name: name.to_string(),
+        status: Status::MissingApproval,
+        cell_diffs: Vec::new(),
+        cell_diff_total: 0,
+        pixel_score: None,
+        approved_png_regenerated: false,
+        digest_expected: None,
+        digest_actual: format!("{:016x}", actual.digest()),
+        actual_frame: candidate.actual_frame.clone(),
+        actual_png: candidate.actual_png.clone(),
+        expected_frame: approved_frame_path.to_path_buf(),
+        expected_png: None,
+        expected_png_bytes: None,
+        diff_png: None,
+        note: String::new(),
+    }
+}
+
+/// Cell comparison (exact; dimension mismatch is a status, not a diff).
+fn compare_cells(actual: &Frame, approved: &Frame, outcome: &mut CompareOutcome) {
+    match actual.diff_cells(approved) {
+        Err(_) => {
+            outcome.status = Status::DimensionMismatch;
         }
-        Ok(outcome)
+        Ok(positions) => {
+            outcome.cell_diff_total = positions.len();
+            // Cursor-only change: every reported position holds equal
+            // cells, so cell summaries would print identical text twice.
+            // Say what actually changed instead.
+            let cells_equal = positions.iter().all(|(x, y)| {
+                approved.get(*x, *y).map(summarize) == actual.get(*x, *y).map(summarize)
+            });
+            if cells_equal && outcome.cell_diff_total > 0 {
+                outcome.cell_diffs.push(CellDiff {
+                    x: actual.cursor.x,
+                    y: actual.cursor.y,
+                    expected: Frame::summarize_cursor(&approved.cursor),
+                    actual: Frame::summarize_cursor(&actual.cursor),
+                });
+            } else {
+                for (x, y) in positions.into_iter().take(MAX_CELL_DIFFS) {
+                    let e = approved
+                        .get(x, y)
+                        .map(summarize)
+                        .unwrap_or_else(|| "∅".into());
+                    let a = actual
+                        .get(x, y)
+                        .map(summarize)
+                        .unwrap_or_else(|| "∅".into());
+                    outcome.cell_diffs.push(CellDiff {
+                        x,
+                        y,
+                        expected: e,
+                        actual: a,
+                    });
+                }
+            }
+            if outcome.cell_diff_total > 0 {
+                outcome.status = Status::CellsDiffer;
+            }
+        }
     }
 }

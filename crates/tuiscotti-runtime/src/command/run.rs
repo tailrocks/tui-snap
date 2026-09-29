@@ -2,7 +2,7 @@ use super::*;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
+use std::process::{Child, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
@@ -122,46 +122,17 @@ impl Command {
             std::thread::spawn(move || {
                 // Broken pipe only means the child exited without reading
                 // stdin; the child's termination status stays authoritative.
-                let _ = stdin.write_all(&input);
+                if stdin.write_all(&input).is_err() {
+                    // Child exited without reading stdin; status stands.
+                }
             });
         }
 
         let deadline = self.timeout.map(|t| start + t);
-        let status = loop {
-            if limit_hit.load(Ordering::SeqCst) {
-                let _ = child.kill();
-                let _ = child.wait();
-                out.truncated = true;
-                break Termination::OutputLimit;
-            }
-            match child.try_wait() {
-                Ok(Some(st)) => {
-                    // A limit observed while the child exited concurrently
-                    // still wins: bytes were dropped either way.
-                    if limit_hit.load(Ordering::SeqCst) {
-                        out.truncated = true;
-                        break Termination::OutputLimit;
-                    }
-                    break classify(st);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    // try_wait failing after a live spawn should not happen;
-                    // kill defensively and report what we know.
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    out.error = Some(SpawnError::wait_failed(e.to_string()));
-                    break Termination::SpawnError;
-                }
-            }
-            if deadline.is_some_and(|d| Instant::now() >= d) {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Termination::Timeout;
-            }
-            std::thread::sleep(POLL_INTERVAL);
-        };
-        out.status = status;
+        let supervised = supervise_child(&mut child, &limit_hit, deadline);
+        out.status = supervised.status;
+        out.truncated = supervised.truncated;
+        out.error = supervised.error;
 
         // Bounded late-output collection after the reap (R02): descendants
         // may still hold the pipes open, so each stream gets drain_deadline.
@@ -221,7 +192,74 @@ fn spawn_drain(
                 Err(_) => break, // Pipe error: return what we have.
             }
         }
-        let _ = tx.send(buf);
+        // The supervisor may have stopped listening (drain deadline);
+        // then these bytes are already counted as truncated.
+        if tx.send(buf).is_err() {
+            // Supervisor gone; the drain still exits cleanly.
+        }
     });
     rx
+}
+
+/// What the supervisor loop decided about the child.
+struct Supervised {
+    status: Termination,
+    truncated: bool,
+    error: Option<SpawnError>,
+}
+
+/// Poll the child until exit, output limit, or deadline, killing and
+/// reaping on the failure paths. See [`Command::run`].
+fn supervise_child(
+    child: &mut Child,
+    limit_hit: &AtomicBool,
+    deadline: Option<Instant>,
+) -> Supervised {
+    let status = loop {
+        if limit_hit.load(Ordering::SeqCst) {
+            kill_and_reap(child);
+            break (Termination::OutputLimit, true, None);
+        }
+        match child.try_wait() {
+            Ok(Some(st)) => {
+                // A limit observed while the child exited concurrently
+                // still wins: bytes were dropped either way.
+                if limit_hit.load(Ordering::SeqCst) {
+                    break (Termination::OutputLimit, true, None);
+                }
+                break (classify(st), false, None);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                // try_wait failing after a live spawn should not happen;
+                // kill defensively and report what we know.
+                kill_and_reap(child);
+                break (
+                    Termination::SpawnError,
+                    false,
+                    Some(SpawnError::wait_failed(e.to_string())),
+                );
+            }
+        }
+        if deadline.is_some_and(|d| Instant::now() >= d) {
+            kill_and_reap(child);
+            break (Termination::Timeout, false, None);
+        }
+        std::thread::sleep(POLL_INTERVAL);
+    };
+    Supervised {
+        status: status.0,
+        truncated: status.1,
+        error: status.2,
+    }
+}
+
+/// Best-effort kill + reap: the child may have exited concurrently, and
+/// the supervisor's verdict stays authoritative either way.
+fn kill_and_reap(child: &mut Child) {
+    let kill_outcome = child.kill();
+    let reap_outcome = child.wait();
+    if kill_outcome.is_err() || reap_outcome.is_err() {
+        // Best-effort only; the caller's verdict stands.
+    }
 }

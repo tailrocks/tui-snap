@@ -96,81 +96,7 @@ pub fn write_report_at(
         failed_n
     );
     for e in ordered {
-        let o = &e.outcome;
-        body.push_str(&format!(
-            "<section id=\"{}\"><h2>{} — {}</h2>\n",
-            esc_attr(&o.name),
-            esc_html(&o.name),
-            o.status.as_str()
-        ));
-        body.push_str("<div class=\"imgs\">");
-        let expected_src = match &o.expected_png {
-            Some(p) if p.exists() => Some(rel_href(report_dir, p)),
-            _ => match &o.expected_png_bytes {
-                Some(bytes) => Some(rel_href(
-                    report_dir,
-                    &write_report_sidecar(report_dir, &o.name, "expected", bytes)?,
-                )),
-                None => None,
-            },
-        };
-        if let Some(src) = expected_src {
-            body.push_str(&format!(
-                "<figure><figcaption>expected</figcaption><img src=\"{src}\" alt=\"expected {}\"></figure>",
-                esc_attr(&o.name)
-            ));
-        } else {
-            body.push_str(
-                "<figure><figcaption>expected</figcaption><p>missing approval</p></figure>",
-            );
-        }
-        if o.actual_png.exists() {
-            let src = rel_href(report_dir, &o.actual_png);
-            body.push_str(&format!(
-                "<figure><figcaption>actual</figcaption><img src=\"{src}\" alt=\"actual {}\"></figure>",
-                esc_attr(&o.name)
-            ));
-        }
-        if let Some(p) = o.diff_png.as_ref().filter(|p| p.exists()) {
-            let src = rel_href(report_dir, p);
-            body.push_str(&format!(
-                "<figure><figcaption>diff</figcaption><img src=\"{src}\" alt=\"diff {}\"></figure>",
-                esc_attr(&o.name)
-            ));
-        }
-        body.push_str("</div>");
-        if o.cell_diff_total > 0 {
-            body.push_str(&format!(
-                "<p>{} differing cell(s):</p><table><tr><th>x</th><th>y</th><th>expected</th><th>actual</th></tr>",
-                o.cell_diff_total
-            ));
-            for d in &o.cell_diffs {
-                body.push_str(&format!(
-                    "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    d.x,
-                    d.y,
-                    esc_html(&d.expected),
-                    esc_html(&d.actual)
-                ));
-            }
-            body.push_str("</table>");
-        }
-        if let Some(s) = o.pixel_score {
-            body.push_str(&format!("<p>pixel similarity: {s:.6}</p>"));
-        }
-        if o.actual_frame.exists() {
-            body.push_str(&format!(
-                "<p><a href=\"{}\">actual frame.json</a></p>",
-                rel_href(report_dir, &o.actual_frame)
-            ));
-        }
-        if o.expected_frame.exists() {
-            body.push_str(&format!(
-                "<p><a href=\"{}\">expected frame.json</a></p>",
-                rel_href(report_dir, &o.expected_frame)
-            ));
-        }
-        body.push_str("</section>");
+        append_entry_section(&mut body, report_dir, e)?;
     }
     let profile_line = entries
         .first()
@@ -189,6 +115,100 @@ pub fn write_report_at(
     );
     write_atomic(path, html.as_bytes())?;
     Ok(path.to_path_buf())
+}
+
+/// One `<section>` of the report: header, images, cell table, scores,
+/// and frame links for a single entry.
+fn append_entry_section(
+    body: &mut String,
+    report_dir: &Path,
+    e: &ReportEntry,
+) -> Result<(), SnapshotError> {
+    let o = &e.outcome;
+    body.push_str(&format!(
+        "<section id=\"{}\"><h2>{} — {}</h2>\n",
+        esc_attr(&o.name),
+        esc_html(&o.name),
+        o.status.as_str()
+    ));
+    append_entry_images(body, report_dir, o)?;
+    if o.cell_diff_total > 0 {
+        body.push_str(&format!(
+            "<p>{} differing cell(s):</p><table><tr><th>x</th><th>y</th><th>expected</th><th>actual</th></tr>",
+            o.cell_diff_total
+        ));
+        for d in &o.cell_diffs {
+            body.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                d.x,
+                d.y,
+                esc_html(&d.expected),
+                esc_html(&d.actual)
+            ));
+        }
+        body.push_str("</table>");
+    }
+    if let Some(s) = o.pixel_score {
+        body.push_str(&format!("<p>pixel similarity: {s:.6}</p>"));
+    }
+    if o.actual_frame.exists() {
+        body.push_str(&format!(
+            "<p><a href=\"{}\">actual frame.json</a></p>",
+            rel_href(report_dir, &o.actual_frame)
+        ));
+    }
+    if o.expected_frame.exists() {
+        body.push_str(&format!(
+            "<p><a href=\"{}\">expected frame.json</a></p>",
+            rel_href(report_dir, &o.expected_frame)
+        ));
+    }
+    body.push_str("</section>");
+    Ok(())
+}
+
+/// The expected/actual/diff image row of one entry section. Expected PNG
+/// bytes that live only in memory spill to a `report-media/` sidecar.
+fn append_entry_images(
+    body: &mut String,
+    report_dir: &Path,
+    o: &CompareOutcome,
+) -> Result<(), SnapshotError> {
+    body.push_str("<div class=\"imgs\">");
+    let expected_src = match &o.expected_png {
+        Some(p) if p.exists() => Some(rel_href(report_dir, p)),
+        _ => match &o.expected_png_bytes {
+            Some(bytes) => Some(rel_href(
+                report_dir,
+                &write_report_sidecar(report_dir, &o.name, "expected", bytes)?,
+            )),
+            None => None,
+        },
+    };
+    if let Some(src) = expected_src {
+        body.push_str(&format!(
+            "<figure><figcaption>expected</figcaption><img src=\"{src}\" alt=\"expected {}\"></figure>",
+            esc_attr(&o.name)
+        ));
+    } else {
+        body.push_str("<figure><figcaption>expected</figcaption><p>missing approval</p></figure>");
+    }
+    if o.actual_png.exists() {
+        let src = rel_href(report_dir, &o.actual_png);
+        body.push_str(&format!(
+            "<figure><figcaption>actual</figcaption><img src=\"{src}\" alt=\"actual {}\"></figure>",
+            esc_attr(&o.name)
+        ));
+    }
+    if let Some(p) = o.diff_png.as_ref().filter(|p| p.exists()) {
+        let src = rel_href(report_dir, p);
+        body.push_str(&format!(
+            "<figure><figcaption>diff</figcaption><img src=\"{src}\" alt=\"diff {}\"></figure>",
+            esc_attr(&o.name)
+        ));
+    }
+    body.push_str("</div>");
+    Ok(())
 }
 
 fn esc_attr(s: &str) -> String {

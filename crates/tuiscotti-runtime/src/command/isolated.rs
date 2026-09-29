@@ -120,7 +120,11 @@ impl IsolatedEnv {
 impl Drop for IsolatedEnv {
     fn drop(&mut self) {
         if !self.keep {
-            let _ = std::fs::remove_dir_all(&self.root);
+            // Best-effort cleanup from Drop: a failure leaves the temp root
+            // behind for inspection rather than panicking.
+            if std::fs::remove_dir_all(&self.root).is_err() {
+                // Nothing further to do; Drop must not fail.
+            }
         }
     }
 }
@@ -146,7 +150,9 @@ pub fn isolated_env() -> std::io::Result<IsolatedEnv> {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700));
+                    // The fixture promises a 0700 root: a chmod failure is an
+                    // error, never a silently world-readable temp dir.
+                    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
                 }
                 let env = IsolatedEnv {
                     root,

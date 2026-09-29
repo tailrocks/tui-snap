@@ -144,7 +144,12 @@ mod pty_paths {
             self.inner.changed.notify_all();
             if let Ok(mut guard) = self.thread.lock() {
                 if let Some(h) = guard.take() {
-                    let _ = h.join();
+                    // A panicked poll thread still ends the subscription:
+                    // stop stays idempotent and the queue is dropped either
+                    // way, so the join outcome changes nothing.
+                    if h.join().is_err() {
+                        // Poll thread panicked; already stopped.
+                    }
                 }
             }
         }

@@ -20,8 +20,14 @@ pub fn serve<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
             continue;
         }
         if let Some(resp) = handle_request(&line) {
-            let _ = writeln!(writer, "{resp}");
-            let _ = writer.flush();
+            // An unwritable client is gone: stop serving instead of spinning
+            // on requests whose responses go nowhere.
+            if writeln!(writer, "{resp}").is_err() {
+                break;
+            }
+            if writer.flush().is_err() {
+                break;
+            }
         }
     }
 }

@@ -251,7 +251,11 @@ struct ReplayListener {
 
 impl EventListener for ReplayListener {
     fn send_event(&self, event: Event) {
-        let _ = self.tx.send(event);
+        // The drain runs after the feed, so the receiver is alive; a
+        // failure would only mean replay was abandoned mid-parse.
+        if self.tx.send(event).is_err() {
+            // Receiver gone; replay is abandoned anyway.
+        }
     }
 }
 

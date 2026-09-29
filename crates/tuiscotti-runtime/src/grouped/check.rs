@@ -36,21 +36,6 @@ pub(crate) fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, SnapshotErro
     }
 }
 
-/// Locate the first differing byte of two blobs, for human diagnostics.
-fn first_difference(approved: &[u8], actual: &[u8]) -> String {
-    let n = approved.len().min(actual.len());
-    let mut i = 0;
-    while i < n && approved[i] == actual[i] {
-        i += 1;
-    }
-    let line = approved[..i].iter().filter(|&&c| c == b'\n').count() + 1;
-    format!(
-        "first difference at byte {i} (approved line {line}); approved {} bytes, actual {} bytes",
-        approved.len(),
-        actual.len()
-    )
-}
-
 impl GroupedStore {
     /// Check one frame against the approved artifacts. Writes the four
     /// actual artifacts (plus debug sidecars) under the actual root BEFORE
@@ -81,86 +66,29 @@ impl GroupedStore {
         actual: &Frame,
         pixel_threshold: f64,
     ) -> Result<GroupedOutcome, SnapshotError> {
-        validate_name(name)?;
-        actual.validate().map_err(SnapshotError::from)?;
-
-        let actual_ansi = render::ansi_dump(actual);
-        let actual_txt = actual.text();
-
-        let actual_paths = artifact_paths(&self.actual_root, name);
-        let approved_paths = artifact_paths(&self.approved_root, name);
-        // Cheap actuals first: a failing gate still leaves reviewable evidence.
-        write_atomic(&actual_paths.ansi, actual_ansi.as_bytes())?;
-        write_atomic(&actual_paths.txt, actual_txt.as_bytes())?;
-        write_atomic(&actual_paths.frame_json, actual.to_json().as_bytes())?;
-
-        let outcome = CompareOutcome {
-            name: name.to_string(),
-            status: Status::MissingApproval,
-            cell_diffs: Vec::new(),
-            cell_diff_total: 0,
-            pixel_score: None,
-            approved_png_regenerated: false,
-            digest_expected: None,
-            digest_actual: format!("{:016x}", actual.digest()),
-            actual_frame: actual_paths.frame_json.clone(),
-            actual_png: actual_paths.png.clone(),
-            // Never exists in a conforming approved tree (four artifacts
-            // only); reports simply omit the expected-frame panel.
-            expected_frame: approved_paths.frame_json.clone(),
-            expected_png: None,
-            expected_png_bytes: None,
-            diff_png: None,
-            note: String::new(),
-        };
-        let mut grouped = GroupedOutcome {
-            outcome,
-            ansi_match: None,
-            txt_match: None,
-            html_match: None,
-            actual: actual_paths,
-            approved: approved_paths,
-        };
-        let outcome = &mut grouped.outcome;
+        let cheap = self.write_cheap_actuals(name, actual)?;
+        let mut grouped = fresh_grouped(name, &cheap, actual);
 
         // Missing ANY approved artifact fails closed as MissingApproval.
         let approved_ansi = read_optional(&grouped.approved.ansi)?;
         let approved_txt = read_optional(&grouped.approved.txt)?;
         let approved_html = read_optional(&grouped.approved.html)?;
         let approved_png = read_optional(&grouped.approved.png)?;
-        let mut missing = Vec::new();
-        if approved_ansi.is_none() {
-            missing.push(".ansi");
-        }
-        if approved_txt.is_none() {
-            missing.push(".txt");
-        }
-        if approved_html.is_none() {
-            missing.push(".html");
-        }
-        if approved_png.is_none() {
-            missing.push(".png");
-        }
+        let missing = missing_approved_names(
+            approved_ansi.is_none(),
+            approved_txt.is_none(),
+            approved_html.is_none(),
+            approved_png.is_none(),
+        );
         if !missing.is_empty() {
-            let artifacts = renderer
-                .render_artifacts(actual, name)
-                .map_err(SnapshotError::from)?;
-            write_atomic(&grouped.actual.png, &artifacts.png)?;
-            write_atomic(&grouped.actual.html, artifacts.html.as_bytes())?;
-            write_atomic(
-                &fidelity_sidecar(&grouped.actual.png),
-                artifacts.fidelity.to_json().as_bytes(),
+            self.seal_missing_approval(
+                renderer,
+                name,
+                actual,
+                &mut grouped,
+                pixel_threshold,
+                &missing,
             )?;
-            outcome.note = format!(
-                "missing approved artifact(s) for `{name}`: {}",
-                missing.join(" ")
-            );
-            // C06-mirror: the candidate above is rendered fresh from the
-            // actual frame — no approved bytes are copied into actual/ — and
-            // the gate fails closed. Seal so reports reuse this verdict.
-            let profile_name = renderer.profile().name.clone();
-            self.seal_candidate(&profile_name, name, &grouped.actual)?;
-            self.seal_verdict(name, &grouped, pixel_threshold, &["approved-presence"])?;
             return Ok(grouped);
         }
         let (Some(approved_ansi), Some(approved_txt), Some(approved_html), Some(approved_png)) =
@@ -170,34 +98,18 @@ impl GroupedStore {
                 "approved artifacts for `{name}` failed the presence check twice"
             )));
         };
-        outcome.expected_png = Some(grouped.approved.png.clone());
-        outcome.expected_png_bytes = Some(approved_png.clone());
+        grouped.outcome.expected_png = Some(grouped.approved.png.clone());
+        grouped.outcome.expected_png_bytes = Some(approved_png.clone());
 
         let mut notes: Vec<String> = Vec::new();
-
-        // ANSI byte gate: the cell-exact comparison (symbol+fg+bg+mods).
-        let ansi_equal = approved_ansi.as_slice() == actual_ansi.as_bytes();
-        grouped.ansi_match = Some(ansi_equal);
-        if !ansi_equal {
-            outcome.status = Status::CellsDiffer;
-            notes.push(format!(
-                "ansi differs (cell-exact gate): {}",
-                first_difference(&approved_ansi, actual_ansi.as_bytes())
-            ));
-        }
-
-        // TXT byte gate: content only (style-only changes keep txt equal).
-        let txt_equal = approved_txt.as_slice() == actual_txt.as_bytes();
-        grouped.txt_match = Some(txt_equal);
-        if !txt_equal {
-            if matches!(outcome.status, Status::MissingApproval) {
-                outcome.status = Status::CellsDiffer;
-            }
-            notes.push(format!(
-                "txt differs: {}",
-                first_difference(&approved_txt, actual_txt.as_bytes())
-            ));
-        }
+        run_byte_gates(
+            &mut grouped,
+            &approved_ansi,
+            &cheap.ansi,
+            &approved_txt,
+            &cheap.txt,
+            &mut notes,
+        );
 
         // C02: actual evidence always renders fresh from the candidate frame.
         // The old tiered fast path copied approved PNG/HTML bytes into
@@ -205,6 +117,78 @@ impl GroupedStore {
         // and a pixel score of 1.0 without rendering, and masking
         // approved-side tamper. There is no skip-render path anymore, so
         // there is nothing to mark not-checked: every tier renders.
+        let (actual_html_bytes, actual_png_bytes) =
+            self.render_actual_artifacts(renderer, name, actual, &grouped.actual)?;
+        run_html_gate(&mut grouped, &approved_html, &actual_html_bytes, &mut notes);
+        self.run_png_gate(
+            name,
+            &mut grouped,
+            &approved_png,
+            &actual_png_bytes,
+            pixel_threshold,
+            &mut notes,
+        )?;
+
+        self.finalize_check(renderer, name, &mut grouped, pixel_threshold, notes)?;
+        Ok(grouped)
+    }
+
+    /// Validate, render the cheap actuals (ansi/txt/frame), and write them.
+    /// A failing gate still leaves reviewable evidence.
+    fn write_cheap_actuals(
+        &self,
+        name: &str,
+        actual: &Frame,
+    ) -> Result<CheapActuals, SnapshotError> {
+        validate_name(name)?;
+        actual.validate().map_err(SnapshotError::from)?;
+        let actual_ansi = render::ansi_dump(actual);
+        let actual_txt = actual.text();
+        let actual_paths = artifact_paths(&self.actual_root, name);
+        let approved_paths = artifact_paths(&self.approved_root, name);
+        write_atomic(&actual_paths.ansi, actual_ansi.as_bytes())?;
+        write_atomic(&actual_paths.txt, actual_txt.as_bytes())?;
+        write_atomic(&actual_paths.frame_json, actual.to_json().as_bytes())?;
+        Ok(CheapActuals {
+            ansi: actual_ansi,
+            txt: actual_txt,
+            actual: actual_paths,
+            approved: approved_paths,
+        })
+    }
+
+    /// Render the expensive actuals (png/html/fidelity) fresh from the
+    /// candidate frame and write them. Returns `(html_bytes, png_bytes)`.
+    fn render_actual_artifacts(
+        &self,
+        renderer: &mut Renderer,
+        name: &str,
+        actual: &Frame,
+        grouped_actual: &ArtifactPaths,
+    ) -> Result<(Vec<u8>, Vec<u8>), SnapshotError> {
+        let artifacts = renderer
+            .render_artifacts(actual, name)
+            .map_err(SnapshotError::from)?;
+        write_atomic(&grouped_actual.png, &artifacts.png)?;
+        write_atomic(&grouped_actual.html, artifacts.html.as_bytes())?;
+        write_atomic(
+            &fidelity_sidecar(&grouped_actual.png),
+            artifacts.fidelity.to_json().as_bytes(),
+        )?;
+        Ok((artifacts.html.into_bytes(), artifacts.png))
+    }
+
+    /// Missing-approval path: render fresh actuals anyway (reviewable
+    /// evidence), note the gap, and seal so reports reuse this verdict.
+    fn seal_missing_approval(
+        &self,
+        renderer: &mut Renderer,
+        name: &str,
+        actual: &Frame,
+        grouped: &mut GroupedOutcome,
+        pixel_threshold: f64,
+        missing: &[&str],
+    ) -> Result<(), SnapshotError> {
         let artifacts = renderer
             .render_artifacts(actual, name)
             .map_err(SnapshotError::from)?;
@@ -214,25 +198,32 @@ impl GroupedStore {
             &fidelity_sidecar(&grouped.actual.png),
             artifacts.fidelity.to_json().as_bytes(),
         )?;
-        let (actual_html_bytes, actual_png_bytes) = (artifacts.html.into_bytes(), artifacts.png);
+        grouped.outcome.note = format!(
+            "missing approved artifact(s) for `{name}`: {}",
+            missing.join(" ")
+        );
+        // C06-mirror: the candidate above is rendered fresh from the
+        // actual frame — no approved bytes are copied into actual/ — and
+        // the gate fails closed. Seal so reports reuse this verdict.
+        let profile_name = renderer.profile().name.clone();
+        self.seal_candidate(&profile_name, name, &grouped.actual)?;
+        self.seal_verdict(name, grouped, pixel_threshold, &["approved-presence"])?;
+        Ok(())
+    }
 
-        // HTML byte gate: identical cells with a changed renderer/font fail
-        // here — a render-level event, reported as PixelsDiffer.
-        let html_equal = approved_html == actual_html_bytes;
-        grouped.html_match = Some(html_equal);
-        if !html_equal {
-            if matches!(outcome.status, Status::MissingApproval) {
-                outcome.status = Status::PixelsDiffer;
-            }
-            notes.push(format!(
-                "html differs (render-level gate): {}",
-                first_difference(&approved_html, &actual_html_bytes)
-            ));
-        }
-
-        // PNG pixel gate: decoded pixels, same threshold semantics as the
-        // classic store. A corrupt approved PNG is an explicit error.
-        let verdict = diff::compare_png(&approved_png, &actual_png_bytes)?;
+    /// PNG pixel gate: decoded pixels, same threshold semantics as the
+    /// classic store. A corrupt approved PNG is an explicit error.
+    fn run_png_gate(
+        &self,
+        name: &str,
+        grouped: &mut GroupedOutcome,
+        approved_png: &[u8],
+        actual_png_bytes: &[u8],
+        pixel_threshold: f64,
+        notes: &mut Vec<String>,
+    ) -> Result<(), SnapshotError> {
+        let outcome = &mut grouped.outcome;
+        let verdict = diff::compare_png(approved_png, actual_png_bytes)?;
         if !verdict.dims_equal {
             outcome.status = Status::DimensionMismatch;
             notes.push(format!(
@@ -255,18 +246,30 @@ impl GroupedStore {
                 outcome.diff_png = Some(path);
             }
         }
+        Ok(())
+    }
 
-        if matches!(outcome.status, Status::MissingApproval) {
-            outcome.status = Status::Matched;
+    /// Flip a clean run to `Matched`, join the notes, and seal the
+    /// candidate file set plus this exact verdict (C05/C08-grouped).
+    fn finalize_check(
+        &self,
+        renderer: &Renderer,
+        name: &str,
+        grouped: &mut GroupedOutcome,
+        pixel_threshold: f64,
+        notes: Vec<String>,
+    ) -> Result<(), SnapshotError> {
+        if matches!(grouped.outcome.status, Status::MissingApproval) {
+            grouped.outcome.status = Status::Matched;
         }
-        outcome.note = notes.join("; ");
+        grouped.outcome.note = notes.join("; ");
         // C05/C08-grouped: seal the candidate file set, then persist this
         // exact verdict — the ONE verdict reports reuse when fresh.
         let profile_name = renderer.profile().name.clone();
         self.seal_candidate(&profile_name, name, &grouped.actual)?;
         self.seal_verdict(
             name,
-            &grouped,
+            grouped,
             pixel_threshold,
             &[
                 "ansi-byte-gate",
@@ -274,8 +277,7 @@ impl GroupedStore {
                 "html-byte-gate",
                 "png-pixel-gate",
             ],
-        )?;
-        Ok(grouped)
+        )
     }
 }
 

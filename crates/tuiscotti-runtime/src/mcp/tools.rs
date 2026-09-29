@@ -30,6 +30,14 @@ pub(crate) fn schema(required: &[&str], properties: Value) -> Value {
 /// contract in schema form); `tools/list` serializes this table.
 #[must_use]
 pub fn tools() -> Vec<Tool> {
+    let mut tools = pty_tools();
+    tools.extend(utility_tools());
+    tools.extend(session_tools());
+    tools
+}
+
+/// PTY session lifecycle tools (`spawn` through `exit`).
+fn pty_tools() -> Vec<Tool> {
     vec![
         Tool {
             name: "spawn",
@@ -98,6 +106,12 @@ pub fn tools() -> Vec<Tool> {
                 }),
             ),
         },
+    ]
+}
+
+/// Stateless check/render/diff tools.
+fn utility_tools() -> Vec<Tool> {
+    vec![
         Tool {
             name: "assert",
             description: "Run a shared-engine check (text-contains|text-equals).",
@@ -132,6 +146,12 @@ pub fn tools() -> Vec<Tool> {
                 }),
             ),
         },
+    ]
+}
+
+/// Named sessions plus build introspection.
+fn session_tools() -> Vec<Tool> {
+    vec![
         Tool {
             name: "session-start",
             description: "Start a named (piped, detached) session; force replaces a live one.",

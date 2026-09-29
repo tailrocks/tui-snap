@@ -63,11 +63,13 @@
 //! [`GroupedStore::with_report_path`] (e.g. under `target/`).
 
 mod check;
+mod check_gates;
 mod mutate;
 mod seal;
 mod types;
 
 pub use check::*;
+pub use check_gates::*;
 pub use mutate::*;
 pub use seal::*;
 pub use types::*;
