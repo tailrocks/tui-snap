@@ -63,7 +63,7 @@ fn env_parsing_nextest_shape() {
 
     let b = BaselineId::from_map("scenario-a", &e, "/fallback");
     assert_eq!(b.workspace, root.to_str().unwrap());
-    assert_eq!(b.package, "tuisnap");
+    assert_eq!(b.package, "tuiscotti");
     assert_eq!(b.binary, "runner");
     assert_eq!(b.test, "env_parsing");
     assert_eq!(b.scenario, "scenario-a");
