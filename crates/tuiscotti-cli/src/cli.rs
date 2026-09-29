@@ -2,13 +2,14 @@
 //!
 //! The parent parser never consumes an argument after `--`: child argv fields
 //! use `last = true` plus [`std::ffi::OsString`], so a child argument like
-//! `--machine` always reaches the child (see the `child_receives_dashdash`
-//! regression test). Child argv is parsed from `args_os` (no lossy UTF-8
-//! conversion, no Unicode panic).
+//! `--machine` always reaches the child (see the
+//! `child_receives_double_dash_machine` regression test). Child argv is
+//! parsed from `args_os` (no lossy UTF-8 conversion, no Unicode panic).
 //!
 //! Exit policy (see also `SYNTAX.md`):
 //! - `0`: ok.
-//! - `2`: CLI usage error (clap).
+//! - `2`: CLI usage error (clap parse failure, unknown typed `--format` /
+//!   `--kind`, empty `--format` list, or missing child argv after `--`).
 //! - `3`: tool/op error ([`tuiscotti::proto::EXIT_OP_ERROR`]).
 //! - `4`: verification disagreement ([`tuiscotti::proto::EXIT_VERIFY_FAIL`]).
 //! - `capture`/`record` preserve the CHILD's exit code instead.
@@ -70,6 +71,33 @@ impl RenderFormat {
             Self::Svg => "svg",
             Self::Html => "html",
             Self::Png => "png",
+        }
+    }
+}
+
+/// Journal event kind filter for `trace`. Typed, so an unknown `--kind` is a
+/// usage error (exit 2) with the valid set listed — never a silent no-match.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum TraceKind {
+    /// Session start record (`argv=…`).
+    Start,
+    /// Captured output sizes record.
+    Output,
+    /// Child termination record.
+    Exit,
+    /// Journal completion record.
+    Complete,
+}
+
+impl TraceKind {
+    /// Journal `kind` string this variant filters on.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Output => "output",
+            Self::Exit => "exit",
+            Self::Complete => "complete",
         }
     }
 }
@@ -171,7 +199,7 @@ pub enum Cmd {
         #[arg(long)]
         input: PathBuf,
         #[arg(long)]
-        kind: Option<String>,
+        kind: Option<TraceKind>,
     },
     /// Machine interface: op JSON per line on stdin, one envelope per line
     /// on stdout. Exit 0 when every op succeeded, else 3.

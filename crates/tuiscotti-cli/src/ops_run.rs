@@ -4,11 +4,15 @@
 //! from `args_os` and spawns byte-exact; only the UTF-8 JSON records
 //! (manifests, session endpoints) carry lossy projections, each documented at
 //! the conversion.
+//!
+//! Every stdout path goes through [`crate::write_stdout`] (buffered) or
+//! [`crate::write_line`] (streaming): no `println!`, so a closed pipe is a
+//! clean exit 0 instead of an EPIPE panic (exit 101).
 
 use std::ffi::OsString;
 use std::path::Path;
 
-use tuiscotti::proto::{self, EXIT_OP_ERROR};
+use tuiscotti::proto::{self, EXIT_OP_ERROR, EXIT_USAGE};
 
 use crate::cli::SessionCmd;
 use crate::ops_offline::op_error;
@@ -25,7 +29,7 @@ fn argv_display(argv: &[OsString]) -> Vec<String> {
 pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
     if argv.is_empty() {
         eprintln!("error: pass the command after `--`");
-        return EXIT_OP_ERROR;
+        return EXIT_USAGE;
     }
     if let Err(e) = std::fs::create_dir_all(out) {
         eprintln!("error: mkdir {}: {e}", out.display());
@@ -60,7 +64,11 @@ pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
         eprintln!("error: write manifest.json: {e}");
         return EXIT_OP_ERROR;
     }
-    println!("captured {:?} -> {}", result.status, out.display());
+    let buf = format!("captured {:?} -> {}\n", result.status, out.display());
+    let w = crate::write_stdout(&buf);
+    if w != 0 {
+        return w;
+    }
     match result.status {
         tuiscotti::command::Termination::Exit(c) => c,
         _ => EXIT_OP_ERROR,
@@ -70,43 +78,52 @@ pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
 pub fn cmd_session(cmd: SessionCmd) -> i32 {
     match cmd {
         SessionCmd::Start { name, force, argv } => {
+            if argv.is_empty() {
+                eprintln!("error: pass the command after `--`");
+                return EXIT_USAGE;
+            }
             match proto::session_start_os(&name, &argv, force) {
                 Ok(info) => {
-                    println!("started: {} (pid {})", info.name, info.pid);
-                    0
+                    let buf = format!("started: {} (pid {})\n", info.name, info.pid);
+                    crate::write_stdout(&buf)
                 }
                 Err(e) => op_error(&e),
             }
         }
         SessionCmd::Stop { name } => match proto::session_stop(&name) {
             Ok(info) => {
-                println!("stopped: {} (was {:?})", info.name, info.status);
-                0
+                let buf = format!("stopped: {} (was {:?})\n", info.name, info.status);
+                crate::write_stdout(&buf)
             }
             Err(e) => op_error(&e),
         },
         SessionCmd::List => match proto::session_list() {
             Ok(sessions) => {
+                let mut buf = String::new();
                 if sessions.is_empty() {
-                    println!("no sessions");
+                    crate::push_line(&mut buf, "no sessions");
                 }
                 for s in sessions {
-                    println!(
-                        "{} pid={} {:?} started={} argv={:?}",
-                        s.name, s.pid, s.status, s.started_unix, s.argv
+                    crate::push_line(
+                        &mut buf,
+                        &format!(
+                            "{} pid={} {:?} started={} argv={:?}",
+                            s.name, s.pid, s.status, s.started_unix, s.argv
+                        ),
                     );
                 }
-                0
+                crate::write_stdout(&buf)
             }
             Err(e) => op_error(&e),
         },
         SessionCmd::Prune => match proto::session_prune() {
             Ok(pruned) => {
-                println!("pruned {} session(s)", pruned.len());
+                let mut buf = String::new();
+                crate::push_line(&mut buf, &format!("pruned {} session(s)", pruned.len()));
                 for name in pruned {
-                    println!("  {name}");
+                    crate::push_line(&mut buf, &format!("  {name}"));
                 }
-                0
+                crate::write_stdout(&buf)
             }
             Err(e) => op_error(&e),
         },
@@ -139,11 +156,17 @@ fn cmd_session_attach(name: &str) -> i32 {
         eprintln!("error: [not-found] no log for session {name:?}");
         return EXIT_OP_ERROR;
     }
-    println!(
+    if let Some(code) = crate::write_line(&format!(
         "attached: {} (pid {} {:?}) — best-effort human view; assertions stay on Observations",
         info.name, info.pid, info.status
-    );
-    println!("stdin is not delivered (process sessions have no input transport); EOF detaches");
+    )) {
+        return code;
+    }
+    if let Some(code) = crate::write_line(
+        "stdin is not delivered (process sessions have no input transport); EOF detaches",
+    ) {
+        return code;
+    }
     let eof = Arc::new(AtomicBool::new(false));
     let stdin_eof = Arc::clone(&eof);
     std::thread::spawn(move || {
@@ -162,20 +185,19 @@ fn cmd_session_attach(name: &str) -> i32 {
         }
         stdin_eof.store(true, Ordering::SeqCst);
     });
-    let mut offset: u64 = 0;
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
+    let mut offset: usize = 0;
     loop {
         if eof.load(Ordering::SeqCst) {
-            println!("detached: stdin EOF");
-            return 0;
+            // A closed pipe here is also a clean exit 0 (same code either
+            // way), so the writer result folds into the return.
+            return crate::write_line("detached: stdin EOF").unwrap_or(0);
         }
         let bytes = std::fs::read(&log_path).unwrap_or_default();
-        if bytes.len() as u64 > offset {
-            use std::io::Write;
-            let _ = out.write_all(&bytes[offset as usize..]);
-            let _ = out.flush();
-            offset = bytes.len() as u64;
+        if bytes.len() > offset {
+            if let Some(code) = crate::write_bytes(&bytes[offset..]) {
+                return code;
+            }
+            offset = bytes.len();
         }
         let alive = proto::session_list()
             .map(|l| {
@@ -184,8 +206,7 @@ fn cmd_session_attach(name: &str) -> i32 {
             })
             .unwrap_or(false);
         if !alive {
-            println!("detached: session ended");
-            return 0;
+            return crate::write_line("detached: session ended").unwrap_or(0);
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
@@ -194,7 +215,7 @@ fn cmd_session_attach(name: &str) -> i32 {
 pub fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<OsString>) -> i32 {
     if argv.is_empty() {
         eprintln!("error: pass the command after `--`");
-        return EXIT_OP_ERROR;
+        return EXIT_USAGE;
     }
     let mut rec = match proto::Recorder::create(out, max_events, max_bytes) {
         Ok(r) => r,
@@ -235,7 +256,11 @@ pub fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<OsStrin
     if let Err(e) = rec.record("complete", &format!("events={}", rec.events() + 1)) {
         return fail(e);
     }
-    println!("recorded {} events -> {}", rec.events(), out.display());
+    let buf = format!("recorded {} events -> {}\n", rec.events(), out.display());
+    let w = crate::write_stdout(&buf);
+    if w != 0 {
+        return w;
+    }
     match result.status {
         tuiscotti::command::Termination::Exit(c) => c,
         _ => EXIT_OP_ERROR,

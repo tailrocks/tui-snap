@@ -51,6 +51,65 @@ pub(crate) fn write_stdout(text: &str) -> i32 {
     }
 }
 
+/// Write one line to stdout without panicking on a closed pipe.
+///
+/// Streaming counterpart to [`write_stdout`] for commands that emit output
+/// incrementally (`machine`, `trace`, `session attach`): returns `None` on
+/// success, `Some(exit_code)` when the caller must stop — `0` on a broken
+/// pipe (the reader went away; nothing is lost) or
+/// [`tuiscotti::proto::EXIT_OP_ERROR`] on any other stdout error.
+pub(crate) fn write_line(line: &str) -> Option<i32> {
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    let res = writeln!(out, "{line}").and_then(|()| out.flush());
+    match res {
+        Ok(()) => None,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Some(0),
+        Err(e) => {
+            eprintln!("error: stdout: {e}");
+            Some(tuiscotti::proto::EXIT_OP_ERROR)
+        }
+    }
+}
+
+/// Append one `\n`-terminated line to a report buffer.
+///
+/// Exists so buffered commands never touch `writeln!`'s must-use `Result`
+/// (the workspace denies both `let _ =` on must-use values and `unwrap`).
+pub(crate) fn push_line(buf: &mut String, line: &str) {
+    buf.push_str(line);
+    buf.push('\n');
+}
+
+/// Write raw bytes to stdout without panicking on a closed pipe.
+///
+/// Byte counterpart to [`write_line`] for the `session attach` log tail
+/// (log bytes are not necessarily UTF-8): `None` on success, `Some(code)`
+/// when the caller must stop.
+pub(crate) fn write_bytes(bytes: &[u8]) -> Option<i32> {
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    let res = out.write_all(bytes).and_then(|()| out.flush());
+    match res {
+        Ok(()) => None,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Some(0),
+        Err(e) => {
+            eprintln!("error: stdout: {e}");
+            Some(tuiscotti::proto::EXIT_OP_ERROR)
+        }
+    }
+}
+
+/// Flush a partial report, then report an op failure on stderr.
+pub(crate) fn fail_flushed(buf: &str, msg: &str) -> i32 {
+    let w = write_stdout(buf);
+    if w != 0 {
+        return w;
+    }
+    eprintln!("error: {msg}");
+    tuiscotti::proto::EXIT_OP_ERROR
+}
+
 fn main() {
     // Native args_os parsing: child argv stays OsString end-to-end, and the
     // parser never sees values after `--` as its own flags.
@@ -90,7 +149,7 @@ fn run(cli: cli::Cli) -> i32 {
             max_bytes,
             argv,
         } => ops_run::cmd_record(&out, max_events, max_bytes, argv),
-        cli::Cmd::Trace { input, kind } => ops_offline::cmd_trace(&input, kind.as_deref()),
+        cli::Cmd::Trace { input, kind } => ops_offline::cmd_trace(&input, kind),
         cli::Cmd::Machine => machine::machine_main(),
     }
 }

@@ -26,7 +26,9 @@ pub fn machine_main() -> i32 {
             continue;
         }
         let (out, ok) = proto::run_machine_line(&line);
-        println!("{out}");
+        if let Some(code) = crate::write_line(&out) {
+            return code;
+        }
         all_ok &= ok;
     }
     if all_ok { 0 } else { EXIT_OP_ERROR }

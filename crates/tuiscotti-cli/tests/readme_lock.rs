@@ -708,8 +708,9 @@ fn readme_pinned_facts() {
             "missing {name}"
         );
     }
-    // The fidelity section cites this exact test name.
+    // The approved-PNG spot test keeps its pinned name (renamed in the g5
+    // render-baseline removal; no doc cites the old name anymore).
     let render_tests =
         std::fs::read_to_string(root.join("crates/tuiscotti-fixtures/tests/render.rs")).unwrap();
-    assert!(render_tests.contains("fn primary_covered_fixtures_match_pre_fallback_render_bytes"));
+    assert!(render_tests.contains("fn approved_pngs_are_exactly_what_the_current_renderer_emits"));
 }

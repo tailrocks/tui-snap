@@ -1,4 +1,7 @@
 //! Setup commands: `init`, `doctor`, `schema`.
+//!
+//! Every stdout path goes through [`crate::write_stdout`]: no `println!`, so
+//! a closed pipe is a clean exit 0 instead of an EPIPE panic (exit 101).
 
 use std::path::Path;
 
@@ -54,23 +57,22 @@ pub fn cmd_init(dir: &Path, force: bool) -> i32 {
             return EXIT_OP_ERROR;
         }
     }
+    let mut buf = String::new();
     for (rel, body) in files {
         let path = dir.join(rel);
         if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("error: mkdir {}: {e}", parent.display());
-                return EXIT_OP_ERROR;
+                return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
             }
         }
         if let Err(e) = std::fs::write(&path, body) {
-            eprintln!("error: write {}: {e}", path.display());
-            return EXIT_OP_ERROR;
+            return crate::fail_flushed(&buf, &format!("write {}: {e}", path.display()));
         }
-        println!("wrote {}", path.display());
+        crate::push_line(&mut buf, &format!("wrote {}", path.display()));
     }
-    println!();
-    println!("{}", tuiscotti::proto::CONFIG_DOCS);
-    0
+    buf.push('\n');
+    crate::push_line(&mut buf, tuiscotti::proto::CONFIG_DOCS);
+    crate::write_stdout(&buf)
 }
 
 fn probe(program: &str, args: &[&str]) -> String {

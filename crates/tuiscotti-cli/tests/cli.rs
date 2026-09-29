@@ -925,6 +925,106 @@ fn cli_record_and_trace() {
 }
 
 // ---------------------------------------------------------------------------
+// CLI: missing values are usage errors (exit 2), never op errors (exit 3)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_missing_values_are_usage_errors() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let frame = tmp.path().join("f.frame.json");
+    std::fs::write(&frame, blank_frame_json(10, 4)).expect("frame");
+    let frame_arg = frame.to_str().expect("utf8").to_string();
+    let out_arg = tmp.path().join("o").to_string_lossy().into_owned();
+    // `render` without any --format: usage error, like a typed rejection.
+    let out = run_cli(
+        &["render", "--input", &frame_arg, "--out", &out_arg],
+        &[],
+        None,
+    );
+    assert_eq!(
+        code(&out),
+        2,
+        "empty --format must be exit 2: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Typed --format rejection stays exit 2 with the valid set listed.
+    let out = run_cli(
+        &[
+            "render", "--input", &frame_arg, "--format", "mp4", "--out", &out_arg,
+        ],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), 2);
+    // Missing child argv after `--`: usage error on every spawner.
+    let cap = tmp.path().join("cap").to_string_lossy().into_owned();
+    let out = run_cli(&["capture", "--out", &cap], &[], None);
+    assert_eq!(
+        code(&out),
+        2,
+        "capture without argv must be exit 2: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rec = tmp.path().join("r.jsonl").to_string_lossy().into_owned();
+    let out = run_cli(&["record", "--out", &rec], &[], None);
+    assert_eq!(
+        code(&out),
+        2,
+        "record without argv must be exit 2: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = run_cli(&["session", "start", "--name", "noargv"], &[], None);
+    assert_eq!(
+        code(&out),
+        2,
+        "session start without argv must be exit 2: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// CLI: trace --kind is typed (exit 2 on unknown, valid set listed)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cli_trace_typed_kind() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let journal = tmp.path().join("trace.jsonl");
+    let journal_arg = journal.to_string_lossy().into_owned();
+    let out = run_cli(
+        &["record", "--out", &journal_arg, "--", "echo", "kind-hi"],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), 0);
+    // Every typed kind is accepted.
+    for kind in ["start", "output", "exit", "complete"] {
+        let out = run_cli(
+            &["trace", "--input", &journal_arg, "--kind", kind],
+            &[],
+            None,
+        );
+        assert_eq!(
+            code(&out),
+            0,
+            "kind {kind}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    // Unknown kinds are usage errors with the valid set listed.
+    let out = run_cli(
+        &["trace", "--input", &journal_arg, "--kind", "bogus"],
+        &[],
+        None,
+    );
+    assert_eq!(code(&out), 2);
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    for kind in ["start", "output", "exit", "complete"] {
+        assert!(err.contains(kind), "stderr lists {kind}:\n{err}");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CLI: machine mode over stdio
 // ---------------------------------------------------------------------------
 

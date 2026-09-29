@@ -28,6 +28,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 | Task | Rust | CLI |
 |---|---|---|
 | Build | `Command::new(p)` / `Command::cargo_bin(n)` | — |
+| `cargo_bin` lookup | canonical order (see Live launch: env exact → normalized → next-to-exe → `deps/` parent → cwd `target/debug`+`target/release`) | — |
 | Args / env / cwd (child-only) | `.arg/.args/.env/.envs/.env_remove/.env_clear/.current_dir` | `capture --out D -- prog args…` |
 | stdin / timeout / limits | `.stdin(bytes) / .timeout(d) / .output_limit(n) / .drain_deadline(d)` | `--timeout-ms` |
 | Shell opt-in | `.shell(true)` (`/bin/sh -c`) | — |
@@ -47,7 +48,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 | Args / size / child env/cwd | `.arg/.args/.size(c,r) / .env(k,v) / .cwd(dir)` |
 | Terminal behavior | `.profile(TerminalProfile)` (unsupported claims rejected) |
 | Spawn | `.spawn()?` → `Session` (`Send + Sync`) |
-| Binary lookup | `CARGO_BIN_EXE_<name>` → next to test exe (`target/<profile>/`) |
+| Binary lookup (canonical: `command::cargo_bin_path`; `Tui`, `Command`, `runner` share it) | env `CARGO_BIN_EXE_<name>` exact → env normalized (`-`→`_`, UPPER) → next to test exe → `deps/` parent → cwd `target/debug` + `target/release` (every candidate `is_file`-checked; errors list all searched paths) |
 
 ## Waits (simple `Duration` / advanced deadline + token)
 
@@ -123,7 +124,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 | HTML (offline, no JS) | `Renderer::render_html` | `--format html` |
 | PNG (+ fidelity sidecar) | `Renderer::render_png / render` | `--format png` |
 | Four-artifact bundle | `assert::emit_four(&screen, dir)` | `render --input F --format … --out P [--font-file F]` |
-| Compare / inspect | `diff::compare_png…` | `diff --expected A --actual B`; `inspect --dir D`; `trace --input J [--kind K]` |
+| Compare / inspect | `diff::compare_png…` | `diff --expected A --actual B`; `inspect --dir D`; `trace --input J [--kind start\|output\|exit\|complete]` |
 
 ## Frozen review (immutable references, never self-heal)
 
@@ -157,3 +158,11 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 disagreement (`diff` mismatch, `review` failures). `capture`/`record`
 preserve the CHILD's exit code. Failing assertions always leave evidence
 (png/ansi/txt/html, journals, `.snap.new`) before failing.
+
+Exit `2` covers every caller-side mistake, not just clap parse failures:
+unknown typed `--format` / `--kind` values, an empty `--format` list, and a
+missing child argv after `--` (`capture`, `record`, `session start`) are all
+usage errors. Exit `3` is reserved for failures the caller could not have
+avoided by fixing the command line (I/O, spawn, timeout, session, op
+errors). A closed stdout pipe is a clean exit `0` on every subcommand (the
+reader went away; nothing is lost), never an EPIPE panic.

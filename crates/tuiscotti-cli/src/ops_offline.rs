@@ -3,12 +3,16 @@
 //!
 //! These never spawn a child and never require the `pty` feature: they work
 //! in a `--no-default-features` build.
+//!
+//! Every stdout path goes through [`crate::write_stdout`] (buffered) or
+//! [`crate::write_line`] (streaming): no `println!`, so a closed pipe is a
+//! clean exit 0 instead of an EPIPE panic (exit 101).
 
 use std::path::Path;
 
-use tuiscotti::proto::{self, EXIT_OP_ERROR, EXIT_VERIFY_FAIL};
+use tuiscotti::proto::{self, EXIT_OP_ERROR, EXIT_USAGE, EXIT_VERIFY_FAIL};
 
-use crate::cli::RenderFormat;
+use crate::cli::{RenderFormat, TraceKind};
 
 pub fn op_error(e: &proto::OpError) -> i32 {
     eprintln!("error: {e}");
@@ -36,38 +40,55 @@ pub fn cmd_inspect(dir: &Path) -> i32 {
         files.push((entry.file_name().to_string_lossy().into_owned(), len));
     }
     files.sort();
-    println!(
-        "artifacts in {} ({} files, offline view):",
-        dir.display(),
-        files.len()
+    let mut buf = String::new();
+    crate::push_line(
+        &mut buf,
+        &format!(
+            "artifacts in {} ({} files, offline view):",
+            dir.display(),
+            files.len()
+        ),
     );
     for (name, len) in &files {
-        println!("  {name} ({len} bytes)");
+        crate::push_line(&mut buf, &format!("  {name} ({len} bytes)"));
     }
     let manifest_path = dir.join("manifest.json");
     if manifest_path.is_file() {
         match std::fs::read_to_string(&manifest_path) {
             Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
-                Ok(v) => println!(
-                    "manifest: {}",
-                    serde_json::to_string(&v).unwrap_or_else(|_| text.clone())
-                ),
-                Err(_) => println!("manifest: (not JSON, {} bytes)", text.len()),
+                Ok(v) => {
+                    crate::push_line(
+                        &mut buf,
+                        &format!(
+                            "manifest: {}",
+                            serde_json::to_string(&v).unwrap_or_else(|_| text.clone())
+                        ),
+                    );
+                }
+                Err(_) => {
+                    crate::push_line(
+                        &mut buf,
+                        &format!("manifest: (not JSON, {} bytes)", text.len()),
+                    );
+                }
             },
             Err(e) => {
-                eprintln!("error: read manifest.json: {e}");
-                return EXIT_OP_ERROR;
+                return crate::fail_flushed(&buf, &format!("read manifest.json: {e}"));
             }
         }
     }
     let journal_path = dir.join("journal.jsonl");
     if journal_path.is_file() {
         match proto::read_journal(&journal_path) {
-            Ok(events) => println!("journal: {} events", events.len()),
-            Err(e) => return op_error(&e),
+            Ok(events) => {
+                crate::push_line(&mut buf, &format!("journal: {} events", events.len()));
+            }
+            Err(e) => {
+                return crate::fail_flushed(&buf, &e.to_string());
+            }
         }
     }
-    0
+    crate::write_stdout(&buf)
 }
 
 pub fn cmd_render(
@@ -78,7 +99,7 @@ pub fn cmd_render(
 ) -> i32 {
     if formats.is_empty() {
         eprintln!("error: pass at least one --format (txt|ansi|json|svg|html|png)");
-        return EXIT_OP_ERROR;
+        return EXIT_USAGE;
     }
     let text = match std::fs::read_to_string(input) {
         Ok(t) => t,
@@ -94,84 +115,126 @@ pub fn cmd_render(
             return EXIT_OP_ERROR;
         }
     };
-    let mut profile = tuiscotti::Profile::default_profile();
-    let owned;
-    let faces;
-    if let Some(path) = font_file {
-        let bytes = match std::fs::read(path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("error: read font {}: {e}", path.display());
-                return EXIT_OP_ERROR;
-            }
-        };
-        profile = profile.with_font_file(path.display().to_string(), &bytes);
-        owned = [bytes.clone(), bytes.clone(), bytes.clone(), bytes];
-        faces = tuiscotti::FontFaces {
-            regular: owned[0].as_slice(),
-            bold: owned[1].as_slice(),
-            italic: owned[2].as_slice(),
-            bold_italic: owned[3].as_slice(),
-        };
-    } else {
-        faces = tuiscotti::FontFaces {
-            regular: tuiscotti::VENDORED_FONT,
-            bold: tuiscotti::VENDORED_FONT_BOLD,
-            italic: tuiscotti::VENDORED_FONT_ITALIC,
-            bold_italic: tuiscotti::VENDORED_FONT_BOLD_ITALIC,
-        };
-    }
+    let fonts = match RasterFonts::load(font_file) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return EXIT_OP_ERROR;
+        }
+    };
     let mut renderer: Option<tuiscotti::Renderer> = None;
-    // Lazily constructed and reused across formats (faces parse once).
-    macro_rules! get_renderer {
-        () => {{
-            if renderer.is_none() {
-                renderer =
-                    Some(tuiscotti::Renderer::new(&profile, &faces).map_err(|e| e.to_string())?);
-            }
-            renderer.as_mut().expect("constructed above")
-        }};
-    }
+    let mut buf = String::new();
     for format in formats {
         let ext = format.extension();
         let path = format!("{out}.{ext}");
         if let Some(parent) = Path::new(&path).parent() {
             if !parent.as_os_str().is_empty() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    eprintln!("error: mkdir {}: {e}", parent.display());
-                    return EXIT_OP_ERROR;
+                    return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
                 }
             }
         }
-        let write_result = match format {
-            RenderFormat::Txt => std::fs::write(&path, frame.text()).map_err(|e| e.to_string()),
-            RenderFormat::Ansi => std::fs::write(&path, tuiscotti::render::ansi_dump(&frame))
-                .map_err(|e| e.to_string()),
-            RenderFormat::Json => std::fs::write(&path, frame.to_json()).map_err(|e| e.to_string()),
-            RenderFormat::Svg => {
-                std::fs::write(&path, tuiscotti::render::render_svg(&frame, &profile))
-                    .map_err(|e| e.to_string())
-            }
-            RenderFormat::Html => (|| -> Result<(), String> {
-                let html = get_renderer!()
-                    .render_html(&frame, "frame")
-                    .map_err(|e| e.to_string())?;
-                std::fs::write(&path, html).map_err(|e| e.to_string())
-            })(),
-            RenderFormat::Png => (|| -> Result<(), String> {
-                let rendered = get_renderer!().render(&frame).map_err(|e| e.to_string())?;
-                std::fs::write(&path, &rendered.png).map_err(|e| e.to_string())?;
-                std::fs::write(format!("{path}.fidelity.json"), rendered.fidelity.to_json())
-                    .map_err(|e| e.to_string())
-            })(),
-        };
-        if let Err(e) = write_result {
-            eprintln!("error: render {ext}: {e}");
-            return EXIT_OP_ERROR;
+        if let Err(e) = render_format_to(&frame, &fonts, &mut renderer, *format, &path) {
+            return crate::fail_flushed(&buf, &format!("render {ext}: {e}"));
         }
-        println!("wrote {path}");
+        crate::push_line(&mut buf, &format!("wrote {path}"));
     }
-    0
+    crate::write_stdout(&buf)
+}
+
+/// Raster profile plus the font bytes backing it: a `--font-file` override
+/// (one file used for all four faces) or the vendored faces.
+struct RasterFonts {
+    profile: tuiscotti::Profile,
+    owned: Option<[Vec<u8>; 4]>,
+}
+
+impl RasterFonts {
+    fn load(font_file: Option<&Path>) -> Result<Self, String> {
+        let Some(path) = font_file else {
+            return Ok(Self {
+                profile: tuiscotti::Profile::default_profile(),
+                owned: None,
+            });
+        };
+        let bytes =
+            std::fs::read(path).map_err(|e| format!("read font {}: {e}", path.display()))?;
+        let profile = tuiscotti::Profile::default_profile()
+            .with_font_file(path.display().to_string(), &bytes);
+        Ok(Self {
+            profile,
+            owned: Some([bytes.clone(), bytes.clone(), bytes.clone(), bytes]),
+        })
+    }
+
+    fn faces(&self) -> tuiscotti::FontFaces<'_> {
+        if let Some(owned) = &self.owned {
+            tuiscotti::FontFaces {
+                regular: owned[0].as_slice(),
+                bold: owned[1].as_slice(),
+                italic: owned[2].as_slice(),
+                bold_italic: owned[3].as_slice(),
+            }
+        } else {
+            tuiscotti::FontFaces {
+                regular: tuiscotti::VENDORED_FONT,
+                bold: tuiscotti::VENDORED_FONT_BOLD,
+                italic: tuiscotti::VENDORED_FONT_ITALIC,
+                bold_italic: tuiscotti::VENDORED_FONT_BOLD_ITALIC,
+            }
+        }
+    }
+}
+
+/// Render `frame` in one `format` to `path`. The raster renderer is lazily
+/// constructed and reused across formats (faces parse once).
+fn render_format_to(
+    frame: &tuiscotti::Frame,
+    fonts: &RasterFonts,
+    renderer: &mut Option<tuiscotti::Renderer>,
+    format: RenderFormat,
+    path: &str,
+) -> Result<(), String> {
+    match format {
+        RenderFormat::Txt => std::fs::write(path, frame.text()).map_err(|e| e.to_string()),
+        RenderFormat::Ansi => {
+            std::fs::write(path, tuiscotti::render::ansi_dump(frame)).map_err(|e| e.to_string())
+        }
+        RenderFormat::Json => std::fs::write(path, frame.to_json()).map_err(|e| e.to_string()),
+        RenderFormat::Svg => {
+            std::fs::write(path, tuiscotti::render::render_svg(frame, &fonts.profile))
+                .map_err(|e| e.to_string())
+        }
+        RenderFormat::Html => {
+            let html = cached_renderer(fonts, renderer)?
+                .render_html(frame, "frame")
+                .map_err(|e| e.to_string())?;
+            std::fs::write(path, html).map_err(|e| e.to_string())
+        }
+        RenderFormat::Png => {
+            let rendered = cached_renderer(fonts, renderer)?
+                .render(frame)
+                .map_err(|e| e.to_string())?;
+            std::fs::write(path, &rendered.png).map_err(|e| e.to_string())?;
+            std::fs::write(format!("{path}.fidelity.json"), rendered.fidelity.to_json())
+                .map_err(|e| e.to_string())
+        }
+    }
+}
+
+/// Lazily construct (once) and borrow the raster renderer.
+fn cached_renderer<'r>(
+    fonts: &RasterFonts,
+    renderer: &'r mut Option<tuiscotti::Renderer>,
+) -> Result<&'r mut tuiscotti::Renderer, String> {
+    if renderer.is_none() {
+        let faces = fonts.faces();
+        let built = tuiscotti::Renderer::new(&fonts.profile, &faces).map_err(|e| e.to_string())?;
+        *renderer = Some(built);
+    }
+    renderer
+        .as_mut()
+        .ok_or_else(|| "renderer build failed".to_string())
 }
 
 pub fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
@@ -191,10 +254,14 @@ pub fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
     };
     match tuiscotti::diff::compare_png(&expected_bytes, &actual_bytes) {
         Ok(v) => {
-            println!(
-                "pixels_equal={} dims_equal={} score={}",
+            let buf = format!(
+                "pixels_equal={} dims_equal={} score={}\n",
                 v.pixels_equal, v.dims_equal, v.score
             );
+            let w = crate::write_stdout(&buf);
+            if w != 0 {
+                return w;
+            }
             if v.pixels_equal { 0 } else { EXIT_VERIFY_FAIL }
         }
         Err(e) => {
@@ -209,28 +276,36 @@ pub fn cmd_review(dir: &Path) -> i32 {
         Ok(v) => v,
         Err(e) => return op_error(&e),
     };
+    let mut buf = String::new();
     if verdicts.is_empty() {
-        println!("no verdicts in {}", dir.display());
-        return 0;
+        crate::push_line(&mut buf, &format!("no verdicts in {}", dir.display()));
+        return crate::write_stdout(&buf);
     }
     let mut failed = 0u32;
     for v in &verdicts {
         if v.passed() {
-            println!("PASS {}", v.name);
+            crate::push_line(&mut buf, &format!("PASS {}", v.name));
         } else {
             failed += 1;
             if v.detail.is_empty() {
-                println!("FAIL {}", v.name);
+                crate::push_line(&mut buf, &format!("FAIL {}", v.name));
             } else {
-                println!("FAIL {} ({})", v.name, v.detail);
+                crate::push_line(&mut buf, &format!("FAIL {} ({})", v.name, v.detail));
             }
         }
     }
-    println!(
-        "{} passed, {} failed",
-        verdicts.len() - failed as usize,
-        failed
+    crate::push_line(
+        &mut buf,
+        &format!(
+            "{} passed, {} failed",
+            verdicts.len() - failed as usize,
+            failed
+        ),
     );
+    let w = crate::write_stdout(&buf);
+    if w != 0 {
+        return w;
+    }
     if failed > 0 { EXIT_VERIFY_FAIL } else { 0 }
 }
 
@@ -251,8 +326,8 @@ pub fn cmd_accept(store: &Path, name: &str) -> i32 {
     }
     match tuiscotti::snapshot::Store::new(store).accept(name) {
         Ok(()) => {
-            println!("accepted `{name}` in {}", store.display());
-            0
+            let buf = format!("accepted `{name}` in {}\n", store.display());
+            crate::write_stdout(&buf)
         }
         Err(e) => {
             eprintln!("error: {e}");
@@ -294,27 +369,31 @@ pub fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {
         return EXIT_OP_ERROR;
     }
     let failed = verdicts.iter().filter(|v| !v.passed()).count();
-    println!(
-        "report: {} ({} verdicts, {} failed)",
+    let buf = format!(
+        "report: {} ({} verdicts, {} failed)\n",
         out.display(),
         verdicts.len(),
         failed
     );
-    0
+    crate::write_stdout(&buf)
 }
 
 pub fn cmd_import(dir: &Path) -> i32 {
     match tuiscotti::assert::import_frozen_v1(dir) {
         Ok(tree) => {
-            println!("scenarios: {}", tree.scenarios.len());
+            let mut buf = String::new();
+            crate::push_line(&mut buf, &format!("scenarios: {}", tree.scenarios.len()));
             for s in &tree.scenarios {
-                println!("  {}", s.name);
+                crate::push_line(&mut buf, &format!("  {}", s.name));
             }
-            println!("unsupported: {}", tree.unsupported.len());
+            crate::push_line(
+                &mut buf,
+                &format!("unsupported: {}", tree.unsupported.len()),
+            );
             for u in &tree.unsupported {
-                println!("  {u}");
+                crate::push_line(&mut buf, &format!("  {u}"));
             }
-            0
+            crate::write_stdout(&buf)
         }
         Err(e) => {
             eprintln!("error: import failed: {e}");
@@ -323,18 +402,23 @@ pub fn cmd_import(dir: &Path) -> i32 {
     }
 }
 
-pub fn cmd_trace(input: &Path, kind: Option<&str>) -> i32 {
+pub fn cmd_trace(input: &Path, kind: Option<TraceKind>) -> i32 {
     let events = match proto::read_journal(input) {
         Ok(e) => e,
         Err(e) => return op_error(&e),
     };
+    // Streaming: journals are unbounded, so emit line-by-line through the
+    // EPIPE-tolerant writer instead of buffering the whole view.
     for ev in events {
         if let Some(k) = kind {
-            if ev.kind != k {
+            if ev.kind != k.as_str() {
                 continue;
             }
         }
-        println!("{} {} {}", ev.seq, ev.kind, ev.detail);
+        let line = format!("{} {} {}", ev.seq, ev.kind, ev.detail);
+        if let Some(code) = crate::write_line(&line) {
+            return code;
+        }
     }
     0
 }
