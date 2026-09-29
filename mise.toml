@@ -7,6 +7,15 @@
 # Pinned exact, never floating `latest` (G7).
 # rust 1.98.1 keeps the Mise pin consistent with rust-toolchain.toml
 # (`mise ls-remote rust` lists 1.98.1; `rust` is a mise core backend).
+# cargo:alint 0.15.2 provisions the repo shape/line gate (`mise run alint`,
+# wired into CI via the `repo-shape` unit in .github-gen/velnor-workflow.toml).
 [tools]
 mr-boxington = "1.20.0"
 rust = "1.98.1"
+"cargo:alint" = "0.15.2"
+"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.146"
+"cargo:cargo-deny" = "0.20.2"
+
+[tasks.alint]
+description = "Repo shape and line gates: alint check at the repo root"
+run = "alint check"
