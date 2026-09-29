@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
 base64.workspace = true
-fontdue.workspace = true
+swash.workspace = true
 image.workspace = true
 image-compare.workspace = true
 serde.workspace = true

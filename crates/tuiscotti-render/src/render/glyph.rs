@@ -1,12 +1,11 @@
 //! Glyph raster cache and low-level cell painting helpers.
 
-use super::{FallbackGlyph, LoadedFont, MissingGlyph};
+use super::{FallbackGlyph, GlyphMetrics, LoadedFont, MissingGlyph};
 use tuiscotti_core::frame::Rgb;
 
 /// Glyph rasters keyed by character and face, negative results included
 /// (`None` = rasterized once to an empty bitmap — never re-rasterized).
-pub(crate) type GlyphCache =
-    std::collections::HashMap<GlyphKey, Option<(fontdue::Metrics, Vec<u8>)>>;
+pub(crate) type GlyphCache = std::collections::HashMap<GlyphKey, Option<(GlyphMetrics, Vec<u8>)>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct GlyphKey {
@@ -148,14 +147,11 @@ pub(crate) fn cached_raster<'a>(
     face: &LoadedFont,
     idx: FaceIdx,
     c: char,
-) -> Option<&'a (fontdue::Metrics, Vec<u8>)> {
+) -> Option<&'a (GlyphMetrics, Vec<u8>)> {
     cache
         .entry(GlyphKey { ch: c, face: idx })
         .or_insert_with(|| {
-            if face.font.lookup_glyph_index(c) == 0 {
-                return None;
-            }
-            let (m, bmp) = face.font.rasterize(c, face.px);
+            let (m, bmp) = face.rasterize(c)?;
             if m.width == 0 || m.height == 0 || bmp.iter().all(|&p| p == 0) {
                 None
             } else {

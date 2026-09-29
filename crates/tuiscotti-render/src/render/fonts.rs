@@ -1,13 +1,41 @@
 //! Font loading: [`LoadedFont`](super::LoadedFont), [`FontSet`](super::FontSet), geometry pins.
+//!
+//! Raster backend is `swash` (Fontations/skrifa outlines, unhinted): the
+//! previous backend (`fontdue`) pulled the unmaintained `ttf-parser`
+//! (RUSTSEC-2026-0192) plus a Zlib-only `foldhash`, both rejected by
+//! `cargo deny`. Unhinted swash rasters match the old backend's geometry
+//! exactly (same `xmin`/`ymin`/dims/advance per glyph; only antialiasing
+//! gradations differ), so the profile cell pins are unchanged.
 
 use super::RenderError;
 use crate::profile::FontFaces;
 use crate::profile::Profile;
-use fontdue::{Font, FontSettings};
+
+/// Glyph bitmap metrics in the shape the blitters consume: `xmin` is the
+/// bitmap's left edge relative to the pen, `ymin` the bitmap's BOTTOM edge
+/// relative to the baseline in y-up coordinates (so the top edge sits at
+/// `baseline - (ymin + height)`), `width`/`height` the bitmap dims, advances
+/// in pixels at raster size.
+#[derive(Debug, Clone, Copy)]
+pub struct GlyphMetrics {
+    /// Bitmap width in pixels.
+    pub width: usize,
+    /// Bitmap height in pixels.
+    pub height: usize,
+    /// Bitmap left edge relative to the pen.
+    pub xmin: i32,
+    /// Bitmap bottom edge relative to the baseline (y-up).
+    pub ymin: i32,
+    /// Horizontal advance in pixels at raster size.
+    pub advance_width: f32,
+    /// Vertical advance in pixels at raster size.
+    pub advance_height: f32,
+}
 
 /// A loaded raster font with line metrics.
 pub struct LoadedFont {
-    pub(crate) font: Font,
+    /// Owned font bytes (`swash::FontRef` borrows; validated at load).
+    data: Vec<u8>,
     /// Pixels above baseline.
     pub ascent: f32,
     /// Pixels below baseline (nonnegative).
@@ -17,17 +45,81 @@ pub struct LoadedFont {
     pub desc: String,
 }
 
+/// Outline-only render sources: embedded bitmaps and color outlines are
+/// never served (a color/bitmap-only glyph reads as uncovered, never as a
+/// silent blank or a miscolored mask).
+const SOURCES: &[swash::scale::Source] = &[swash::scale::Source::Outline];
+
+impl LoadedFont {
+    fn font_ref(&self) -> Option<swash::FontRef<'_>> {
+        swash::FontRef::from_index(&self.data, 0)
+    }
+
+    /// Scaled horizontal advance of `c` in pixels. Coverage-independent (a
+    /// cmap miss still yields the `.notdef` advance), for geometry pins.
+    pub(crate) fn advance_width(&self, c: char) -> f32 {
+        let Some(font) = self.font_ref() else {
+            return 0.0;
+        };
+        let upm = font.metrics(&[]).units_per_em;
+        if upm == 0 {
+            return 0.0;
+        }
+        let id = font.charmap().map(c);
+        font.glyph_metrics(&[]).advance_width(id) * self.px / f32::from(upm)
+    }
+
+    /// Rasterize `c` at face size: `None` when the face lacks the glyph (cmap
+    /// miss — including the `.notdef` trap) or has no scalable outline for
+    /// it; otherwise the 8-bit alpha mask with blitter-ready metrics.
+    /// Callers still apply the ink check: an empty outline does not cover.
+    pub(crate) fn rasterize(&self, c: char) -> Option<(GlyphMetrics, Vec<u8>)> {
+        let font = self.font_ref()?;
+        let id = font.charmap().map(c);
+        if id == 0 {
+            return None;
+        }
+        let mut ctx = swash::scale::ScaleContext::new();
+        let mut scaler = ctx.builder(font).size(self.px).hint(false).build();
+        let image = swash::scale::Render::new(SOURCES).render(&mut scaler, id)?;
+        if !matches!(image.content, swash::scale::image::Content::Mask) {
+            return None;
+        }
+        let p = &image.placement;
+        let (w, h) = (p.width as usize, p.height as usize);
+        if w == 0 || h == 0 || image.data.len() != w * h {
+            return None;
+        }
+        let upm = font.metrics(&[]).units_per_em;
+        let scale = self.px / f32::from(upm.max(1));
+        let gm = font.glyph_metrics(&[]);
+        Some((
+            GlyphMetrics {
+                width: w,
+                height: h,
+                xmin: p.left,
+                ymin: p.top - p.height as i32,
+                advance_width: gm.advance_width(id) * scale,
+                advance_height: gm.advance_height(id) * scale,
+            },
+            image.data,
+        ))
+    }
+}
+
 /// Load + measure a font.
 pub fn load_font(bytes: &[u8], px: f32) -> Result<LoadedFont, RenderError> {
-    let font = Font::from_bytes(bytes, FontSettings::default())
-        .map_err(|e| RenderError(format!("cannot parse font: {e}")))?;
-    let lm = font
-        .horizontal_line_metrics(px)
-        .ok_or_else(|| RenderError("font has no horizontal metrics".to_string()))?;
+    let font = swash::FontRef::from_index(bytes, 0)
+        .ok_or_else(|| RenderError("cannot parse font: swash rejected the bytes".to_string()))?;
+    let m = font.metrics(&[]);
+    if m.units_per_em == 0 {
+        return Err(RenderError("font has no horizontal metrics".to_string()));
+    }
+    let scale = px / f32::from(m.units_per_em);
     Ok(LoadedFont {
-        font,
-        ascent: lm.ascent,
-        descent: lm.descent.abs(),
+        data: bytes.to_vec(),
+        ascent: m.ascent * scale,
+        descent: (m.descent * scale).abs(),
         px,
         desc: String::new(),
     })
@@ -35,8 +127,7 @@ pub fn load_font(bytes: &[u8], px: f32) -> Result<LoadedFont, RenderError> {
 
 /// Measured advance of `M` and line height at profile size.
 pub fn measure(loaded: &LoadedFont) -> (f32, f32) {
-    let adv = loaded.font.rasterize('M', loaded.px).0.advance_width;
-    (adv, loaded.ascent + loaded.descent)
+    (loaded.advance_width('M'), loaded.ascent + loaded.descent)
 }
 
 /// Fail unless the font measures exactly like the profile pins.

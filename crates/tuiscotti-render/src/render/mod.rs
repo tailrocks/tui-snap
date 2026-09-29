@@ -1,9 +1,9 @@
 //! Pinned-profile rendering: canonical [`Frame`](tuiscotti_core::frame::Frame) → PNG / SVG / ANSI / text.
 //!
-//! The PNG path rasterizes **real glyphs** with `fontdue` from pinned font
+//! The PNG path rasterizes **real glyphs** with `swash` from pinned font
 //! bytes — never placeholder blocks. Glyphs are rasterized at the FINAL scale
 //! (`font_px * scale`) straight onto the output image, so HiDPI output keeps
-//! real font hinting/coverage gradations instead of nearest-neighbor 2×2
+//! real coverage gradations instead of nearest-neighbor 2×2
 //! blocks. [`verify_geometry`] fails loudly if the regular face's measured
 //! advance/line-height drifts from the profile constants, so a font change
 //! reads as a renderer change, not an app regression.
@@ -45,7 +45,7 @@ pub use bundle::{BundleManifest, ContractBytes, check_contract_bytes};
 pub use cache::{RenderCache, render_cache_disabled, screen_content_hash, set_no_cache_override};
 pub(crate) use draw::{draw_primary, draw_symbol};
 pub use fidelity::{Artifacts, FallbackGlyph, Fidelity, MissingGlyph, Rendered};
-pub use fonts::{FontSet, LoadedFont, load_font, measure, verify_geometry};
+pub use fonts::{FontSet, GlyphMetrics, LoadedFont, load_font, measure, verify_geometry};
 pub use frame::{
     frame_from_screen, redact_frame, redact_screen, render_frame_strict, render_screen,
     render_screen_png,
