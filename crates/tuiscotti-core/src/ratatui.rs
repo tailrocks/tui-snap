@@ -485,6 +485,30 @@ pub fn render_screen(
     screen_from_test_backend(&mut term, policy)
 }
 
+/// Render a production draw closure into a validated [`Screen`] (G6 simple path).
+///
+/// `size` is `(cols, rows)`; the closure is the real render path
+/// (`FnOnce(&mut ratatui::Frame)`). Edge clips fail loudly under
+/// [`EdgePolicy::Error`] so the simple path never hides substitutions — use
+/// [`render_screen`] with an explicit policy for lenient clipping.
+///
+/// ```rust
+/// # use tuiscotti_core::ratatui as shot;
+/// # use tuiscotti_core::screen::Screen;
+/// use ratatui::widgets::{Block, Paragraph};
+/// let screen = shot::render((100, 30), |frame| {
+///     frame.render_widget(Paragraph::new("hi").block(Block::bordered()), frame.area());
+/// })?;
+/// assert_eq!((screen.cols(), screen.rows()), (100, 30));
+/// # Ok::<(), tuiscotti_core::screen::ScreenError>(())
+/// ```
+pub fn render(
+    size: (u16, u16),
+    draw: impl FnOnce(&mut ratatui::Frame),
+) -> Result<Screen, ScreenError> {
+    render_screen(size.0, size.1, draw, EdgePolicy::Error).map(ScreenCapture::into_screen)
+}
+
 /// Render any production `Widget` fullscreen into a [`ScreenCapture`] (M05).
 ///
 /// Cursor state is whatever the draw leaves behind (`TestBackend` defaults

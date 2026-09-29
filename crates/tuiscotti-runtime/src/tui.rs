@@ -46,6 +46,7 @@
 //! [`Session::close`] (forceful, idempotent) return teardown errors.
 //! `Drop` reaps children and joins threads without double-panicking.
 
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
@@ -609,31 +610,58 @@ impl CancelToken {
 // Tui builder
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
 enum Program {
-    Argv(Vec<String>),
-    CargoBin(String),
+    Argv(Vec<OsString>),
+    CargoBin(OsString),
 }
 
-/// PTY session builder. Environment and working directory apply to the child
-/// only; the parent process is never mutated.
+/// PTY session builder: one program plus args, child-only env/cwd. The parent
+/// process environment and working directory are never mutated.
+///
+/// `Debug` is secret-safe: env values are redacted, so tokens passed to the
+/// child never leak into logs or snapshots.
 pub struct Tui {
     program: Program,
-    extra_args: Vec<String>,
+    extra_args: Vec<OsString>,
     size: (u16, u16),
-    env: Vec<(String, String)>,
+    env: Vec<(OsString, OsString)>,
     cwd: Option<PathBuf>,
     profile: TerminalProfile,
 }
 
+impl std::fmt::Debug for Tui {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let redacted_env: Vec<(OsString, &str)> = self
+            .env
+            .iter()
+            .map(|(k, _)| (k.clone(), "<redacted>"))
+            .collect();
+        f.debug_struct("Tui")
+            .field("program", &self.program)
+            .field("extra_args", &self.extra_args)
+            .field("size", &self.size)
+            .field("env", &redacted_env)
+            .field("cwd", &self.cwd)
+            .field("profile", &self.profile)
+            .finish()
+    }
+}
+
 impl Tui {
-    /// Launch `argv[0]` with `argv[1..]` as arguments.
+    /// Launch `argv[0]` with `argv[1..]` as arguments. Native `OsStr`
+    /// arguments: non-UTF-8 argv passes through byte-exact.
     pub fn new<I, S>(argv: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<String>,
+        S: AsRef<OsStr>,
     {
         Self {
-            program: Program::Argv(argv.into_iter().map(Into::into).collect()),
+            program: Program::Argv(
+                argv.into_iter()
+                    .map(|a| a.as_ref().to_os_string())
+                    .collect(),
+            ),
             extra_args: Vec::new(),
             size: (80, 24),
             env: Vec::new(),
@@ -642,24 +670,26 @@ impl Tui {
         }
     }
 
-    /// Launch a cargo-built binary of this package by name. Resolved at
-    /// `spawn()` time: `CARGO_BIN_EXE_<name>` when set, else the binary next
-    /// to the current test executable's directory (`target/debug/<name>`).
-    /// Resolution failure surfaces from `spawn()` listing every path tried.
-    pub fn cargo_bin(name: &str) -> Self {
-        Self {
-            program: Program::CargoBin(name.to_string()),
+    /// Launch a cargo-built binary of this package by name. Resolved eagerly:
+    /// `CARGO_BIN_EXE_<name>` when set, else the binary next to the current
+    /// test executable's directory. Resolution failure is an error here (not
+    /// deferred to [`Tui::spawn`]), listing every location tried.
+    pub fn cargo_bin(name: impl AsRef<OsStr>) -> Result<Self, TuiError> {
+        let name = name.as_ref().to_os_string();
+        resolve_cargo_bin(&name)?;
+        Ok(Self {
+            program: Program::CargoBin(name),
             extra_args: Vec::new(),
             size: (80, 24),
             env: Vec::new(),
             cwd: None,
             profile: TerminalProfile::default(),
-        }
+        })
     }
 
     #[must_use]
-    pub fn arg(mut self, arg: &str) -> Self {
-        self.extra_args.push(arg.to_string());
+    pub fn arg(mut self, arg: impl AsRef<OsStr>) -> Self {
+        self.extra_args.push(arg.as_ref().to_os_string());
         self
     }
 
@@ -667,9 +697,10 @@ impl Tui {
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<String>,
+        S: AsRef<OsStr>,
     {
-        self.extra_args.extend(args.into_iter().map(Into::into));
+        self.extra_args
+            .extend(args.into_iter().map(|a| a.as_ref().to_os_string()));
         self
     }
 
@@ -683,12 +714,16 @@ impl Tui {
 
     /// Child-only environment entry. Never touches the parent environment.
     #[must_use]
-    pub fn env(mut self, key: &str, value: &str) -> Self {
-        self.env.push((key.to_string(), value.to_string()));
+    pub fn env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
+        self.env.push((
+            key.as_ref().to_os_string(),
+            value.as_ref().to_os_string(),
+        ));
         self
     }
 
-    /// Child working directory.
+    /// Child working directory. Takes [`PathBuf`] (not a generic) so
+    /// `".into()"` call sites keep inferring without annotations.
     #[must_use]
     pub fn cwd(mut self, dir: PathBuf) -> Self {
         self.cwd = Some(dir);
@@ -809,43 +844,49 @@ impl Tui {
         Ok(session)
     }
 
-    fn resolve_argv(&self) -> Result<Vec<String>, TuiError> {
+    fn resolve_argv(&self) -> Result<Vec<OsString>, TuiError> {
         match &self.program {
             Program::Argv(argv) => Ok(argv.clone()),
-            Program::CargoBin(name) => {
-                let var = format!(
-                    "CARGO_BIN_EXE_{}",
-                    name.replace('-', "_").to_ascii_uppercase()
-                );
-                let mut tried = Vec::new();
-                if let Ok(p) = std::env::var(&var) {
-                    return Ok(vec![p]);
-                }
-                tried.push(format!("env {var} (unset)"));
-                if let Ok(exe) = std::env::current_exe() {
-                    if let Some(deps) = exe.parent() {
-                        let dir = if deps.file_name().is_some_and(|n| n == "deps") {
-                            deps.parent().unwrap_or(deps).to_path_buf()
-                        } else {
-                            deps.to_path_buf()
-                        };
-                        #[cfg(windows)]
-                        let candidate = dir.join(format!("{name}.exe"));
-                        #[cfg(not(windows))]
-                        let candidate = dir.join(name);
-                        tried.push(candidate.display().to_string());
-                        if candidate.is_file() {
-                            return Ok(vec![candidate.to_string_lossy().into_owned()]);
-                        }
-                    }
-                }
-                Err(TuiError::Spawn(format!(
-                    "binary {name:?} not found; tried: {}",
-                    tried.join(", ")
-                )))
+            Program::CargoBin(name) => Ok(vec![resolve_cargo_bin(name)?]),
+        }
+    }
+}
+
+/// Resolve a cargo-built binary: `CARGO_BIN_EXE_<name>` when set, else next
+/// to the current test executable. Shared by eager [`Tui::cargo_bin`] and
+/// [`Tui::spawn`] so the two can never disagree on lookup order.
+fn resolve_cargo_bin(name: &OsStr) -> Result<OsString, TuiError> {
+    let display = name.to_string_lossy();
+    let var = format!(
+        "CARGO_BIN_EXE_{}",
+        display.replace('-', "_").to_ascii_uppercase()
+    );
+    let mut tried = Vec::new();
+    if let Some(p) = std::env::var_os(&var) {
+        return Ok(p);
+    }
+    tried.push(format!("env {var} (unset)"));
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(deps) = exe.parent() {
+            let dir = if deps.file_name().is_some_and(|n| n == "deps") {
+                deps.parent().unwrap_or(deps).to_path_buf()
+            } else {
+                deps.to_path_buf()
+            };
+            #[cfg(windows)]
+            let candidate = dir.join(format!("{display}.exe"));
+            #[cfg(not(windows))]
+            let candidate = dir.join(name);
+            tried.push(candidate.display().to_string());
+            if candidate.is_file() {
+                return Ok(candidate.into_os_string());
             }
         }
     }
+    Err(TuiError::Spawn(format!(
+        "binary {display:?} not found; tried: {}",
+        tried.join(", ")
+    )))
 }
 
 // ---------------------------------------------------------------------------

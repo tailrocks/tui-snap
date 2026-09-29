@@ -12,7 +12,10 @@ pty = ["tuiscotti-runtime/pty"]
 [dependencies]
 tuiscotti-core = { path = "../tuiscotti-core" }
 tuiscotti-render = { path = "../tuiscotti-render" }
-tuiscotti-runtime = { path = "../tuiscotti-runtime" }
+# default-features = false: the facade `pty` feature (default on) re-adds the
+# terminal runtime explicitly, so `--no-default-features` builds pure-view use
+# without PTY dependencies.
+tuiscotti-runtime = { path = "../tuiscotti-runtime", default-features = false }
 tuiscotti-insta = { path = "../tuiscotti-insta" }
 
 [dev-dependencies]

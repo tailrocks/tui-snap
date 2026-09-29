@@ -1305,10 +1305,28 @@ fn now_unix() -> u64 {
 /// publish the endpoint. A live same-name session is a `session-exists` error
 /// unless `force` stops it first.
 pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<SessionInfo, OpError> {
+    let owned: Vec<std::ffi::OsString> =
+        argv.iter().map(|a| std::ffi::OsString::from(a)).collect();
+    session_start_os(name, &owned, force)
+}
+
+/// [`session_start`] with native [`OsString`](std::ffi::OsString) argv: the
+/// child spawns byte-exact. The endpoint record keeps a lossy UTF-8
+/// projection (`argv_display`) because endpoint JSON and the machine-protocol
+/// schema are UTF-8; the record is diagnostic, never re-spawned.
+pub fn session_start_os(
+    name: &str,
+    argv: &[std::ffi::OsString],
+    force: bool,
+) -> Result<SessionInfo, OpError> {
     validate_session_name(name)?;
     if argv.is_empty() {
         return Err(OpError::new("invalid-input", "session start needs argv"));
     }
+    let argv_display: Vec<String> = argv
+        .iter()
+        .map(|a| a.as_os_str().to_string_lossy().into_owned())
+        .collect();
     let dir = runtime_dir()?;
     if let Some(ep) = read_endpoint(&dir, name)? {
         if pid_alive(ep.pid) {
@@ -1341,14 +1359,17 @@ pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<Session
     // start` process in the common case (no SIGHUP unless its terminal
     // closes). Restoring a real detach needs a policy exception or a safe
     // wrapper; recorded as known debt.
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| OpError::new("spawn-failed", format!("{}: {e}", argv[0])))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        OpError::new(
+            "spawn-failed",
+            format!("{}: {e}", argv_display.first().cloned().unwrap_or_default()),
+        )
+    })?;
     let ep = SessionEndpoint {
         version: SESSION_ENDPOINT_VERSION,
         name: name.to_string(),
         pid: child.id(),
-        argv: argv.to_vec(),
+        argv: argv_display,
         backend: SessionBackend::Process,
         started_unix: now_unix(),
         owner: Some(current_uid()),

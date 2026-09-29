@@ -76,6 +76,94 @@ impl Termination {
     }
 }
 
+/// Why a run never produced child output: resolution or spawn failure.
+///
+/// Typed context for [`Termination::SpawnError`]: the failure kind plus the
+/// detail that caused it (searched locations for resolution, the OS message
+/// otherwise). Never a bare string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnError {
+    kind: SpawnErrorKind,
+    detail: String,
+    searched: Vec<PathBuf>,
+}
+
+/// Spawn-failure kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnErrorKind {
+    /// `cargo_bin` resolution found no binary.
+    BinaryNotFound,
+    /// The OS refused the spawn (missing binary, bad cwd, ...).
+    SpawnFailed,
+    /// Reaping a live child failed after spawn.
+    WaitFailed,
+}
+
+impl SpawnError {
+    /// Typed failure kind.
+    #[must_use]
+    pub fn kind(&self) -> SpawnErrorKind {
+        self.kind
+    }
+
+    /// Human-readable detail (OS message or searched locations).
+    #[must_use]
+    pub fn detail(&self) -> &str {
+        &self.detail
+    }
+
+    /// Resolution candidates tried, for [`SpawnErrorKind::BinaryNotFound`].
+    #[must_use]
+    pub fn searched(&self) -> &[PathBuf] {
+        &self.searched
+    }
+
+    fn not_found(name: &OsStr, var: &str, searched: Vec<PathBuf>) -> Self {
+        Self {
+            kind: SpawnErrorKind::BinaryNotFound,
+            detail: format!(
+                "binary `{}` not found; set {var} or build it first (searched: {})",
+                Path::new(name).file_name().unwrap_or(name).to_string_lossy(),
+                searched
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            searched,
+        }
+    }
+
+    fn spawn_failed(detail: String) -> Self {
+        Self {
+            kind: SpawnErrorKind::SpawnFailed,
+            detail,
+            searched: Vec::new(),
+        }
+    }
+
+    fn wait_failed(detail: String) -> Self {
+        Self {
+            kind: SpawnErrorKind::WaitFailed,
+            detail,
+            searched: Vec::new(),
+        }
+    }
+}
+
+impl std::fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kind = match self.kind {
+            SpawnErrorKind::BinaryNotFound => "binary not found",
+            SpawnErrorKind::SpawnFailed => "spawn failed",
+            SpawnErrorKind::WaitFailed => "wait failed",
+        };
+        write!(f, "{kind}: {}", self.detail)
+    }
+}
+
+impl std::error::Error for SpawnError {}
+
 /// Collected result of one [`Command::run`].
 ///
 /// `stdout`/`stderr` hold raw bytes exactly as read: no UTF-8 validation,
@@ -97,8 +185,8 @@ pub struct ProcessOutput {
     pub truncated: bool,
     /// Wall time from spawn (or spawn attempt) until output collection ended.
     pub elapsed: Duration,
-    /// Auxiliary detail: spawn-failure message for [`Termination::SpawnError`].
-    pub error: Option<String>,
+    /// Typed spawn-failure detail for [`Termination::SpawnError`].
+    pub error: Option<SpawnError>,
 }
 
 impl ProcessOutput {
@@ -120,13 +208,27 @@ impl ProcessOutput {
         self.status.signal()
     }
 
-    /// Best-effort UTF-8 view of stdout (lossy; [`Self::stdout`] is intact).
+    /// Fallible UTF-8 view of stdout; the raw bytes stay authoritative.
+    /// Use [`Self::stdout_lossy`] only when loss is explicitly acceptable —
+    /// never in equality checks.
+    pub fn stdout_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.stdout)
+    }
+
+    /// Fallible UTF-8 view of stderr; the raw bytes stay authoritative.
+    /// Use [`Self::stderr_lossy`] only when loss is explicitly acceptable —
+    /// never in equality checks.
+    pub fn stderr_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.stderr)
+    }
+
+    /// Explicitly lossy UTF-8 view of stdout ([`Self::stdout`] is intact).
     #[must_use]
     pub fn stdout_lossy(&self) -> String {
         String::from_utf8_lossy(&self.stdout).into_owned()
     }
 
-    /// Best-effort UTF-8 view of stderr (lossy; [`Self::stderr`] is intact).
+    /// Explicitly lossy UTF-8 view of stderr ([`Self::stderr`] is intact).
     #[must_use]
     pub fn stderr_lossy(&self) -> String {
         String::from_utf8_lossy(&self.stderr).into_owned()
@@ -169,9 +271,9 @@ fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
 /// `Command::new(env!("CARGO_BIN_EXE_<name>"))` in the test itself; that
 /// `env!` must expand in the test crate, not in this library.
 ///
-/// Returns the first candidate that exists, else an error listing every
+/// Returns the first candidate that exists, else a typed error listing every
 /// location that was searched.
-pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, String> {
+pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, SpawnError> {
     let name = name.as_ref();
     let file = Path::new(name).file_name().unwrap_or(name);
     let var = format!("CARGO_BIN_EXE_{}", file.to_string_lossy());
@@ -189,15 +291,7 @@ pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, String> {
         }
         searched.push(c);
     }
-    Err(format!(
-        "binary `{}` not found; set {var} or build it first (searched: {})",
-        file.to_string_lossy(),
-        searched
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    ))
+    Err(SpawnError::not_found(file, &var, searched))
 }
 
 /// Default bound for collecting pipe output after the child was reaped.
@@ -215,7 +309,7 @@ enum Program {
     /// [`Termination::SpawnError`] instead of spawning.
     CargoBin {
         name: OsString,
-        resolved: Result<PathBuf, String>,
+        resolved: Result<PathBuf, SpawnError>,
     },
 }
 
@@ -223,7 +317,10 @@ enum Program {
 ///
 /// No shell is involved unless [`.shell(true)`](Command::shell) opts in.
 /// Environment entries and the working directory apply to the child only.
-#[derive(Debug, Clone)]
+///
+/// `Debug` is secret-safe: env values and stdin bytes are redacted (lengths
+/// shown), so tokens passed to the child never leak into logs or snapshots.
+#[derive(Clone)]
 pub struct Command {
     program: Program,
     args: Vec<OsString>,
@@ -235,6 +332,28 @@ pub struct Command {
     output_limit: Option<usize>,
     drain_deadline: Duration,
     shell: bool,
+}
+
+impl std::fmt::Debug for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let redacted_env: Vec<(OsString, Option<&str>)> = self
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_ref().map(|_| "<redacted>")))
+            .collect();
+        f.debug_struct("Command")
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("env", &redacted_env)
+            .field("env_clear", &self.env_clear)
+            .field("cwd", &self.cwd)
+            .field("stdin_bytes", &self.stdin_bytes.as_ref().map(Vec::len))
+            .field("timeout", &self.timeout)
+            .field("output_limit", &self.output_limit)
+            .field("drain_deadline", &self.drain_deadline)
+            .field("shell", &self.shell)
+            .finish()
+    }
 }
 
 impl Command {
@@ -473,7 +592,7 @@ impl Command {
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                out.error = Some(e.to_string());
+                out.error = Some(SpawnError::spawn_failed(e.to_string()));
                 out.elapsed = start.elapsed();
                 return out;
             }
@@ -523,7 +642,7 @@ impl Command {
                     // kill defensively and report what we know.
                     let _ = child.kill();
                     let _ = child.wait();
-                    out.error = Some(format!("wait failed: {e}"));
+                    out.error = Some(SpawnError::wait_failed(e.to_string()));
                     break Termination::SpawnError;
                 }
             }

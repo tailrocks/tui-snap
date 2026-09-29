@@ -233,7 +233,8 @@ impl Screen {
     /// Validated import from a canonical [`Frame`] (M02). The frame is
     /// validated first; all source distinctions (colors, modifiers incl.
     /// hidden/blink, styled blanks, continuations, cursor) are preserved.
-    /// Imported screens sit at origin (0,0).
+    /// Imported screens sit at origin (0,0). Also available as
+    /// `TryFrom<&Frame>` for generic conversion sites.
     pub fn from_frame(frame: &Frame) -> Result<Self, ScreenError> {
         frame
             .validate()
@@ -379,6 +380,15 @@ impl Screen {
             cursor,
         )?;
         Ok(Region { screen, policy })
+    }
+}
+
+impl TryFrom<&Frame> for Screen {
+    type Error = ScreenError;
+
+    /// Fallible conversion identical to [`Screen::from_frame`].
+    fn try_from(frame: &Frame) -> Result<Self, Self::Error> {
+        Self::from_frame(frame)
     }
 }
 

@@ -482,7 +482,7 @@ fn readme_cli_help_lists_documented_subcommands() {
     let top = help(&["--help"]);
     for cmd in [
         "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
-        "report", "import", "session", "record", "trace",
+        "report", "import", "session", "record", "trace", "machine",
     ] {
         assert!(top.contains(cmd), "--help missing {cmd}:\n{top}");
     }
@@ -603,14 +603,14 @@ fn home_frame_diff_png(dir: &Path) -> PathBuf {
 
 #[test]
 fn readme_cli_machine_and_offline_commands() {
-    // tuisnap --machine < ops.jsonl : one envelope line, exit 0.
+    // tuisnap machine < ops.jsonl : one envelope line, exit 0.
     let mut child = Command::new(bin())
-        .arg("--machine")
+        .arg("machine")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("spawn --machine");
+        .expect("spawn machine");
     use std::io::Write;
     child
         .stdin
@@ -618,7 +618,7 @@ fn readme_cli_machine_and_offline_commands() {
         .unwrap()
         .write_all(br#"{"type":"capabilities"}"#)
         .unwrap();
-    let out = child.wait_with_output().expect("wait --machine");
+    let out = child.wait_with_output().expect("wait machine");
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(r#""ok":true"#), "machine out: {stdout}");

@@ -139,7 +139,7 @@ fn shell_opt_in_passes_positional_params() {
 fn spawn_error_reports_detail() {
     let out = Command::new("/nonexistent-binary-xyz").run();
     assert_eq!(out.status, Termination::SpawnError);
-    assert!(out.error.as_deref().is_some_and(|e| !e.is_empty()));
+    assert!(out.error.as_ref().is_some_and(|e| !e.detail().is_empty()));
     assert!(!out.truncated);
 }
 
@@ -156,8 +156,16 @@ fn cargo_bin_resolves_tuisnap_itself() {
 fn cargo_bin_missing_reports_searched_paths() {
     let out = Command::cargo_bin("tuisnap-no-such-bin-xyz").run();
     assert_eq!(out.status, Termination::SpawnError);
-    let msg = out.error.expect("searched locations reported");
-    assert!(msg.contains("tuisnap-no-such-bin-xyz"), "{msg}");
+    let err = out.error.expect("searched locations reported");
+    assert_eq!(
+        err.kind(),
+        tuiscotti::command::SpawnErrorKind::BinaryNotFound
+    );
+    assert!(!err.searched().is_empty(), "searched paths: {err}");
+    assert!(
+        err.detail().contains("tuisnap-no-such-bin-xyz"),
+        "{err}"
+    );
 }
 
 #[test]

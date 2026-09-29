@@ -8,14 +8,18 @@ license.workspace = true
 [[bin]]
 name = "tuisnap"
 path = "src/main.rs"
-required-features = ["pty"]
 
+# No required-features: the binary always builds. Offline commands (inspect,
+# render, diff, review, accept, report, import, trace) work without `pty`;
+# PTY-backed machine ops report `unsupported` instead.
 [features]
 default = ["pty"]
 pty = ["tuiscotti/pty"]
 
 [dependencies]
-tuiscotti = { path = "../tuiscotti" }
+# default-features = false: without the CLI `pty` feature this must not
+# compile the terminal runtime (offline render/diff/report/import only).
+tuiscotti = { path = "../tuiscotti", default-features = false }
 clap.workspace = true
 serde_json.workspace = true
 

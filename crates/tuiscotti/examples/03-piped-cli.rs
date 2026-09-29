@@ -12,7 +12,14 @@ fn main() {
     let missing = Command::new("/nonexistent-tuisnap-binary-xyz").run();
     assert_eq!(missing.status, Termination::SpawnError);
     assert!(!missing.success());
-    assert!(missing.error.as_deref().unwrap_or_default().len() > 5);
+    assert!(
+        missing
+            .error
+            .as_ref()
+            .map(|e| e.detail().len())
+            .unwrap_or_default()
+            > 5
+    );
 
     // Failing child: exit code + split streams, byte-exact.
     let failed = Command::new("/bin/sh")

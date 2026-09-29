@@ -1,7 +1,7 @@
 //! CLI core + typed op protocol tests (A01, A02-partial, A04-partial).
 //!
 //! Covers [`tuiscotti::proto::execute`] for every op (happy + error paths), the
-//! `--machine` JSON-lines shape, every CLI subcommand round trip in temp dirs,
+//! `machine` JSON-lines shape, every CLI subcommand round trip in temp dirs,
 //! exit codes, and the inspect/import never-executes guarantee.
 
 use std::path::{Path, PathBuf};
@@ -507,7 +507,7 @@ fn cli_help_and_version() {
     let h = stdout(&out);
     for cmd in [
         "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
-        "report", "import", "session", "record", "trace",
+        "report", "import", "session", "record", "trace", "machine",
     ] {
         assert!(h.contains(cmd), "help lists {cmd}:\n{h}");
     }
@@ -931,7 +931,7 @@ fn cli_record_and_trace() {
 #[test]
 fn cli_machine_mode() {
     let input = "{\"type\":\"version\"}\n{\"type\":\"assert\",\"check\":\"text-equals\",\"actual\":\"a\",\"expected\":\"a\"}\n";
-    let out = run_cli(&["--machine"], &[], Some(input));
+    let out = run_cli(&["machine"], &[], Some(input));
     assert_eq!(
         code(&out),
         0,
@@ -946,7 +946,7 @@ fn cli_machine_mode() {
         assert!(env.ok);
     }
     let out = run_cli(
-        &["--machine"],
+        &["machine"],
         &[],
         Some("{\"type\":\"version\"}\ngarbage\n"),
     );
@@ -956,6 +956,56 @@ fn cli_machine_mode() {
     assert_eq!(lines.len(), 2);
     let second: Envelope = serde_json::from_str(lines[1]).expect("envelope");
     assert!(!second.ok);
+}
+
+// ---------------------------------------------------------------------------
+// CLI: the parent parser never consumes an argument after `--` (G6).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn child_receives_double_dash_machine() {
+    // Exact regression: with the old hidden `--machine` pre-scan, the parent
+    // stripped `--machine` ANYWHERE in argv — including the child's. Now the
+    // child receives it byte-exact and machine mode is `tuisnap machine`.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("cap");
+    let out_arg = out.to_str().expect("utf8 tempdir").to_string();
+    let res = run_cli(
+        &["capture", "--out", &out_arg, "--", "/bin/echo", "--machine"],
+        &[],
+        None,
+    );
+    assert_eq!(
+        code(&res),
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let captured = std::fs::read(out.join("stdout.bin")).expect("stdout.bin");
+    assert_eq!(captured, b"--machine\n");
+    // A literal `--` child argument survives too (clap consumes only the
+    // separator; no post-filter may eat child values).
+    let out2 = tmp.path().join("cap2");
+    let out2_arg = out2.to_str().expect("utf8 tempdir").to_string();
+    let res = run_cli(
+        &["capture", "--out", &out2_arg, "--", "/bin/echo", "--", "--machine"],
+        &[],
+        None,
+    );
+    assert_eq!(code(&res), 0);
+    let captured = std::fs::read(out2.join("stdout.bin")).expect("stdout.bin");
+    assert_eq!(captured, b"-- --machine\n");
+    // A bare `--machine` flag is no longer machine mode: usage error (exit 2).
+    let res = run_cli(&["--machine"], &[], None);
+    assert_eq!(code(&res), 2);
+    // `machine --help` documents the explicit interface.
+    let res = run_cli(&["machine", "--help"], &[], None);
+    assert_eq!(code(&res), 0);
+    assert!(
+        stdout(&res).contains("stdin"),
+        "machine help: {}",
+        stdout(&res)
+    );
 }
 
 // ---------------------------------------------------------------------------

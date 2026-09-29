@@ -14,20 +14,29 @@
 //! - [`emit_four`] / [`import_frozen_v1`]: four-artifact (ANSI/TXT/PNG/HTML) export from
 //!   one [`Screen`] and a read-only importer for classic/grouped four-file trees.
 //!
-//! Design notes (public-API gaps found while building this):
-//! - The macros capture `file!()`/`line!()` and forward to `*_impl` functions, so the
-//!   Insta assertion textually expands inside this module: the `.snap` `source:` field
-//!   names `src/assert.rs`, not the caller. The caller location is therefore ALSO
-//!   embedded in the snapshot description (`... at <file>:<line>`), which review tools
-//!   display. The default snapshot directory is derived from the CALLER file
-//!   (`<caller-dir>/snapshots`, mirroring Insta's native default); set
+//! Design notes (G6 caller-fixed metadata):
+//! - The macros textually expand `$crate::insta::assert_snapshot!` /
+//!   `assert_binary_snapshot!` AT THE CALLER, so Insta captures the caller's
+//!   `file!()`/`module_path!()`/`line!()` and its `CARGO_MANIFEST_DIR` for
+//!   snapshot placement: the `.snap` `source:` field names the caller, and
+//!   relative snapshot dirs resolve against the caller's crate. Each argument
+//!   is evaluated exactly once into a hygienic `__tuiscotti_*` binding.
+//! - Scoped settings derive from [`insta::Settings::clone_current`]: an outer
+//!   `snapshot_suffix` (parameterized tests) is honored, while the snapshot
+//!   path, module-prepend, description, and PNG comparator are overridden
+//!   inside a `bind` scope that never leaks outward.
+//! - The caller location is ALSO embedded in the snapshot description
+//!   (`... at <file>:<line>`), which review tools display, together with the
+//!   render identity (`<profile>/rv<version>/<alpha>`) the PNG verdict
+//!   depends on. The default snapshot directory is derived from the CALLER
+//!   file (`<caller-dir>/snapshots`, mirroring Insta's native default); set
 //!   [`SNAPSHOT_DIR_ENV`] to override.
 //! - `insta_proto` carries no `check_consistent` (it only ever existed as a local helper
 //!   in `tests/insta_spike.rs`), and this facade may not touch that module — so the
 //!   canonical consistency gate lives here ([`check_consistent`]).
-//! - Insta exposes no `Settings` switch for the update behavior; tests forbid auto-write
-//!   with `INSTA_UPDATE=no` set in-process before the first assertion (Insta memoizes
-//!   tool config per workspace binary).
+//! - Insta exposes no `Settings` switch for the update behavior; forbid
+//!   auto-write with `INSTA_UPDATE=no` in the process environment before the
+//!   first assertion (Insta memoizes tool config per workspace binary).
 //!
 //! Environment:
 //! - [`SNAPSHOT_DIR_ENV`]: explicit Insta snapshot directory (tests point it at a
@@ -67,60 +76,180 @@ pub struct Location {
 
 /// Assert styled canonical state through native Insta review (I01).
 ///
-/// `$name` is the snapshot name, `$screen` a `&Screen`. An optional [`Policy`]
-/// switches between the evolving review flow and a frozen root.
+/// `$name` is the snapshot name (`&str` or `String`), `$screen` a `&Screen`.
+/// An optional `&`[`Policy`] switches between the evolving review flow and a
+/// frozen root. The Insta assertion expands AT THE CALLER: snapshot metadata
+/// (file/module/test identity) names the call site. Each argument is
+/// evaluated exactly once.
 #[macro_export]
 macro_rules! assert_snapshot {
     ($name:expr, $screen:expr) => {
-        $crate::assert::assert_snapshot_impl(
-            $name,
-            $screen,
-            $crate::assert::Location {
-                file: file!(),
-                line: line!(),
-            },
-        )
+        $crate::assert_snapshot!($name, $screen, &$crate::assert::Policy::Evolving)
     };
-    ($name:expr, $screen:expr, $policy:expr) => {
-        $crate::assert::assert_snapshot_with_policy(
-            $policy,
-            $name,
-            $screen,
-            $crate::assert::Location {
-                file: file!(),
-                line: line!(),
-            },
-        )
-    };
+    ($name:expr, $screen:expr, $policy:expr) => {{
+        let __tuiscotti_name = $name;
+        let __tuiscotti_name: &str = __tuiscotti_name.as_ref();
+        let __tuiscotti_screen = $screen;
+        let __tuiscotti_policy: &$crate::assert::Policy = $policy;
+        let __tuiscotti_location = $crate::assert::Location {
+            file: file!(),
+            line: line!(),
+        };
+        match __tuiscotti_policy {
+            $crate::assert::Policy::Evolving => {
+                let __tuiscotti_dir = $crate::assert::default_snapshot_dir();
+                let (__tuiscotti_canonical, __tuiscotti_generation) =
+                    $crate::assert::prepare_snapshot(__tuiscotti_screen);
+                let __tuiscotti_settings = $crate::assert::snapshot_settings(
+                    &__tuiscotti_dir,
+                    __tuiscotti_location,
+                    &__tuiscotti_generation,
+                );
+                let __tuiscotti_snap_name = __tuiscotti_name.to_string();
+                __tuiscotti_settings.bind(|| {
+                    $crate::insta::assert_snapshot!(
+                        __tuiscotti_snap_name,
+                        __tuiscotti_canonical,
+                        "canonical screen"
+                    );
+                });
+            }
+            $crate::assert::Policy::EvolvingIn { snapshots, .. } => {
+                let (__tuiscotti_canonical, __tuiscotti_generation) =
+                    $crate::assert::prepare_snapshot(__tuiscotti_screen);
+                let __tuiscotti_settings = $crate::assert::snapshot_settings(
+                    snapshots,
+                    __tuiscotti_location,
+                    &__tuiscotti_generation,
+                );
+                let __tuiscotti_snap_name = __tuiscotti_name.to_string();
+                __tuiscotti_settings.bind(|| {
+                    $crate::insta::assert_snapshot!(
+                        __tuiscotti_snap_name,
+                        __tuiscotti_canonical,
+                        "canonical screen"
+                    );
+                });
+            }
+            $crate::assert::Policy::Frozen { root } => {
+                $crate::assert::assert_frozen_snapshot(
+                    root,
+                    __tuiscotti_name,
+                    __tuiscotti_screen,
+                );
+            }
+        }
+    }};
 }
 
 /// Assert canonical state plus an independently rendered PNG as one sample (I02).
 ///
+/// `$name` is the snapshot base (`&str` or `String`), `$screen` a `&Screen`.
 /// Candidate evidence (`<name>.{png,ansi,txt,html}` under [`EVIDENCE_DIR_ENV`])
 /// is written BEFORE any failure. The PNG snapshot is named `<name>-img`.
+/// Both Insta assertions expand AT THE CALLER. Each argument is evaluated
+/// exactly once.
 #[macro_export]
 macro_rules! assert_screenshot {
     ($name:expr, $screen:expr) => {
-        $crate::assert::assert_screenshot_impl(
-            $name,
-            $screen,
-            $crate::assert::Location {
-                file: file!(),
-                line: line!(),
-            },
-        )
+        $crate::assert_screenshot!($name, $screen, &$crate::assert::Policy::Evolving)
     };
-    ($name:expr, $screen:expr, $policy:expr) => {
-        $crate::assert::assert_screenshot_with_policy(
-            $policy,
+    ($name:expr, $screen:expr, $policy:expr) => {{
+        let __tuiscotti_name = $name;
+        let __tuiscotti_name: &str = __tuiscotti_name.as_ref();
+        let __tuiscotti_screen = $screen;
+        let __tuiscotti_policy: &$crate::assert::Policy = $policy;
+        let __tuiscotti_location = $crate::assert::Location {
+            file: file!(),
+            line: line!(),
+        };
+        match __tuiscotti_policy {
+            $crate::assert::Policy::Evolving => {
+                let __tuiscotti_dir = $crate::assert::default_snapshot_dir();
+                $crate::assert_screenshot_in!(
+                    __tuiscotti_name,
+                    __tuiscotti_screen,
+                    __tuiscotti_location,
+                    __tuiscotti_dir,
+                    $crate::assert::evidence_dir()
+                );
+            }
+            $crate::assert::Policy::EvolvingIn { snapshots, evidence } => {
+                $crate::assert_screenshot_in!(
+                    __tuiscotti_name,
+                    __tuiscotti_screen,
+                    __tuiscotti_location,
+                    snapshots.clone(),
+                    evidence.clone()
+                );
+            }
+            $crate::assert::Policy::Frozen { root } => {
+                $crate::assert::assert_frozen_screenshot(
+                    root,
+                    __tuiscotti_name,
+                    __tuiscotti_screen,
+                );
+            }
+        }
+    }};
+}
+
+/// Evolving screenshot body shared by both [`assert_screenshot!`] policy arms.
+///
+/// Macro-internal (`#[doc(hidden)]`): runs the one-sample flow — prepare
+/// (render + evidence BEFORE any failure), assert canonical, assert PNG by
+/// decoded pixels, run the lenient compound gate — with both Insta assertions
+/// expanding at the original caller.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! assert_screenshot_in {
+    ($name:expr, $screen:expr, $location:expr, $snapshots:expr, $evidence:expr) => {{
+        let __tuiscotti_snapshots = $snapshots;
+        let __tuiscotti_evidence = $evidence;
+        let __tuiscotti_prepared =
+            $crate::assert::prepare_screenshot($name, $screen, &__tuiscotti_evidence);
+        let __tuiscotti_settings = $crate::assert::snapshot_settings(
+            &__tuiscotti_snapshots,
+            $location,
+            &__tuiscotti_prepared.generation,
+        );
+        let __tuiscotti_snap_name = $name.to_string();
+        let __tuiscotti_canonical = __tuiscotti_prepared.canonical;
+        __tuiscotti_settings.bind(|| {
+            $crate::insta::assert_snapshot!(
+                __tuiscotti_snap_name,
+                __tuiscotti_canonical,
+                "canonical screen"
+            );
+        });
+        let __tuiscotti_png_base = $crate::assert::png_snapshot_base($name);
+        let __tuiscotti_png_name = format!("{}.png", __tuiscotti_png_base);
+        let mut __tuiscotti_png_settings = $crate::assert::snapshot_settings(
+            &__tuiscotti_snapshots,
+            $location,
+            &__tuiscotti_prepared.generation,
+        );
+        __tuiscotti_png_settings
+            .set_comparator(Box::new($crate::assert::screenshot_png_comparator()));
+        let __tuiscotti_png = __tuiscotti_prepared.png;
+        __tuiscotti_png_settings.bind(|| {
+            $crate::insta::assert_binary_snapshot!(
+                __tuiscotti_png_name.as_str(),
+                __tuiscotti_png,
+                "screenshot png"
+            );
+        });
+        if let Err(__tuiscotti_err) = $crate::assert::check_consistent_lenient(
+            &__tuiscotti_snapshots,
             $name,
-            $screen,
-            $crate::assert::Location {
-                file: file!(),
-                line: line!(),
-            },
-        )
-    };
+            &__tuiscotti_png_base,
+        ) {
+            panic!(
+                "tuisnap assert_screenshot!({:?}): {}",
+                $name, __tuiscotti_err
+            );
+        }
+    }};
 }
 
 /// Content-derived generation binding: hex SHA-256 of the canonical text.
@@ -141,23 +270,39 @@ pub fn generation_id(canonical: &str) -> String {
 
 fn description_for(generation: &str, location: Location) -> String {
     format!(
-        "{GEN_DESC_PREFIX}{generation} at {}:{}",
-        location.file, location.line
+        "{GEN_DESC_PREFIX}{generation} render {} at {}:{}",
+        render_identity(),
+        location.file,
+        location.line
     )
 }
 
-/// Snapshot directory for a macro call: [`SNAPSHOT_DIR_ENV`] when set, else
-/// `<caller-dir>/snapshots` (mirrors Insta's native default, relative to the
-/// CALLER file since the assertion textually expands here).
+/// Render identity the PNG verdict depends on: default profile name,
+/// renderer version, and screenshot alpha policy. Recorded in every snapshot
+/// description so a canonical-identical/render-different drift names its
+/// cause. [`snap_generation`] only reads the first token, so this stays
+/// parse-safe.
+fn render_identity() -> String {
+    let profile = Profile::default_profile();
+    format!(
+        "{}/rv{}/straight-rgba",
+        profile.name,
+        tuiscotti_render::profile::RENDERER_VERSION
+    )
+}
+
+/// Default snapshot directory for a macro call: [`SNAPSHOT_DIR_ENV`] when set,
+/// else the relative path `snapshots`. Insta joins a relative snapshot path
+/// against the ASSERTION FILE's directory, and the facade assertions expand
+/// at the caller — so this lands in `<caller-dir>/snapshots`, exactly Insta's
+/// native default. No caller path is needed (or accepted: prefixing the
+/// caller dir here would double-join).
 #[must_use]
-pub fn snapshot_dir_for(caller_file: &str) -> PathBuf {
+pub fn default_snapshot_dir() -> PathBuf {
     if let Ok(dir) = std::env::var(SNAPSHOT_DIR_ENV) {
         return PathBuf::from(dir);
     }
-    match Path::new(caller_file).parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent.join("snapshots"),
-        _ => PathBuf::from("snapshots"),
-    }
+    PathBuf::from("snapshots")
 }
 
 /// Candidate-evidence root: [`EVIDENCE_DIR_ENV`] when set, else
@@ -282,71 +427,58 @@ pub fn png_comparator(alpha: AlphaPolicy) -> PngPixelComparator {
     PngPixelComparator::new(alpha)
 }
 
-fn evolving_settings(location: Location, generation: &str) -> insta::Settings {
-    evolving_settings_in(&snapshot_dir_for(location.file), location, generation)
-}
-
-fn evolving_settings_in(
+/// Scoped evolving settings for the facade macros (macro backend).
+///
+/// Derives from [`insta::Settings::clone_current`] so an outer
+/// `snapshot_suffix` (parameterized tests) is honored, then overrides the
+/// snapshot path, module-prepend, and the generation/render description. The
+/// macros `bind` these around the caller-expanded Insta assertion, so nothing
+/// leaks outward.
+#[doc(hidden)]
+#[must_use]
+pub fn snapshot_settings(
     snapshot_dir: &Path,
     location: Location,
     generation: &str,
 ) -> insta::Settings {
-    let mut settings = insta::Settings::new();
+    let mut settings = insta::Settings::clone_current();
     settings.set_snapshot_path(snapshot_dir);
     settings.set_prepend_module_to_snapshot(false);
     settings.set_description(description_for(generation, location));
     settings
 }
 
-/// `assert_snapshot!` implementation: canonical text through native Insta review.
-/// Panics on mismatch (native Insta failure); never writes approvals itself.
-pub fn assert_snapshot_impl(name: &str, screen: &Screen, location: Location) {
-    assert_snapshot_impl_in(name, screen, location, &snapshot_dir_for(location.file));
-}
-
-/// [`assert_snapshot_impl`] with an explicit snapshot directory (no `unsafe`,
-/// unlike `set_var`, which is an `unsafe fn` in edition 2024 and cannot be
-/// used under the workspace lints). Backs [`Policy::EvolvingIn`].
-pub fn assert_snapshot_impl_in(
-    name: &str,
-    screen: &Screen,
-    location: Location,
-    snapshot_dir: &Path,
-) {
+/// Canonical text plus its content-derived generation (macro backend for
+/// [`assert_snapshot!`]).
+#[doc(hidden)]
+#[must_use]
+pub fn prepare_snapshot(screen: &Screen) -> (String, String) {
     let canonical = insta_string(screen);
     let generation = generation_id(&canonical);
-    let settings = evolving_settings_in(snapshot_dir, location, &generation);
-    let owned_name = name.to_string();
-    settings.bind(|| {
-        insta::assert_snapshot!(owned_name, canonical);
-    });
+    (canonical, generation)
 }
 
-/// `assert_screenshot!` implementation: canonical + PNG as one sample.
-///
-/// Order: render the sample, write candidate evidence, assert canonical, assert
-/// PNG (decoded pixels), then run the compound generation gate. Any failure
-/// panics; evidence is always on disk first.
-pub fn assert_screenshot_impl(name: &str, screen: &Screen, location: Location) {
-    assert_screenshot_impl_in(
-        name,
-        screen,
-        location,
-        &snapshot_dir_for(location.file),
-        &evidence_dir(),
-    );
+/// One prepared screenshot sample: canonical state plus the generation-tagged
+/// PNG, with candidate evidence already on disk (macro backend).
+#[doc(hidden)]
+pub struct PreparedScreenshot {
+    /// Styled canonical state.
+    pub canonical: String,
+    /// Content-derived generation binding both artifacts.
+    pub generation: String,
+    /// Generation-tagged PNG bytes.
+    pub png: Vec<u8>,
 }
 
-/// [`assert_screenshot_impl`] with explicit snapshot and evidence directories
-/// (no `unsafe`, unlike `set_var`, which is an `unsafe fn` in edition 2024
-/// and cannot be used under the workspace lints). Backs [`Policy::EvolvingIn`].
-pub fn assert_screenshot_impl_in(
+/// Render one sample and write candidate evidence BEFORE any failure (macro
+/// backend for [`assert_screenshot!`]). Panics with context when rendering or
+/// evidence writing fails.
+#[doc(hidden)]
+pub fn prepare_screenshot(
     name: &str,
     screen: &Screen,
-    location: Location,
-    snapshot_dir: &Path,
     evidence_dir: &Path,
-) {
+) -> PreparedScreenshot {
     let sample = render_sample(screen).unwrap_or_else(|e| {
         panic!("tuisnap assert_screenshot!({name:?}): cannot render sample: {e}")
     });
@@ -355,21 +487,26 @@ pub fn assert_screenshot_impl_in(
     write_evidence_in(evidence_dir, name, &sample, &png).unwrap_or_else(|e| {
         panic!("tuisnap assert_screenshot!({name:?}): cannot write evidence: {e}")
     });
-    let canonical_name = name.to_string();
-    let canonical_text = sample.canonical.clone();
-    evolving_settings_in(snapshot_dir, location, &generation).bind(|| {
-        insta::assert_snapshot!(canonical_name, canonical_text);
-    });
-    let png_base = format!("{name}{PNG_SNAPSHOT_SUFFIX}");
-    let png_name = format!("{png_base}.png");
-    let mut png_settings = evolving_settings_in(snapshot_dir, location, &generation);
-    png_settings.set_comparator(Box::new(png_comparator(AlphaPolicy::StraightRgba)));
-    png_settings.bind(|| {
-        insta::assert_binary_snapshot!(png_name.as_str(), png);
-    });
-    if let Err(e) = check_consistent_lenient(snapshot_dir, name, &png_base) {
-        panic!("tuisnap assert_screenshot!({name:?}): {e}");
+    PreparedScreenshot {
+        canonical: sample.canonical,
+        generation,
+        png,
     }
+}
+
+/// PNG snapshot base for a screenshot name: `<name>-img` (macro backend).
+#[doc(hidden)]
+#[must_use]
+pub fn png_snapshot_base(name: &str) -> String {
+    format!("{name}{PNG_SNAPSHOT_SUFFIX}")
+}
+
+/// Decoded-pixel PNG comparator under the screenshot alpha policy
+/// ([`AlphaPolicy::StraightRgba`]) (macro backend).
+#[doc(hidden)]
+#[must_use]
+pub fn screenshot_png_comparator() -> PngPixelComparator {
+    png_comparator(AlphaPolicy::StraightRgba)
 }
 
 fn write_evidence(name: &str, sample: &Sample, png: &[u8]) -> Result<(), AssertError> {
@@ -539,10 +676,11 @@ pub fn check_consistent(dir: &Path, canonical: &str, png: &str) -> Result<(), Co
     }
 }
 
-/// Lenient gate used inside [`assert_screenshot_impl`]: legacy approvals without
+/// Lenient gate used inside [`assert_screenshot!`]: legacy approvals without
 /// any generation binding keep their per-artifact verdicts; bindings that are
-/// ALL present but disagree fail.
-fn check_consistent_lenient(
+/// ALL present but disagree fail. Macro backend.
+#[doc(hidden)]
+pub fn check_consistent_lenient(
     dir: &Path,
     canonical: &str,
     png: &str,
@@ -568,8 +706,8 @@ fn check_consistent_lenient(
 /// are read-only directories of approved canonical+PNG files.
 #[derive(Debug, Clone)]
 pub enum Policy {
-    /// Native Insta pending/review flow ([`assert_snapshot_impl`] /
-    /// [`assert_screenshot_impl`]).
+    /// Native Insta pending/review flow ([`crate::assert_snapshot!`] /
+    /// [`crate::assert_screenshot!`] with caller-fixed metadata).
     Evolving,
     /// Same flow with explicit snapshot and evidence directories (no env).
     /// Hermetic tests pass tempdirs here: `set_var` is an `unsafe fn` in
@@ -759,40 +897,6 @@ pub fn frozen_accept(root: &Path, name: &str) -> Result<(), FrozenError> {
         root: root.to_path_buf(),
         name: name.to_string(),
     })
-}
-
-/// Policy-dispatched snapshot assertion (macro backend).
-pub fn assert_snapshot_with_policy(
-    policy: &Policy,
-    name: &str,
-    screen: &Screen,
-    location: Location,
-) {
-    match policy {
-        Policy::Evolving => assert_snapshot_impl(name, screen, location),
-        Policy::EvolvingIn {
-            snapshots,
-            evidence: _,
-        } => assert_snapshot_impl_in(name, screen, location, snapshots),
-        Policy::Frozen { root } => assert_frozen_snapshot(root, name, screen),
-    }
-}
-
-/// Policy-dispatched screenshot assertion (macro backend).
-pub fn assert_screenshot_with_policy(
-    policy: &Policy,
-    name: &str,
-    screen: &Screen,
-    location: Location,
-) {
-    match policy {
-        Policy::Evolving => assert_screenshot_impl(name, screen, location),
-        Policy::EvolvingIn {
-            snapshots,
-            evidence,
-        } => assert_screenshot_impl_in(name, screen, location, snapshots, evidence),
-        Policy::Frozen { root } => assert_frozen_screenshot(root, name, screen),
-    }
 }
 
 // ---------------------------------------------------------------------------
