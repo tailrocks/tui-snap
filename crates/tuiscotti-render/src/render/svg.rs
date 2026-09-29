@@ -79,114 +79,154 @@ pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) ->
                 x += 1;
                 continue;
             }
-            // Coalesce the maximal run of identical-style cells so words stay
-            // selectable as one <text> element. Spaces join the run (same
-            // advance in monospace); continuations break it (the lead's wide
-            // advance is handled by cell geometry, not font metrics).
             let (fg0, bg0) = Frame::resolve_cell(cell, profile.default_fg, profile.default_bg);
-            let key = (
-                fg0,
-                bg0,
-                cell.mods.bold,
-                cell.mods.italic,
-                cell.mods.effective_underline_style(),
-                cell.underline_color,
-                cell.mods.strikethrough,
-            );
-            let mut run = String::new();
-            let mut nx = x;
-            while nx < frame.cols {
-                let Some(c) = frame.get(nx, y) else { break };
-                if c.continuation {
-                    break;
-                }
-                let (fg, bg) = Frame::resolve_cell(c, profile.default_fg, profile.default_bg);
-                if (
-                    fg,
-                    bg,
-                    c.mods.bold,
-                    c.mods.italic,
-                    c.mods.effective_underline_style(),
-                    c.underline_color,
-                    c.mods.strikethrough,
-                ) != key
-                {
-                    break;
-                }
-                if c.mods.hidden || (c.mods.blink && phase == BlinkPhase::Off) {
-                    run.push_str(&" ".repeat(usize::from(c.width.max(1))));
-                } else {
-                    run.push_str(&c.symbol);
-                }
-                // Advance by display width (wide cells occupy 2 columns but
-                // hold one grapheme in the lead cell).
-                nx += u16::from(c.width.max(1));
-            }
-            let span_cols = nx - x;
-            let px = pad + x as u32 * cw;
-            let py = pad + y as u32 * ch;
-            if bg0 != profile.default_bg {
-                s.push_str(&format!(
-                    "<rect x=\"{px}\" y=\"{py}\" width=\"{}\" height=\"{ch}\" fill=\"{}\"/>\n",
-                    span_cols as u32 * cw,
-                    bg0.to_hex()
-                ));
-            }
-            let weight = if cell.mods.bold {
-                " font-weight=\"bold\""
-            } else {
-                ""
-            };
-            let style = if cell.mods.italic {
-                " font-style=\"italic\""
-            } else {
-                ""
-            };
-            // text-decoration paints across the whole run, spaces included —
-            // the same contract the PNG path follows for whitespace cells.
-            let mut deco = Vec::new();
-            if cell.mods.underline {
-                deco.push("underline");
-            }
-            if cell.mods.strikethrough {
-                deco.push("line-through");
-            }
-            let decoration = if deco.is_empty() {
-                String::new()
-            } else {
-                format!(" text-decoration=\"{}\"", deco.join(" "))
-            };
-            // Non-single styles map to the SVG decoration style. The style
-            // applies to every decoration on the run (a combined
-            // double-underline + strike doubles both); single underlines
-            // emit nothing, keeping existing SVG byte-identical.
-            let deco_style = match cell.mods.effective_underline_style() {
-                tuiscotti_core::frame::UnderlineStyle::Double => {
-                    " text-decoration-style=\"double\""
-                }
-                tuiscotti_core::frame::UnderlineStyle::Curly => " text-decoration-style=\"wavy\"",
-                tuiscotti_core::frame::UnderlineStyle::Dotted => {
-                    " text-decoration-style=\"dotted\""
-                }
-                tuiscotti_core::frame::UnderlineStyle::Dashed => {
-                    " text-decoration-style=\"dashed\""
-                }
-                tuiscotti_core::frame::UnderlineStyle::None
-                | tuiscotti_core::frame::UnderlineStyle::Single => "",
-            };
-            let attrs = format!("{weight}{style}{decoration}{deco_style}");
-            s.push_str(&format!(
-                "<text xml:space=\"preserve\" x=\"{px}\" y=\"{}\" fill=\"{}\"{}>{}</text>\n",
-                py + ch - 4,
-                fg0.to_hex(),
-                attrs,
-                esc_xml(&run)
-            ));
+            let key = style_key(cell, fg0, bg0);
+            let (run, nx) = coalesce_run(frame, profile, phase, x, y, &key);
+            emit_span(&mut s, frame, profile, cell, &run, x, y, nx, fg0, bg0);
             x = nx;
         }
     }
     s.push_str("</svg>\n");
     s
+}
+
+type StyleKey = (
+    tuiscotti_core::frame::Rgb,
+    tuiscotti_core::frame::Rgb,
+    bool,
+    bool,
+    tuiscotti_core::frame::UnderlineStyle,
+    tuiscotti_core::frame::Color,
+    bool,
+);
+
+fn style_key(
+    cell: &tuiscotti_core::frame::Cell,
+    fg: tuiscotti_core::frame::Rgb,
+    bg: tuiscotti_core::frame::Rgb,
+) -> StyleKey {
+    (
+        fg,
+        bg,
+        cell.mods.bold,
+        cell.mods.italic,
+        cell.mods.effective_underline_style(),
+        cell.underline_color,
+        cell.mods.strikethrough,
+    )
+}
+
+/// Coalesce the maximal run of identical-style cells so words stay selectable
+/// as one `<text>` element. Spaces join the run (same advance in monospace);
+/// continuations break it (the lead's wide advance is handled by cell
+/// geometry, not font metrics). Returns the run text and the first column
+/// past the run.
+fn coalesce_run(
+    frame: &Frame,
+    profile: &Profile,
+    phase: BlinkPhase,
+    x: u16,
+    y: u16,
+    key: &StyleKey,
+) -> (String, u16) {
+    let mut run = String::new();
+    let mut nx = x;
+    while nx < frame.cols {
+        let Some(c) = frame.get(nx, y) else { break };
+        if c.continuation {
+            break;
+        }
+        let (fg, bg) = Frame::resolve_cell(c, profile.default_fg, profile.default_bg);
+        if style_key(c, fg, bg) != *key {
+            break;
+        }
+        if c.mods.hidden || (c.mods.blink && phase == BlinkPhase::Off) {
+            run.push_str(&" ".repeat(usize::from(c.width.max(1))));
+        } else {
+            run.push_str(&c.symbol);
+        }
+        // Advance by display width (wide cells occupy 2 columns but hold one
+        // grapheme in the lead cell).
+        nx += u16::from(c.width.max(1));
+    }
+    (run, nx)
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "span emission shares one call site; grouping would obscure the SVG contract"
+)]
+fn emit_span(
+    s: &mut String,
+    frame: &Frame,
+    profile: &Profile,
+    cell: &tuiscotti_core::frame::Cell,
+    run: &str,
+    x: u16,
+    y: u16,
+    nx: u16,
+    fg0: tuiscotti_core::frame::Rgb,
+    bg0: tuiscotti_core::frame::Rgb,
+) {
+    let cw = profile.cell_w;
+    let ch = profile.cell_h;
+    let pad = profile.pad;
+    {
+        let span_cols = nx - x;
+        let px = pad + x as u32 * cw;
+        let py = pad + y as u32 * ch;
+        if bg0 != profile.default_bg {
+            s.push_str(&format!(
+                "<rect x=\"{px}\" y=\"{py}\" width=\"{}\" height=\"{ch}\" fill=\"{}\"/>\n",
+                span_cols as u32 * cw,
+                bg0.to_hex()
+            ));
+        }
+        let weight = if cell.mods.bold {
+            " font-weight=\"bold\""
+        } else {
+            ""
+        };
+        let style = if cell.mods.italic {
+            " font-style=\"italic\""
+        } else {
+            ""
+        };
+        // text-decoration paints across the whole run, spaces included —
+        // the same contract the PNG path follows for whitespace cells.
+        let mut deco = Vec::new();
+        if cell.mods.underline {
+            deco.push("underline");
+        }
+        if cell.mods.strikethrough {
+            deco.push("line-through");
+        }
+        let decoration = if deco.is_empty() {
+            String::new()
+        } else {
+            format!(" text-decoration=\"{}\"", deco.join(" "))
+        };
+        // Non-single styles map to the SVG decoration style. The style
+        // applies to every decoration on the run (a combined
+        // double-underline + strike doubles both); single underlines
+        // emit nothing, keeping existing SVG byte-identical.
+        let deco_style = match cell.mods.effective_underline_style() {
+            tuiscotti_core::frame::UnderlineStyle::Double => " text-decoration-style=\"double\"",
+            tuiscotti_core::frame::UnderlineStyle::Curly => " text-decoration-style=\"wavy\"",
+            tuiscotti_core::frame::UnderlineStyle::Dotted => " text-decoration-style=\"dotted\"",
+            tuiscotti_core::frame::UnderlineStyle::Dashed => " text-decoration-style=\"dashed\"",
+            tuiscotti_core::frame::UnderlineStyle::None
+            | tuiscotti_core::frame::UnderlineStyle::Single => "",
+        };
+        let attrs = format!("{weight}{style}{decoration}{deco_style}");
+        s.push_str(&format!(
+            "<text xml:space=\"preserve\" x=\"{px}\" y=\"{}\" fill=\"{}\"{}>{}</text>\n",
+            py + ch - 4,
+            fg0.to_hex(),
+            attrs,
+            esc_xml(run)
+        ));
+    }
 }
 
 /// Build the standalone HTML document for a frame from an already-rendered

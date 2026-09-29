@@ -243,6 +243,7 @@ pub fn check_frozen_screenshot(
 }
 
 /// Assert canonical state against a frozen root. Panics on any [`FrozenError`].
+#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
 pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_snapshot(root, name, screen) {
         panic!("tuisnap frozen snapshot {name:?} failed: {e}");
@@ -250,6 +251,7 @@ pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
 }
 
 /// Assert canonical state plus PNG against a frozen root. Panics on any [`FrozenError`].
+#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
 pub fn assert_frozen_screenshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_screenshot(root, name, screen) {
         panic!("tuisnap frozen screenshot {name:?} failed: {e}");

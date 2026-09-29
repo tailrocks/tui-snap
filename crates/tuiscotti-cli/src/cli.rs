@@ -233,3 +233,38 @@ pub enum SessionCmd {
         name: String,
     },
 }
+
+/// Dispatch a parsed [`Cli`] to its `ops_*` handler; returns the exit code.
+pub(crate) fn run(cli: Cli) -> i32 {
+    match cli.cmd {
+        Cmd::Init { dir, force } => crate::ops_setup::cmd_init(&dir, force),
+        Cmd::Doctor => crate::ops_setup::cmd_doctor(),
+        Cmd::Schema => crate::ops_setup::cmd_schema(),
+        Cmd::Capture {
+            out,
+            timeout_ms,
+            argv,
+        } => crate::ops_run::cmd_capture(&out, timeout_ms, argv),
+        Cmd::Inspect { dir } => crate::ops_offline::cmd_inspect(&dir),
+        Cmd::Render {
+            input,
+            formats,
+            out,
+            font_file,
+        } => crate::ops_offline::cmd_render(&input, &formats, &out, font_file.as_deref()),
+        Cmd::Diff { expected, actual } => crate::ops_offline::cmd_diff(&expected, &actual),
+        Cmd::Review { dir } => crate::ops_offline::cmd_review(&dir),
+        Cmd::Accept { name, store } => crate::ops_offline::cmd_accept(&store, &name),
+        Cmd::Report { dir, out, title } => crate::ops_offline::cmd_report(&dir, &out, &title),
+        Cmd::Import { dir } => crate::ops_offline::cmd_import(&dir),
+        Cmd::Session { cmd } => crate::ops_run::cmd_session(cmd),
+        Cmd::Record {
+            out,
+            max_events,
+            max_bytes,
+            argv,
+        } => crate::ops_run::cmd_record(&out, max_events, max_bytes, argv),
+        Cmd::Trace { input, kind } => crate::ops_offline::cmd_trace(&input, kind),
+        Cmd::Machine => crate::machine::machine_main(),
+    }
+}

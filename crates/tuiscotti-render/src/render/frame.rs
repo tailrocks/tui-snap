@@ -17,6 +17,22 @@ use tuiscotti_core::screen::Screen;
 /// screens render identical bytes.
 #[must_use]
 pub fn frame_from_screen(screen: &Screen, profile_name: &str) -> Frame {
+    frame_from_screen_with_source(screen, profile_name, "screen")
+}
+
+/// [`frame_from_screen`] with an explicit provenance source: the ONE
+/// screen→frame adaptation; every caller funnels through here.
+///
+/// Source strings by caller (all other provenance fields are identical):
+/// - `"screen"`: the render pipeline itself ([`frame_from_screen`], used by
+///   [`Renderer::render_screen`](super::Renderer::render_screen) and redaction) —
+///   the frame came straight from a live or replayed screen.
+/// - `"tuisnap-assert"`: `tuiscotti-insta` assertion evidence
+///   (`tuiscotti::assert::frame_from_screen`) — the frame backs an Insta
+///   snapshot gate, so the source names the asserting tool for provenance
+///   audits rather than the generic screen origin.
+#[must_use]
+pub fn frame_from_screen_with_source(screen: &Screen, profile_name: &str, source: &str) -> Frame {
     Frame {
         version: tuiscotti_core::frame::FRAME_VERSION,
         cols: screen.cols(),
@@ -27,7 +43,7 @@ pub fn frame_from_screen(screen: &Screen, profile_name: &str) -> Frame {
             tool: "tuisnap".to_string(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             profile: profile_name.to_string(),
-            source: "screen".to_string(),
+            source: source.to_string(),
             argv: Vec::new(),
             created_unix: 0,
         },

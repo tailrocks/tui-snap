@@ -26,6 +26,7 @@
 mod cli;
 mod machine;
 mod ops_offline;
+mod ops_offline_render;
 mod ops_run;
 mod ops_setup;
 
@@ -117,39 +118,5 @@ fn main() {
         Ok(cli) => cli,
         Err(e) => e.exit(), // clap usage error, exit 2
     };
-    std::process::exit(run(cli));
-}
-
-fn run(cli: cli::Cli) -> i32 {
-    match cli.cmd {
-        cli::Cmd::Init { dir, force } => ops_setup::cmd_init(&dir, force),
-        cli::Cmd::Doctor => ops_setup::cmd_doctor(),
-        cli::Cmd::Schema => ops_setup::cmd_schema(),
-        cli::Cmd::Capture {
-            out,
-            timeout_ms,
-            argv,
-        } => ops_run::cmd_capture(&out, timeout_ms, argv),
-        cli::Cmd::Inspect { dir } => ops_offline::cmd_inspect(&dir),
-        cli::Cmd::Render {
-            input,
-            formats,
-            out,
-            font_file,
-        } => ops_offline::cmd_render(&input, &formats, &out, font_file.as_deref()),
-        cli::Cmd::Diff { expected, actual } => ops_offline::cmd_diff(&expected, &actual),
-        cli::Cmd::Review { dir } => ops_offline::cmd_review(&dir),
-        cli::Cmd::Accept { name, store } => ops_offline::cmd_accept(&store, &name),
-        cli::Cmd::Report { dir, out, title } => ops_offline::cmd_report(&dir, &out, &title),
-        cli::Cmd::Import { dir } => ops_offline::cmd_import(&dir),
-        cli::Cmd::Session { cmd } => ops_run::cmd_session(cmd),
-        cli::Cmd::Record {
-            out,
-            max_events,
-            max_bytes,
-            argv,
-        } => ops_run::cmd_record(&out, max_events, max_bytes, argv),
-        cli::Cmd::Trace { input, kind } => ops_offline::cmd_trace(&input, kind),
-        cli::Cmd::Machine => machine::machine_main(),
-    }
+    std::process::exit(cli::run(cli));
 }

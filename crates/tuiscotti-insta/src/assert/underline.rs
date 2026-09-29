@@ -37,6 +37,7 @@ pub fn check_underline_at(
 
 /// Assert one cell's underline style + color, panicking with the
 /// [`check_underline_at`] message on mismatch.
+#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
 pub fn assert_underline_at(
     screen: &Screen,
     x: u16,

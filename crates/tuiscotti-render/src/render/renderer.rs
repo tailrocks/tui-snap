@@ -13,6 +13,8 @@ use crate::profile::RenderProfile;
 use tuiscotti_core::frame::Frame;
 use tuiscotti_core::screen::Screen;
 
+mod strict;
+
 /// A reusable renderer: parses the pinned faces ONCE at construction (the
 /// geometry pin is verified there too) and caches glyph rasters across
 /// frames, so a bulk gate costs O(distinct glyphs) rasterizations instead of
@@ -193,7 +195,7 @@ impl Renderer {
         }
 
         self.draw_cursor(&mut img, frame);
-        self.check_strict_missing(&missing)?;
+        strict::check_strict_missing(self.strict_missing, &missing)?;
 
         let mut out = Vec::new();
         image::DynamicImage::ImageRgb8(img)
@@ -375,32 +377,5 @@ impl Renderer {
                 }
             }
         }
-    }
-
-    /// V05 strict missing-glyph policy: fail with the exact uncovered
-    /// set instead of returning tofu. Placeholder mode (legacy behavior)
-    /// returns the tofu PNG plus the fidelity record.
-    fn check_strict_missing(&self, missing: &[MissingGlyph]) -> Result<(), RenderError> {
-        if !self.strict_missing || missing.is_empty() {
-            return Ok(());
-        }
-        let mut detail: Vec<String> = missing
-            .iter()
-            .map(|m| {
-                format!(
-                    "({},{}) {:?} [{}]",
-                    m.x,
-                    m.y,
-                    m.symbol,
-                    m.codepoints.join(",")
-                )
-            })
-            .collect();
-        detail.sort();
-        Err(RenderError(format!(
-            "strict missing-glyph policy: {} uncovered cell(s): {}",
-            missing.len(),
-            detail.join("; ")
-        )))
     }
 }

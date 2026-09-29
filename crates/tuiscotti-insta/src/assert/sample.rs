@@ -6,7 +6,7 @@ use super::{
 };
 use crate::insta_proto::{PngPixelComparator, insta_string};
 use std::path::Path;
-use tuiscotti_core::frame::{FRAME_VERSION, Frame, Provenance};
+use tuiscotti_core::frame::Frame;
 use tuiscotti_core::screen::Screen;
 use tuiscotti_render::diff::AlphaPolicy;
 use tuiscotti_render::profile::{Profile, VENDORED_FACES};
@@ -17,23 +17,18 @@ use tuiscotti_render::render::Renderer;
 /// Cells and cursor are preserved exactly; provenance is fixed with
 /// `created_unix = 0` so every derived artifact is byte-deterministic for
 /// identical screens (the timestamp is informational and excluded from gates).
+///
+/// Delegates to the canonical screen→frame adaptation in
+/// `tuiscotti_render` with the assert profile override (`"tuisnap-default"`)
+/// and the assert source (`"tuisnap-assert"`, naming the asserting tool for
+/// provenance audits — the render pipeline itself passes `"screen"`).
 #[must_use]
 pub fn frame_from_screen(screen: &Screen) -> Frame {
-    Frame {
-        version: FRAME_VERSION,
-        cols: screen.cols(),
-        rows: screen.rows(),
-        cells: screen.cells().to_vec(),
-        cursor: *screen.cursor(),
-        provenance: Provenance {
-            tool: "tuisnap".to_string(),
-            tool_version: env!("CARGO_PKG_VERSION").to_string(),
-            profile: "tuisnap-default".to_string(),
-            source: "tuisnap-assert".to_string(),
-            argv: Vec::new(),
-            created_unix: 0,
-        },
-    }
+    tuiscotti_render::render::frame::frame_from_screen_with_source(
+        screen,
+        "tuisnap-default",
+        "tuisnap-assert",
+    )
 }
 
 /// One visual sample: canonical state plus all four rendered artifacts.
@@ -147,6 +142,7 @@ pub struct PreparedScreenshot {
 /// backend for [`crate::assert_screenshot!`]). Panics with context when rendering or
 /// evidence writing fails.
 #[doc(hidden)]
+#[allow(clippy::panic, reason = "assert-macro backend panics by contract, like std assert")]
 pub fn prepare_screenshot(name: &str, screen: &Screen, evidence_dir: &Path) -> PreparedScreenshot {
     let sample = render_sample(screen).unwrap_or_else(|e| {
         panic!("tuisnap assert_screenshot!({name:?}): cannot render sample: {e}")
