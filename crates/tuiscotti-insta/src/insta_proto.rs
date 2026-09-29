@@ -31,6 +31,7 @@
 //!   `DefaultComparator` does. For decoded-pixel equality this is the correct
 //!   behavior anyway: bytes that do not decode as PNG never match.
 
+use std::fmt::Write as _;
 use tuiscotti_core::frame::{Color, CursorStyle};
 use tuiscotti_core::screen::Screen;
 use tuiscotti_render::diff::AlphaPolicy;
@@ -98,24 +99,29 @@ fn cursor_style_token(s: CursorStyle) -> &'static str {
 pub fn insta_string(screen: &Screen) -> String {
     let mut out = String::from("tuisnap screen snapshot v1\n");
     let (ox, oy) = screen.origin();
-    out.push_str(&format!(
-        "geometry cols={} rows={} ox={} oy={}\n",
+    writeln!(
+        out,
+        "geometry cols={} rows={} ox={} oy={}",
         screen.cols(),
         screen.rows(),
         ox,
         oy
-    ));
+    )
+    .unwrap_or_default();
     let c = screen.cursor();
-    out.push_str(&format!(
-        "cursor x={} y={} visible={} style={} blinking={}\n",
+    writeln!(
+        out,
+        "cursor x={} y={} visible={} style={} blinking={}",
         c.x,
         c.y,
         c.visible,
         cursor_style_token(c.style),
         c.blinking
-    ));
+    )
+    .unwrap_or_default();
     for cell in screen.cells() {
-        out.push_str(&format!(
+        write!(
+            out,
             "cell {},{} sym={:?} w={} cont={} fg={} bg={} mods={}",
             cell.x,
             cell.y,
@@ -125,11 +131,12 @@ pub fn insta_string(screen: &Screen) -> String {
             color_token(cell.fg),
             color_token(cell.bg),
             mods_token(cell.mods)
-        ));
+        )
+        .unwrap_or_default();
         // Sparse: default underline color adds nothing, so default snapshots
         // keep their exact shape.
         if !cell.underline_color.is_default() {
-            out.push_str(&format!(" uc={}", color_token(cell.underline_color)));
+            write!(out, " uc={}", color_token(cell.underline_color)).unwrap_or_default();
         }
         out.push('\n');
     }
@@ -217,6 +224,7 @@ impl PngPixelComparator {
         Self { alpha_policy }
     }
 
+    /// The alpha policy this comparator decodes pixels under.
     #[must_use]
     pub fn alpha_policy(self) -> AlphaPolicy {
         self.alpha_policy
@@ -229,8 +237,7 @@ impl insta::Comparator for PngPixelComparator {
         match (reference.contents(), test.contents()) {
             (SnapshotContents::Binary(Some(a)), SnapshotContents::Binary(Some(b))) => {
                 tuiscotti_render::diff::compare_png_with_alpha(a, b, self.alpha_policy)
-                    .map(|v| v.pixels_equal)
-                    .unwrap_or(false)
+                    .is_ok_and(|v| v.pixels_equal)
             }
             // Stock text semantics, untouched: no canonical field is ignored
             // or reinterpreted here.

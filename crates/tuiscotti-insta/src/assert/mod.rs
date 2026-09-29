@@ -66,7 +66,7 @@ pub mod sample;
 pub mod underline;
 
 pub use evidence::{png_generation, png_tag_generation};
-pub(crate) use evidence::{snap_generation, write_evidence, write_evidence_in};
+pub(crate) use evidence::{snap_generation, write_evidence_in};
 pub use frozen::{
     ConsistencyError, EmittedPaths, FrozenError, Policy, assert_frozen_screenshot,
     assert_frozen_snapshot, check_consistent, check_consistent_lenient, check_frozen_screenshot,
@@ -75,8 +75,8 @@ pub use frozen::{
 pub(crate) use import::check_scenario_name;
 pub use import::{FrozenTree, ImportError, ImportedScenario, import_frozen_v1};
 pub use macros::Location;
+pub(crate) use paths::description_for;
 pub use paths::{default_snapshot_dir, evidence_dir, generation_id};
-pub(crate) use paths::{description_for, render_identity};
 pub use sample::{
     AssertError, PreparedScreenshot, Sample, frame_from_screen, png_comparator, png_snapshot_base,
     prepare_screenshot, prepare_snapshot, render_sample, screenshot_png_comparator,

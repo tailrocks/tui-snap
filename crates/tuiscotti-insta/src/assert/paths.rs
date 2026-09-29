@@ -1,6 +1,7 @@
 //! Generation bindings and snapshot/evidence directory resolution.
 
 use super::{EVIDENCE_DIR_ENV, GEN_DESC_PREFIX, Location, SNAPSHOT_DIR_ENV};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use tuiscotti_render::profile::Profile;
 
@@ -15,7 +16,7 @@ pub fn generation_id(canonical: &str) -> String {
     let digest = sha2::Sha256::digest(canonical.as_bytes());
     let mut s = String::with_capacity(digest.len() * 2);
     for b in digest {
-        s.push_str(&format!("{b:02x}"));
+        write!(s, "{b:02x}").unwrap_or_default();
     }
     s
 }
@@ -78,13 +79,12 @@ pub fn evidence_dir() -> PathBuf {
 fn workspace_root_of(start: &Path) -> PathBuf {
     let mut cur = Some(start);
     while let Some(dir) = cur {
-        if let Ok(text) = std::fs::read_to_string(dir.join("Cargo.toml")) {
-            if text
+        if let Ok(text) = std::fs::read_to_string(dir.join("Cargo.toml"))
+            && text
                 .lines()
                 .any(|l| l.trim_start().starts_with("[workspace"))
-            {
-                return dir.to_path_buf();
-            }
+        {
+            return dir.to_path_buf();
         }
         cur = dir.parent();
     }

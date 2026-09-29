@@ -10,6 +10,11 @@ use tuiscotti_core::screen::Screen;
 /// Check one cell's underline style + color. `Ok(())` on exact match;
 /// `Err` names the cell, what was wanted, and what is there (including a
 /// missing cell, which is never a silent pass).
+///
+/// # Errors
+///
+/// Returns the mismatch description when the cell is missing or its style or
+/// color differs from what was wanted.
 pub fn check_underline_at(
     screen: &Screen,
     x: u16,
@@ -37,7 +42,15 @@ pub fn check_underline_at(
 
 /// Assert one cell's underline style + color, panicking with the
 /// [`check_underline_at`] message on mismatch.
-#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
+///
+/// # Panics
+///
+/// Panics with the [`check_underline_at`] message when the cell is missing or
+/// its underline style or color differs from what was wanted.
+#[expect(
+    clippy::panic,
+    reason = "assert_* API panics by contract, like std assert"
+)]
 pub fn assert_underline_at(
     screen: &Screen,
     x: u16,

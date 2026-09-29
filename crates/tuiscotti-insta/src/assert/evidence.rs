@@ -1,11 +1,7 @@
 //! Candidate evidence files and PNG/snapshot generation tags.
 
-use super::{AssertError, GEN_DESC_PREFIX, PNG_GEN_KEYWORD, Sample, evidence_dir};
+use super::{AssertError, GEN_DESC_PREFIX, PNG_GEN_KEYWORD, Sample};
 use std::path::Path;
-
-pub(crate) fn write_evidence(name: &str, sample: &Sample, png: &[u8]) -> Result<(), AssertError> {
-    write_evidence_in(&evidence_dir(), name, sample, png)
-}
 
 pub(crate) fn write_evidence_in(
     dir: &Path,
@@ -40,7 +36,7 @@ const PNG_SIG: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFFu32;
     for &b in data {
-        crc ^= b as u32;
+        crc ^= u32::from(b);
         for _ in 0..8 {
             let mask = if crc & 1 == 1 { 0xEDB8_8320 } else { 0 };
             crc = (crc >> 1) ^ mask;
@@ -51,6 +47,8 @@ fn crc32(data: &[u8]) -> u32 {
 
 /// Insert a `tEXt` generation chunk before `IEND`. Decoders ignore it (the pixel
 /// verdict is unaffected); [`check_consistent`](super::check_consistent) reads it back.
+///
+/// # Panics
 ///
 /// Panics on malformed PNG input or a bad keyword (caller bug: renderer output
 /// is always well-formed and the keyword is fixed).
@@ -70,7 +68,7 @@ pub fn png_tag_generation(png: &[u8], generation: &str) -> Vec<u8> {
     data.push(0);
     data.extend_from_slice(generation.as_bytes());
     let mut chunk = Vec::new();
-    chunk.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&u32::try_from(data.len()).unwrap_or(u32::MAX).to_be_bytes());
     chunk.extend_from_slice(b"tEXt");
     chunk.extend_from_slice(&data);
     let mut crc_input = b"tEXt".to_vec();
@@ -103,10 +101,10 @@ pub fn png_generation(png: &[u8]) -> Option<String> {
         }
         if typ == b"tEXt" {
             let data = &png[i + 8..i + 8 + len];
-            if let Some(z) = data.iter().position(|&b| b == 0) {
-                if &data[..z] == PNG_GEN_KEYWORD.as_bytes() {
-                    return Some(String::from_utf8_lossy(&data[z + 1..]).into_owned());
-                }
+            if let Some(z) = data.iter().position(|&b| b == 0)
+                && &data[..z] == PNG_GEN_KEYWORD.as_bytes()
+            {
+                return Some(String::from_utf8_lossy(&data[z + 1..]).into_owned());
             }
         }
         if typ == b"IEND" {

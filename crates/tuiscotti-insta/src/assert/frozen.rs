@@ -24,6 +24,11 @@ impl std::error::Error for ConsistencyError {}
 /// Strict compound gate (I04/C08): the approved canonical `.snap`, the approved
 /// PNG `.snap`, and the PNG sidecar bytes must all carry the SAME generation.
 /// Any mismatch — or any missing binding — is an error.
+///
+/// # Errors
+///
+/// Returns [`ConsistencyError`] when a generation binding is missing or
+/// unreadable, or when the three bindings disagree.
 pub fn check_consistent(dir: &Path, canonical: &str, png: &str) -> Result<(), ConsistencyError> {
     let c = snap_generation(&dir.join(format!("{canonical}.snap")))
         .ok_or_else(|| ConsistencyError(format!("{canonical}.snap: missing generation binding")))?;
@@ -175,6 +180,11 @@ fn read_approved(path: &Path) -> Result<Vec<u8>, FrozenError> {
 
 /// Check canonical state against a frozen root. Fails on missing/corrupt files
 /// and on content mismatch. Reads only.
+///
+/// # Errors
+///
+/// Returns [`FrozenError`] when the name is invalid, the approval is missing
+/// or corrupt, or its content differs from the actual screen.
 pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result<(), FrozenError> {
     check_scenario_name(name).map_err(FrozenError::InvalidName)?;
     let path = frozen_canonical_path(root, name);
@@ -200,6 +210,12 @@ pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result
 /// Check canonical state plus PNG pixels against a frozen root. Also fails when
 /// a tagged approved PNG disagrees with the canonical generation (untagged
 /// legacy PNGs keep the pixel verdict). Reads only.
+///
+/// # Errors
+///
+/// Returns [`FrozenError`] when the canonical check fails, the approved PNG is
+/// missing or undecodable, the pixels differ, or a PNG generation tag
+/// disagrees with the canonical generation.
 pub fn check_frozen_screenshot(
     root: &Path,
     name: &str,
@@ -231,19 +247,27 @@ pub fn check_frozen_screenshot(
         });
     }
     let generation = generation_id(&sample.canonical);
-    if let Some(tag) = png_generation(&approved_png) {
-        if tag != generation {
-            return Err(FrozenError::Mismatch {
-                name: name.to_string(),
-                detail: format!("generation mismatch: canonical={generation} png-bytes={tag}"),
-            });
-        }
+    if let Some(tag) = png_generation(&approved_png)
+        && tag != generation
+    {
+        return Err(FrozenError::Mismatch {
+            name: name.to_string(),
+            detail: format!("generation mismatch: canonical={generation} png-bytes={tag}"),
+        });
     }
     Ok(())
 }
 
 /// Assert canonical state against a frozen root. Panics on any [`FrozenError`].
-#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
+///
+/// # Panics
+///
+/// Panics with the [`FrozenError`] message when [`check_frozen_snapshot`]
+/// fails.
+#[expect(
+    clippy::panic,
+    reason = "assert_* API panics by contract, like std assert"
+)]
 pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_snapshot(root, name, screen) {
         panic!("tuisnap frozen snapshot {name:?} failed: {e}");
@@ -251,7 +275,15 @@ pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
 }
 
 /// Assert canonical state plus PNG against a frozen root. Panics on any [`FrozenError`].
-#[allow(clippy::panic, reason = "assert_* API panics by contract, like std assert")]
+///
+/// # Panics
+///
+/// Panics with the [`FrozenError`] message when [`check_frozen_screenshot`]
+/// fails.
+#[expect(
+    clippy::panic,
+    reason = "assert_* API panics by contract, like std assert"
+)]
 pub fn assert_frozen_screenshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_screenshot(root, name, screen) {
         panic!("tuisnap frozen screenshot {name:?} failed: {e}");
@@ -260,6 +292,10 @@ pub fn assert_frozen_screenshot(root: &Path, name: &str, screen: &Screen) {
 
 /// Frozen roots reject acceptance unconditionally: always returns
 /// [`FrozenError::AcceptRejected`] and writes nothing.
+///
+/// # Errors
+///
+/// Always returns [`FrozenError::AcceptRejected`]; frozen roots never bless.
 pub fn frozen_accept(root: &Path, name: &str) -> Result<(), FrozenError> {
     Err(FrozenError::AcceptRejected {
         root: root.to_path_buf(),
@@ -288,6 +324,11 @@ pub struct EmittedPaths {
 
 /// Emit ANSI/TXT/PNG/HTML from one [`Screen`] in a single sample pass.
 /// Byte-deterministic: the same screen always yields identical bytes.
+///
+/// # Errors
+///
+/// Returns [`AssertError`] when rendering fails or an artifact cannot be
+/// written.
 pub fn emit_four(screen: &Screen, dir: &Path) -> Result<EmittedPaths, AssertError> {
     let sample = render_sample(screen)?;
     let io = |p: &Path, e: std::io::Error| AssertError::Io(format!("{}: {e}", p.display()));

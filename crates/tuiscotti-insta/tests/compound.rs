@@ -86,14 +86,14 @@ fn canonical_identical_render_different_repro() {
     };
     let mut renderer =
         Renderer::new(&other, &VENDORED_FACES).expect("renderer with vendored faces");
-    let rendered = renderer.render(&frame).expect("render frame");
+    let alt_image = renderer.render(&frame).expect("render frame");
 
     // Canonical text is identical (same screen) ...
     assert_eq!(canonical, insta_string(&screen));
     // ... but the pixels differ, and the decoded-pixel comparison — the same
     // function the PNG comparator delegates to — fails loudly.
-    assert_ne!(sample.png, rendered.png);
-    let verdict = compare_png_with_alpha(&sample.png, &rendered.png, AlphaPolicy::StraightRgba)
+    assert_ne!(sample.png, alt_image.png);
+    let verdict = compare_png_with_alpha(&sample.png, &alt_image.png, AlphaPolicy::StraightRgba)
         .expect("compare pngs");
     assert!(
         !verdict.pixels_equal,
@@ -197,7 +197,7 @@ fn render_identity_is_recorded_in_descriptions() {
 fn insta_updates_in_place() -> bool {
     matches!(
         std::env::var("INSTA_UPDATE").ok().as_deref(),
-        Some("always") | Some("1") | Some("unseen") | Some("force")
+        Some("always" | "1" | "unseen" | "force")
     )
 }
 

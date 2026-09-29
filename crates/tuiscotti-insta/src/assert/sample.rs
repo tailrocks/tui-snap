@@ -74,6 +74,10 @@ impl From<tuiscotti_render::render::RenderError> for AssertError {
 
 /// Render one sample from a screen: canonical projection plus all four artifacts
 /// from a single [`Renderer`] pass over the default profile and vendored faces.
+///
+/// # Errors
+///
+/// Returns [`AssertError::Render`] when the pinned renderer refuses the frame.
 pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
     let frame = frame_from_screen(screen);
     let profile = Profile::default_profile();
@@ -129,6 +133,7 @@ pub fn prepare_snapshot(screen: &Screen) -> (String, String) {
 /// One prepared screenshot sample: canonical state plus the generation-tagged
 /// PNG, with candidate evidence already on disk (macro backend).
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct PreparedScreenshot {
     /// Styled canonical state.
     pub canonical: String,
@@ -142,7 +147,11 @@ pub struct PreparedScreenshot {
 /// backend for [`crate::assert_screenshot!`]). Panics with context when rendering or
 /// evidence writing fails.
 #[doc(hidden)]
-#[allow(clippy::panic, reason = "assert-macro backend panics by contract, like std assert")]
+#[must_use]
+#[expect(
+    clippy::panic,
+    reason = "assert-macro backend panics by contract, like std assert"
+)]
 pub fn prepare_screenshot(name: &str, screen: &Screen, evidence_dir: &Path) -> PreparedScreenshot {
     let sample = render_sample(screen).unwrap_or_else(|e| {
         panic!("tuisnap assert_screenshot!({name:?}): cannot render sample: {e}")

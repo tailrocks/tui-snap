@@ -134,6 +134,11 @@ const KNOWN_FRAME_KEYS: &[&str] = &["version", "cols", "rows", "cells", "cursor"
 /// all four artifacts, text parses as UTF-8, PNGs must decode. Anything else —
 /// extra files, unknown embedded-frame JSON fields — is REPORTED in
 /// [`FrozenTree::unsupported`], never fatal. Reads only; the tree is untouched.
+///
+/// # Errors
+///
+/// Returns [`ImportError`] when the tree cannot be read, a stem fails name
+/// validation, a scenario lacks an artifact, or an artifact is corrupt.
 pub fn import_frozen_v1(dir: &Path) -> Result<FrozenTree, ImportError> {
     const MEMBER_EXTS: [&str; 4] = ["ansi", "txt", "png", "html"];
     let mut members: std::collections::BTreeMap<
@@ -157,13 +162,11 @@ pub fn import_frozen_v1(dir: &Path) -> Result<FrozenTree, ImportError> {
             unsupported.push(format!("extra file: {rel}"));
             continue;
         }
-        let (stem, ext) = match rel.rsplit_once('.') {
-            Some((s, e)) => (s.to_string(), e.to_string()),
-            None => {
-                unsupported.push(format!("extra file: {rel}"));
-                continue;
-            }
+        let Some((stem, ext)) = rel.rsplit_once('.') else {
+            unsupported.push(format!("extra file: {rel}"));
+            continue;
         };
+        let (stem, ext) = (stem.to_string(), ext.to_string());
         if !MEMBER_EXTS.contains(&ext.as_str()) {
             unsupported.push(format!("extra file: {rel}"));
             continue;
@@ -250,7 +253,7 @@ fn report_embedded_fields(stem: &str, html: &str, unsupported: &mut Vec<String>)
         .filter(|k| !KNOWN_FRAME_KEYS.contains(&k.as_str()))
         .map(String::as_str)
         .collect();
-    unknown.sort();
+    unknown.sort_unstable();
     for key in unknown {
         unsupported.push(format!("unsupported field in {stem}.html: {key}"));
     }
