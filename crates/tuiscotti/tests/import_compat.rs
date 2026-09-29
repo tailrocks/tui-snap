@@ -3,7 +3,7 @@
 
 use std::path::Path;
 use tuiscotti::import_compat::{
-    import_cast, import_cast_with, import_termctrl, import_termctrl_with, CompatError, ImportLimits,
+    CompatError, ImportLimits, import_cast, import_cast_with, import_termctrl, import_termctrl_with,
 };
 
 fn write_tmp(dir: &Path, name: &str, bytes: &[u8]) -> std::path::PathBuf {

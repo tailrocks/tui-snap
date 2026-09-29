@@ -12,11 +12,10 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
-
 
 // ---------------------------------------------------------------------------
 // R09: scoped guardian (process-group containment with PID-reuse guards)
@@ -34,7 +33,6 @@ pub(crate) const MAX_PS_LINES: usize = 131_072;
 /// Post-kill settle polling budget per sweep.
 pub(crate) const SWEEP_SETTLE: std::time::Duration = std::time::Duration::from_millis(500);
 
-
 /// How completely the guardian contained the child's process group.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Containment {
@@ -51,7 +49,6 @@ pub enum Containment {
     /// Platform cannot enumerate process groups.
     Unsupported,
 }
-
 
 /// What a guardian teardown did, pid by pid. Escaping descendants (setsid/
 /// setpgid) are invisible to the group scan by nature; see
@@ -73,7 +70,6 @@ pub struct GuardianReport {
     pub teardown_error: Option<String>,
 }
 
-
 impl GuardianReport {
     /// The documented escape boundary: descendants that called
     /// `setsid(2)`/`setpgid(2)` leave the child's process group (and
@@ -87,7 +83,6 @@ impl GuardianReport {
     }
 }
 
-
 /// Owns a [`Session`] and contains its whole process group on teardown.
 ///
 /// `finish`/`drop` close the session (reaping the direct child) and then
@@ -99,7 +94,6 @@ pub struct Guardian {
     swept: bool,
 }
 
-
 #[derive(Debug, Clone)]
 pub(crate) struct ChildIds {
     pub(crate) pid: u32,
@@ -107,7 +101,6 @@ pub(crate) struct ChildIds {
     pub(crate) sid: i32,
     pub(crate) start: Option<String>,
 }
-
 
 impl std::fmt::Debug for Guardian {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -117,7 +110,6 @@ impl std::fmt::Debug for Guardian {
             .finish()
     }
 }
-
 
 impl Guardian {
     /// Adopt a session, recording the child's pid/group/session/start-time
@@ -152,7 +144,6 @@ impl Guardian {
     }
 }
 
-
 impl Drop for Guardian {
     fn drop(&mut self) {
         if let Some(mut s) = self.session.take() {
@@ -165,14 +156,12 @@ impl Drop for Guardian {
     }
 }
 
-
 #[cfg(unix)]
 impl ChildIds {
     fn capture(pid: u32) -> Option<Self> {
         guardian_unix::capture_ids(pid)
     }
 }
-
 
 #[cfg(unix)]
 fn sweep_group(
@@ -183,14 +172,12 @@ fn sweep_group(
     guardian_unix::sweep(child, deadline, teardown_error)
 }
 
-
 #[cfg(not(unix))]
 impl ChildIds {
     fn capture(_pid: u32) -> Option<Self> {
         None
     }
 }
-
 
 #[cfg(not(unix))]
 fn sweep_group(
@@ -209,7 +196,6 @@ fn sweep_group(
         teardown_error,
     }
 }
-
 
 // The new handles stay shareable without any unsafe impl.
 const _: fn() = || {

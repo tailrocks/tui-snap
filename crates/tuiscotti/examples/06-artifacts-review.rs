@@ -7,11 +7,11 @@
 //! errors, frozen paths never write). All in temp dirs.
 
 use tuiscotti::assert::{
-    assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept, generation_id,
-    import_frozen_v1, png_tag_generation, render_sample, FrozenError,
+    FrozenError, assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept,
+    generation_id, import_frozen_v1, png_tag_generation, render_sample,
 };
 use tuiscotti::insta_proto::insta_string;
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
 fn main() {
     let screen = render_screen(

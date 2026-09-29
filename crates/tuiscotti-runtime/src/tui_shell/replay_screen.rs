@@ -12,11 +12,10 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
-
 
 pub(crate) fn drain_replay_events<T: EventListener>(
     term: &mut Term<T>,
@@ -42,7 +41,6 @@ pub(crate) fn drain_replay_events<T: EventListener>(
         }
     }
 }
-
 
 /// Viewport grid + cursor, mirroring the live observation builder's mapping
 /// rules (wide-char pairing, orphan spacers, color/cursor mapping).
@@ -95,7 +93,6 @@ pub(crate) fn build_replay_screen<T: EventListener>(
         .map_err(|e| ReplayError::ScreenBuild(e.to_string()))
 }
 
-
 fn replay_cell(
     x: u16,
     y: u16,
@@ -135,7 +132,6 @@ fn replay_cell(
     }
 }
 
-
 /// Map alacritty underline flags (set from SGR 4 / 4:0..4:5 / 24) to the
 /// canonical style. The emulator holds at most one underline flag per cell
 /// (each SGR 4:x clears the rest); the order below is defensive only.
@@ -154,7 +150,6 @@ fn replay_underline_style(flags: CellFlags) -> UnderlineStyle {
         UnderlineStyle::None
     }
 }
-
 
 fn replay_color(c: VteColor) -> Color {
     match c {
@@ -197,7 +192,6 @@ fn replay_color(c: VteColor) -> Color {
         VteColor::Indexed(i) => Color::Indexed(i),
     }
 }
-
 
 fn replay_cursor<T: EventListener>(
     term: &Term<T>,

@@ -164,7 +164,10 @@ pub fn step(model: &mut Model, key: &StreamsKey, view_rows: usize) -> bool {
             model.scroll = model.scroll.saturating_sub(view_rows.max(1));
         }
         StreamsKey::PageDown => {
-            model.scroll = model.scroll.saturating_add(view_rows.max(1)).min(max_scroll);
+            model.scroll = model
+                .scroll
+                .saturating_add(view_rows.max(1))
+                .min(max_scroll);
         }
         StreamsKey::Home => {
             model.autoscroll = false;

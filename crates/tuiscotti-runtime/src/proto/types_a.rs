@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Version, exit statuses, capabilities
@@ -11,7 +10,6 @@ use super::*;
 
 /// Machine-protocol version. Bumped on any incompatible Op/OpResult change.
 pub const PROTOCOL_VERSION: &str = "1.0.0";
-
 
 /// CLI usage error (matches clap's exit code for parse failures).
 pub const EXIT_USAGE: i32 = 2;
@@ -21,7 +19,6 @@ pub const EXIT_OP_ERROR: i32 = 3;
 
 /// Offline verification disagreed (diff mismatch, failing verdicts).
 pub const EXIT_VERIFY_FAIL: i32 = 4;
-
 
 /// What this build can do. Never advertises what it cannot implement.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,7 +31,6 @@ pub struct Capabilities {
     pub platform: String,
 }
 
-
 #[must_use]
 pub fn capabilities() -> Capabilities {
     Capabilities {
@@ -46,7 +42,6 @@ pub fn capabilities() -> Capabilities {
         platform: std::env::consts::OS.to_string(),
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Config responsibilities (referenced by `init --help`)
@@ -65,7 +60,6 @@ insta config         Snapshot review behaviour ([`INSTA_UPDATE`], snapshot\n\
                      paths). Owned by Insta; tui-snap honours it and pins\n\
                      `INSTA_UPDATE=no` only inside its own frozen checks.\n";
 
-
 // ---------------------------------------------------------------------------
 // Ops
 // ---------------------------------------------------------------------------
@@ -78,13 +72,11 @@ pub mod wait_kind {
     pub const EXIT: &str = "exit";
 }
 
-
 /// `check` values for [`Op::Assert`]: `text-contains`, `text-equals`.
 pub mod assert_check {
     pub const TEXT_CONTAINS: &str = "text-contains";
     pub const TEXT_EQUALS: &str = "text-equals";
 }
-
 
 /// One typed operation. `#[serde(tag = "type")]`: each line on the machine
 /// protocol is one of these.
@@ -174,11 +166,9 @@ pub enum Op {
     Capabilities,
 }
 
-
 fn default_timeout_ms() -> u64 {
     5000
 }
-
 
 // ---------------------------------------------------------------------------
 // Results
@@ -195,7 +185,6 @@ pub struct ScreenView {
     pub cursor_visible: bool,
 }
 
-
 /// Serializable observation projection.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ObservationView {
@@ -203,7 +192,6 @@ pub struct ObservationView {
     pub reason: String,
     pub screen: ScreenView,
 }
-
 
 /// Typed op result. Results carry evidence, never bare success flags alone.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

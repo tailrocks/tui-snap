@@ -158,7 +158,9 @@ pub fn apng_with(
     let mut out = Vec::new();
     out.extend_from_slice(&PNG_MAGIC);
     let Some(ihdr) = ihdr else {
-        return Err(ExportError::Encode("apng: no frames after decode".to_string()));
+        return Err(ExportError::Encode(
+            "apng: no frames after decode".to_string(),
+        ));
     };
     emit_chunk(b"IHDR", &ihdr, &mut out);
     let mut actl = Vec::with_capacity(8);

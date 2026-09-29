@@ -48,9 +48,8 @@ pub struct Fidelity {
 impl Fidelity {
     #[must_use]
     pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|e| {
-            unreachable!("Fidelity is plain serializable data: {e}")
-        })
+        serde_json::to_string_pretty(self)
+            .unwrap_or_else(|e| unreachable!("Fidelity is plain serializable data: {e}"))
     }
 }
 

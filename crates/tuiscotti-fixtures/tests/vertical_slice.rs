@@ -29,7 +29,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell as TCell, Paragraph, Row, Table, TableState},
 };
 use tuiscotti::command::{Command, Termination};
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::runner::{Journal, JournalStatus, TestContext};
 
 /// Explicit snapshot dirs: the committed `tests/snapshots` (absolute: the

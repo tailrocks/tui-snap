@@ -27,7 +27,11 @@ fn deadline(secs: u64) -> Instant {
 /// Spawn a fixture binary at `cols`×`rows` with `--theme dark`.
 fn spawn_fixture(name: &str, cols: u16, rows: u16) -> tuiscotti::tui::Session {
     let bin = common::fixture_bin(name);
-    assert!(bin.is_file(), "authoritative binary present: {}", bin.display());
+    assert!(
+        bin.is_file(),
+        "authoritative binary present: {}",
+        bin.display()
+    );
     Tui::new([bin.to_string_lossy().into_owned()])
         .arg("--theme")
         .arg("dark")
@@ -52,7 +56,10 @@ fn assert_live_bundle(bundle: &tuiscotti_render::formats::CaptureBundle) {
     assert_normalized_sgr(&bundle.ansi).expect("live ANSI normalized");
     assert_opaque_rgb(&bundle.png).expect("live PNG opaque");
     assert_static_offline(&bundle.html).expect("live HTML static");
-    assert!(!bundle.generation.id.is_empty(), "live generation identified");
+    assert!(
+        !bundle.generation.id.is_empty(),
+        "live generation identified"
+    );
 }
 
 #[test]
@@ -77,28 +84,46 @@ fn menu_journey_toggle_error_and_quit() {
     Locator::text("Settings (space toggles, q quits, 0 on)")
         .expect_visible(&mut observe, Duration::from_secs(15))
         .expect("title draws");
-    Locator::text("[ ]").expect_count(&mut observe, 3, Duration::from_secs(10)).expect("3 rows");
+    Locator::text("[ ]")
+        .expect_count(&mut observe, 3, Duration::from_secs(10))
+        .expect("3 rows");
     // Down/Space/Down/Space toggles rows 1 and 2 (selection ends on row 2).
     session.press("Down").expect("Down");
-    session.wait_stable(deadline(10), &CancelToken::new()).expect("settle");
+    session
+        .wait_stable(deadline(10), &CancelToken::new())
+        .expect("settle");
     session.press("Space").expect("Space");
-    Locator::text("[x]").expect_count(&mut observe, 1, Duration::from_secs(10)).expect("toggle 1");
+    Locator::text("[x]")
+        .expect_count(&mut observe, 1, Duration::from_secs(10))
+        .expect("toggle 1");
     session.press("Down").expect("Down");
-    session.wait_stable(deadline(10), &CancelToken::new()).expect("settle");
+    session
+        .wait_stable(deadline(10), &CancelToken::new())
+        .expect("settle");
     session.press("Space").expect("Space");
-    Locator::text("[x]").expect_count(&mut observe, 2, Duration::from_secs(10)).expect("toggle 2");
+    Locator::text("[x]")
+        .expect_count(&mut observe, 2, Duration::from_secs(10))
+        .expect("toggle 2");
     // Disabled row: Space rings an error popup, Esc dismisses it.
     for _ in 0..3 {
         session.press("Down").expect("Down");
     }
-    session.wait_stable(deadline(10), &CancelToken::new()).expect("settle");
+    session
+        .wait_stable(deadline(10), &CancelToken::new())
+        .expect("settle");
     session.press("Space").expect("Space");
     Locator::text("is disabled")
         .expect_visible(&mut observe, Duration::from_secs(10))
         .expect("disabled error");
     session.press("Esc").expect("Esc");
-    let settled = session.wait_stable(deadline(10), &CancelToken::new()).expect("settle");
-    assert!(!Locator::text("is disabled").present_now(&settled).expect("locator"));
+    let settled = session
+        .wait_stable(deadline(10), &CancelToken::new())
+        .expect("settle");
+    assert!(
+        !Locator::text("is disabled")
+            .present_now(&settled)
+            .expect("locator")
+    );
     // Pure view and live TUI share rendering: identical labels both sides.
     let mid = session.snapshot().expect("snapshot");
     let live_txt = live_frame(&mid).text();
@@ -119,7 +144,11 @@ fn menu_journey_toggle_error_and_quit() {
     assert_eq!(bundle.generation, gen2, "stable screen, stable generation");
     // Quit cleanly with no leaked process.
     session.press("q").expect("q");
-    session.expect_exit(deadline(10), &CancelToken::new()).expect("exits").success().expect("exit 0");
+    session
+        .expect_exit(deadline(10), &CancelToken::new())
+        .expect("exits")
+        .success()
+        .expect("exit 0");
     let status = session.finish(deadline(5)).expect("finish");
     assert!(status.success());
     assert!(!process_exists(pid), "child reaped");
@@ -130,11 +159,15 @@ fn streams_journey_scroll_resize_and_quit() {
     let session = spawn_fixture("streams_fixture", 60, 12);
     let pid = session.pid().expect("child pid");
     let mut observe = || session.observe_now().expect("observe");
-    Locator::text("Streams").expect_visible(&mut observe, Duration::from_secs(15)).expect("draws");
+    Locator::text("Streams")
+        .expect_visible(&mut observe, Duration::from_secs(15))
+        .expect("draws");
     Locator::text("tail: end of deterministic log")
         .expect_visible(&mut observe, Duration::from_secs(10))
         .expect("tail visible");
-    Locator::text("日本語").expect_visible(&mut observe, Duration::from_secs(10)).expect("CJK");
+    Locator::text("日本語")
+        .expect_visible(&mut observe, Duration::from_secs(10))
+        .expect("CJK");
     // Home leaves the tail: the head of the log becomes visible.
     session.press("Home").expect("Home");
     Locator::text("trace: plain default color")
@@ -142,7 +175,9 @@ fn streams_journey_scroll_resize_and_quit() {
         .expect("scrolled to head");
     // Resize reflows the live view without breaking the frame.
     session.resize(80, 20).expect("resize");
-    let resized = session.wait_stable(deadline(10), &CancelToken::new()).expect("settle");
+    let resized = session
+        .wait_stable(deadline(10), &CancelToken::new())
+        .expect("settle");
     assert_eq!((resized.screen.cols(), resized.screen.rows()), (80, 20));
     let frame = live_frame(&resized.screen);
     frame.validate().expect("resized frame valid");
@@ -152,7 +187,11 @@ fn streams_journey_scroll_resize_and_quit() {
     assert_live_bundle(&bundle);
     assert!(bundle.txt.contains("Streams"), "content survives resize");
     session.press("q").expect("q");
-    session.expect_exit(deadline(10), &CancelToken::new()).expect("exits").success().expect("exit 0");
+    session
+        .expect_exit(deadline(10), &CancelToken::new())
+        .expect("exits")
+        .success()
+        .expect("exit 0");
     let status = session.finish(deadline(5)).expect("finish");
     assert!(status.success());
     assert!(!process_exists(pid), "child reaped");
@@ -163,10 +202,15 @@ fn protocol_journey_paste_focus_resize_and_quit() {
     let session = spawn_fixture("protocol_fixture", 50, 12);
     let pid = session.pid().expect("child pid");
     let mut observe = || session.observe_now().expect("observe");
-    Locator::text("paste=on").expect_visible(&mut observe, Duration::from_secs(15)).expect("draws");
+    Locator::text("paste=on")
+        .expect_visible(&mut observe, Duration::from_secs(15))
+        .expect("draws");
     // Pastes from the committed data file land in the echo area verbatim.
     let raw = String::from_utf8(common::read_data("protocol-pastes.txt")).expect("utf8");
-    let payloads: Vec<&str> = raw.lines().filter(|l| !l.trim().is_empty() && !l.starts_with('#')).collect();
+    let payloads: Vec<&str> = raw
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .collect();
     assert!(payloads.len() >= 2);
     for payload in &payloads[..2] {
         session.paste(payload).expect("paste");
@@ -176,11 +220,17 @@ fn protocol_journey_paste_focus_resize_and_quit() {
     }
     // Focus tracking, raw typing, and resize all reach the model.
     session.focus_out().expect("focus out");
-    Locator::text("blurred").expect_visible(&mut observe, Duration::from_secs(10)).expect("blur");
+    Locator::text("blurred")
+        .expect_visible(&mut observe, Duration::from_secs(10))
+        .expect("blur");
     session.focus_in().expect("focus in");
-    Locator::text("focused").expect_visible(&mut observe, Duration::from_secs(10)).expect("focus");
+    Locator::text("focused")
+        .expect_visible(&mut observe, Duration::from_secs(10))
+        .expect("focus");
     session.send_text("Z").expect("type");
-    Locator::text("Z").expect_visible(&mut observe, Duration::from_secs(10)).expect("typed");
+    Locator::text("Z")
+        .expect_visible(&mut observe, Duration::from_secs(10))
+        .expect("typed");
     session.resize(60, 16).expect("resize");
     Locator::text("size=60x16")
         .expect_visible(&mut observe, Duration::from_secs(10))
@@ -192,7 +242,11 @@ fn protocol_journey_paste_focus_resize_and_quit() {
             .expect("capture");
     assert_live_bundle(&bundle);
     session.press("q").expect("q");
-    session.expect_exit(deadline(10), &CancelToken::new()).expect("exits").success().expect("exit 0");
+    session
+        .expect_exit(deadline(10), &CancelToken::new())
+        .expect("exits")
+        .success()
+        .expect("exit 0");
     let status = session.finish(deadline(5)).expect("finish");
     assert!(status.success());
     assert!(!process_exists(pid), "child reaped");
@@ -220,7 +274,13 @@ fn piped_print_projections_are_clean() {
         .arg("--print")
         .run();
     let pipe = tuiscotti_render::formats::pipe_projection(&out.stdout, 65536).expect("project");
-    for label in ["autosave", "line_numbers", "word_wrap", "日本語モード", "legacy_mode"] {
+    for label in [
+        "autosave",
+        "line_numbers",
+        "word_wrap",
+        "日本語モード",
+        "legacy_mode",
+    ] {
         assert!(pipe.text.contains(label), "pipe carries {label}");
     }
 }

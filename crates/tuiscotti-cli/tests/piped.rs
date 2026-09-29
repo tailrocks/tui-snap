@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tuiscotti::command::{cargo_bin_path, isolated_env, Command, Termination};
+use tuiscotti::command::{Command, Termination, cargo_bin_path, isolated_env};
 
 #[test]
 fn separate_stdout_stderr_bytes() {
@@ -162,10 +162,7 @@ fn cargo_bin_missing_reports_searched_paths() {
         tuiscotti::command::SpawnErrorKind::BinaryNotFound
     );
     assert!(!err.searched().is_empty(), "searched paths: {err}");
-    assert!(
-        err.detail().contains("tuisnap-no-such-bin-xyz"),
-        "{err}"
-    );
+    assert!(err.detail().contains("tuisnap-no-such-bin-xyz"), "{err}");
 }
 
 #[test]

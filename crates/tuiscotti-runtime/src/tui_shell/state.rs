@@ -12,11 +12,10 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
-
 
 // ---------------------------------------------------------------------------
 // R13: terminal-state snapshot + explicit assertions
@@ -29,14 +28,12 @@ pub enum ClipboardTarget {
     Selection,
 }
 
-
 /// One captured OSC 52 store: decoded text plus its target.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ClipboardItem {
     pub target: ClipboardTarget,
     pub text: String,
 }
-
 
 /// Sandboxed clipboard capture: process memory only.
 ///
@@ -47,7 +44,6 @@ pub struct ClipboardItem {
 pub struct SandboxClipboard {
     items: Vec<ClipboardItem>,
 }
-
 
 impl SandboxClipboard {
     #[must_use]
@@ -80,7 +76,6 @@ impl SandboxClipboard {
     }
 }
 
-
 /// Default (non-indexed) foreground/background colors. `None` = terminal
 /// default, i.e. no OSC 10/11 override observed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -89,13 +84,11 @@ pub struct DefaultColors {
     pub bg: Option<Rgb>,
 }
 
-
 /// One OSC 8 hyperlink URI observed on the grid (order of first appearance).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Hyperlink {
     pub uri: String,
 }
-
 
 /// Full terminal state: everything assertions may target.
 ///
@@ -116,7 +109,6 @@ pub struct TermSnapshot {
     pub scrollback: Maybe<Vec<String>>,
 }
 
-
 impl TermSnapshot {
     /// Project a live observation onto the assertion surface. Fields the
     /// live path cannot provide are `Unsupported`, never fabricated.
@@ -135,11 +127,9 @@ impl TermSnapshot {
     }
 }
 
-
 /// Terminal-state assertion failure (mismatch, unknown, or unsupported).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateError(pub String);
-
 
 impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -147,9 +137,7 @@ impl std::fmt::Display for StateError {
     }
 }
 
-
 impl std::error::Error for StateError {}
-
 
 /// Assert the window/icon title equals `expected`.
 pub fn assert_title_eq(state: &TermSnapshot, expected: &str) -> Result<(), StateError> {
@@ -165,7 +153,6 @@ pub fn assert_title_eq(state: &TermSnapshot, expected: &str) -> Result<(), State
     }
 }
 
-
 /// Assert the bell count since session start equals `expected`.
 pub fn assert_bells_eq(state: &TermSnapshot, expected: u64) -> Result<(), StateError> {
     match &state.bells {
@@ -179,7 +166,6 @@ pub fn assert_bells_eq(state: &TermSnapshot, expected: u64) -> Result<(), StateE
         )),
     }
 }
-
 
 /// Assert DEC/private mode `mode` is currently set.
 pub fn assert_mode_set(state: &TermSnapshot, mode: u16) -> Result<(), StateError> {
@@ -195,7 +181,6 @@ pub fn assert_mode_set(state: &TermSnapshot, mode: u16) -> Result<(), StateError
     }
 }
 
-
 /// Assert DEC/private mode `mode` is currently unset.
 pub fn assert_mode_unset(state: &TermSnapshot, mode: u16) -> Result<(), StateError> {
     match &state.modes {
@@ -207,7 +192,6 @@ pub fn assert_mode_unset(state: &TermSnapshot, mode: u16) -> Result<(), StateErr
         )),
     }
 }
-
 
 /// Assert palette entry `index` resolves to `expected`: a live OSC 4
 /// override when present, else the documented nominal xterm default.
@@ -238,7 +222,6 @@ pub fn assert_palette_entry(
     }
 }
 
-
 /// Assert the default fg/bg (OSC 10/11 overrides; `None` = terminal default).
 pub fn assert_default_colors(
     state: &TermSnapshot,
@@ -259,7 +242,6 @@ pub fn assert_default_colors(
     }
 }
 
-
 /// Assert the latest sandboxed clipboard store equals `expected`.
 pub fn assert_clipboard_latest_eq(state: &TermSnapshot, expected: &str) -> Result<(), StateError> {
     match &state.clipboard {
@@ -278,7 +260,6 @@ pub fn assert_clipboard_latest_eq(state: &TermSnapshot, expected: &str) -> Resul
     }
 }
 
-
 /// Assert no clipboard stores were captured.
 pub fn assert_clipboard_empty(state: &TermSnapshot) -> Result<(), StateError> {
     match &state.clipboard {
@@ -294,7 +275,6 @@ pub fn assert_clipboard_empty(state: &TermSnapshot) -> Result<(), StateError> {
     }
 }
 
-
 /// Assert a hyperlink with exactly `uri` is present on the grid.
 pub fn assert_hyperlink_present(state: &TermSnapshot, uri: &str) -> Result<(), StateError> {
     match &state.hyperlinks {
@@ -309,7 +289,6 @@ pub fn assert_hyperlink_present(state: &TermSnapshot, uri: &str) -> Result<(), S
         )),
     }
 }
-
 
 /// Assert scrollback (oldest-first, viewport excluded) contains `needle`.
 pub fn assert_scrollback_contains(state: &TermSnapshot, needle: &str) -> Result<(), StateError> {

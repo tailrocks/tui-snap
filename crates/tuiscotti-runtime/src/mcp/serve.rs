@@ -2,9 +2,8 @@ use std::io::{BufRead, Write};
 
 use serde_json::{Value, json};
 
-use crate::proto::{self, OpError};
 use super::*;
-
+use crate::proto::{self, OpError};
 
 /// Serve JSON-RPC 2.0 over `reader`/`writer`, one message per line, until EOF.
 /// Blank lines are ignored. Notifications get no response.
@@ -27,13 +26,11 @@ pub fn serve<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
     }
 }
 
-
 /// Serve on the real stdio. See the module docs for composition notes.
 pub fn run_stdio() {
     let stdin = std::io::stdin();
     serve(stdin.lock(), std::io::stdout());
 }
-
 
 /// Handle one raw JSON-RPC message. Returns `None` for notifications
 /// (no `id`) and for anything that must stay silent.
@@ -101,7 +98,6 @@ pub fn handle_request(raw: &str) -> Option<String> {
     }
 }
 
-
 fn initialize_result(params: &Value) -> Value {
     let client = params
         .get("clientInfo")
@@ -118,7 +114,6 @@ fn initialize_result(params: &Value) -> Value {
         },
     })
 }
-
 
 fn call_tool(id: Value, params: &Value) -> String {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -180,7 +175,6 @@ fn call_tool(id: Value, params: &Value) -> String {
     )
 }
 
-
 fn success_response(id: Value, result: Value) -> String {
     serde_json::to_string(&json!({"jsonrpc": "2.0", "id": id, "result": result})).unwrap_or_else(
         |_| {
@@ -189,7 +183,6 @@ fn success_response(id: Value, result: Value) -> String {
         },
     )
 }
-
 
 fn error_response(id: Value, code: i32, message: &str, data: Option<Value>) -> String {
     let mut fields = serde_json::Map::with_capacity(3);

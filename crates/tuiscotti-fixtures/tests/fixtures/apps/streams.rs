@@ -13,7 +13,8 @@ use tuiscotti_fixtures::views::streams::{self, Model, StreamsKey};
 
 /// Raw pipe payload: valid lines, invalid sequences, and valid CJK.
 /// Deterministic; `pipe_projection` accounts every invalid sequence.
-const RAW_PAYLOAD: &[u8] = b"streams-raw v1\nline-ok\n\xff\xfe bad-bytes\n\xe6\x97\xa5 valid-cjk\n\x80lone-continuation\n";
+const RAW_PAYLOAD: &[u8] =
+    b"streams-raw v1\nline-ok\n\xff\xfe bad-bytes\n\xe6\x97\xa5 valid-cjk\n\x80lone-continuation\n";
 
 /// Map one terminal event to a controller key.
 fn map(event: Event) -> Option<StreamsKey> {

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Named sessions (A02): versioned endpoints, owner-only runtime dir
@@ -12,7 +11,6 @@ use super::*;
 /// Endpoint file format version. A reader that sees another version refuses
 /// the file instead of guessing.
 pub const SESSION_ENDPOINT_VERSION: u32 = 1;
-
 
 /// Backend that owns the named session's child.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -24,7 +22,6 @@ pub enum SessionBackend {
     Pty,
 }
 
-
 /// Liveness of a named session.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -32,7 +29,6 @@ pub enum SessionStatus {
     Running,
     Exited,
 }
-
 
 /// What `session list` reports per session.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,7 +40,6 @@ pub struct SessionInfo {
     pub status: SessionStatus,
     pub started_unix: u64,
 }
-
 
 /// On-disk endpoint record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,11 +54,9 @@ pub(crate) struct SessionEndpoint {
     pub(crate) owner: Option<u32>,
 }
 
-
 /// Runtime dir: `$TUISNAP_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/tuisnap`, else a
 /// per-uid temp dir. Created owner-only (0o700) on Unix.
 static RUNTIME_DIR_OVERRIDE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
-
 
 /// Test-only runtime-dir override (no `unsafe`, unlike `set_var`, which is an
 /// `unsafe fn` in edition 2024 and cannot be used under the workspace lints).
@@ -75,7 +68,6 @@ pub fn set_runtime_dir_override(dir: Option<PathBuf>) {
         .lock()
         .unwrap_or_else(|e| e.into_inner()) = dir;
 }
-
 
 pub fn runtime_dir() -> Result<PathBuf, OpError> {
     if let Some(d) = RUNTIME_DIR_OVERRIDE
@@ -95,7 +87,6 @@ pub fn runtime_dir() -> Result<PathBuf, OpError> {
     ensure_runtime_dir(&dir)
 }
 
-
 fn ensure_runtime_dir(dir: &Path) -> Result<PathBuf, OpError> {
     std::fs::create_dir_all(dir)
         .map_err(|e| OpError::new("io", format!("runtime dir {}: {e}", dir.display())))?;
@@ -114,7 +105,6 @@ fn ensure_runtime_dir(dir: &Path) -> Result<PathBuf, OpError> {
     }
     Ok(dir.to_path_buf())
 }
-
 
 pub(crate) fn current_uid() -> u32 {
     #[cfg(all(unix, feature = "pty"))]
@@ -140,7 +130,6 @@ pub(crate) fn current_uid() -> u32 {
     }
 }
 
-
 pub(crate) fn validate_session_name(name: &str) -> Result<(), OpError> {
     if name.is_empty() || name.len() > 64 {
         return Err(OpError::new(
@@ -162,11 +151,9 @@ pub(crate) fn validate_session_name(name: &str) -> Result<(), OpError> {
     Ok(())
 }
 
-
 pub(crate) fn endpoint_path(dir: &Path, name: &str) -> PathBuf {
     dir.join(format!("{name}.json"))
 }
-
 
 pub(crate) fn read_endpoint(dir: &Path, name: &str) -> Result<Option<SessionEndpoint>, OpError> {
     let path = endpoint_path(dir, name);
@@ -203,7 +190,6 @@ pub(crate) fn read_endpoint(dir: &Path, name: &str) -> Result<Option<SessionEndp
     Ok(Some(ep))
 }
 
-
 /// Atomic endpoint write (tmp file + rename).
 pub(crate) fn write_endpoint(dir: &Path, ep: &SessionEndpoint) -> Result<(), OpError> {
     let path = endpoint_path(dir, &ep.name);
@@ -216,7 +202,6 @@ pub(crate) fn write_endpoint(dir: &Path, ep: &SessionEndpoint) -> Result<(), OpE
         .map_err(|e| OpError::new("io", format!("publish {}: {e}", path.display())))?;
     Ok(())
 }
-
 
 pub(crate) fn pid_alive(pid: u32) -> bool {
     #[cfg(unix)]
@@ -235,7 +220,6 @@ pub(crate) fn pid_alive(pid: u32) -> bool {
         false
     }
 }
-
 
 pub(crate) fn kill_pid(pid: u32) -> Result<(), OpError> {
     #[cfg(all(unix, feature = "pty"))]
@@ -275,7 +259,6 @@ pub(crate) fn kill_pid(pid: u32) -> Result<(), OpError> {
         }
     }
 }
-
 
 pub(crate) fn now_unix() -> u64 {
     std::time::SystemTime::now()

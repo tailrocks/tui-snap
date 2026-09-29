@@ -2,13 +2,11 @@ use std::io::{BufRead, Write};
 
 use serde_json::{Value, json};
 
-use crate::proto::{self, OpError};
 use super::*;
-
+use crate::proto::{self, OpError};
 
 /// MCP protocol version this server speaks.
 pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
-
 
 /// One MCP tool: a [`crate::proto::Op`] variant plus its hand-written schema.
 #[derive(Debug, Clone)]
@@ -18,7 +16,6 @@ pub struct Tool {
     pub input_schema: Value,
 }
 
-
 pub(crate) fn schema(required: &[&str], properties: Value) -> Value {
     json!({
         "type": "object",
@@ -27,7 +24,6 @@ pub(crate) fn schema(required: &[&str], properties: Value) -> Value {
         "additionalProperties": false,
     })
 }
-
 
 /// Every tool, in [`crate::proto::Op`] declaration order. Schemas are written
 /// from the `Op` struct fields (see `PROTOCOL_SCHEMA_JSON` for the same
@@ -170,7 +166,6 @@ pub fn tools() -> Vec<Tool> {
         },
     ]
 }
-
 
 /// The `tools/list` result value (also the schema-snapshot source).
 #[must_use]

@@ -31,12 +31,12 @@
 //! - Errors carry byte offsets: header problems are
 //!   [`CompatError::Version`], bad event lines [`CompatError::Content`].
 
-mod errors;
 mod cast;
-mod termctrl_types;
+mod errors;
 mod termctrl_parse;
+mod termctrl_types;
 
-pub use errors::*;
 pub use cast::*;
-pub use termctrl_types::*;
+pub use errors::*;
 pub use termctrl_parse::*;
+pub use termctrl_types::*;

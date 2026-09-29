@@ -10,18 +10,18 @@
 //! else (version, capabilities, assert, render, diff, named sessions, record,
 //! review, report) is feature-independent.
 
+mod execute;
+mod journal;
+mod registry;
+mod session_ops;
+mod sessions;
 mod types_a;
 mod types_b;
-mod execute;
-mod registry;
-mod sessions;
-mod session_ops;
-mod journal;
 
+pub use execute::*;
+pub use journal::*;
+pub use registry::*;
+pub use session_ops::*;
+pub use sessions::*;
 pub use types_a::*;
 pub use types_b::*;
-pub use execute::*;
-pub use registry::*;
-pub use sessions::*;
-pub use session_ops::*;
-pub use journal::*;

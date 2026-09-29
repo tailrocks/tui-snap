@@ -1,3 +1,4 @@
+use super::*;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -5,8 +6,6 @@ use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
-use super::*;
-
 
 /// Dynamic-library search paths scrubbed from isolated children by default.
 const DYLIB_VARS: &[&str] = &[
@@ -14,7 +13,6 @@ const DYLIB_VARS: &[&str] = &[
     "DYLD_LIBRARY_PATH",
     "DYLD_FALLBACK_LIBRARY_PATH",
 ];
-
 
 /// Isolated process fixture: temp HOME/XDG/cwd plus child-only env (R03).
 ///
@@ -28,7 +26,6 @@ pub struct IsolatedEnv {
     preserve_dylib_path: bool,
     keep: bool,
 }
-
 
 impl IsolatedEnv {
     /// Create the fixture; same as [`isolated_env`].
@@ -120,7 +117,6 @@ impl IsolatedEnv {
     }
 }
 
-
 impl Drop for IsolatedEnv {
     fn drop(&mut self) {
         if !self.keep {
@@ -128,7 +124,6 @@ impl Drop for IsolatedEnv {
         }
     }
 }
-
 
 /// Create an [`IsolatedEnv`] fixture: a unique `0700` temp root with `home/`,
 /// `work/`, `tmp/`, and the XDG dirs pre-created. Std-only unique naming

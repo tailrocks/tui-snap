@@ -127,14 +127,16 @@ impl DecodedImage {
     /// constructors guarantee the length).
     #[must_use]
     pub fn image(&self) -> image::RgbaImage {
-        image::RgbaImage::from_raw(self.width, self.height, self.rgba.clone()).unwrap_or_else(|| {
-            unreachable!(
-                "decoded image length is width*height*4 by construction ({}x{} vs {} bytes)",
-                self.width,
-                self.height,
-                self.rgba.len()
-            )
-        })
+        image::RgbaImage::from_raw(self.width, self.height, self.rgba.clone()).unwrap_or_else(
+            || {
+                unreachable!(
+                    "decoded image length is width*height*4 by construction ({}x{} vs {} bytes)",
+                    self.width,
+                    self.height,
+                    self.rgba.len()
+                )
+            },
+        )
     }
 }
 

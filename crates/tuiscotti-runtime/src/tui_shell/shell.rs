@@ -12,11 +12,10 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
-
 
 // ---------------------------------------------------------------------------
 // R12: explicit shell sessions with command-boundary integration
@@ -24,7 +23,6 @@ use super::*;
 
 /// Shell integration setup handshake timeout for [`Shell::sh`].
 const SHELL_SETUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-
 
 /// Whether the shell speaks the command-boundary protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +35,6 @@ pub enum Markers {
     /// from prompt text.
     Unavailable,
 }
-
 
 /// One shell-command result. `exit_code` is the *shell command's* exit, not
 /// the direct child's; the shell usually keeps running afterwards.
@@ -52,7 +49,6 @@ pub struct ShellResult {
     pub truncated: bool,
 }
 
-
 /// Shell failure.
 #[derive(Debug)]
 pub enum ShellError {
@@ -62,7 +58,6 @@ pub enum ShellError {
     BadCommand(String),
     Protocol(String),
 }
-
 
 impl std::fmt::Display for ShellError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,7 +71,6 @@ impl std::fmt::Display for ShellError {
     }
 }
 
-
 impl std::error::Error for ShellError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -87,20 +81,17 @@ impl std::error::Error for ShellError {
     }
 }
 
-
 impl From<TuiError> for ShellError {
     fn from(e: TuiError) -> Self {
         Self::Tui(e)
     }
 }
 
-
 impl From<WaitError> for ShellError {
     fn from(e: WaitError) -> Self {
         Self::Wait(e)
     }
 }
-
 
 /// An explicit `/bin/sh` session with command-boundary integration.
 ///
@@ -115,7 +106,6 @@ pub struct Shell {
     tag: String,
 }
 
-
 impl std::fmt::Debug for Shell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Shell")
@@ -125,7 +115,6 @@ impl std::fmt::Debug for Shell {
             .finish()
     }
 }
-
 
 impl Shell {
     /// Spawn `/bin/sh` (80x24) and establish the integration handshake.
@@ -272,7 +261,6 @@ impl Shell {
         self.session.wait_exit(deadline, cancel)
     }
 }
-
 
 /// Plain-text viewport rows (trailing blanks trimmed per row).
 fn screen_rows(screen: &Screen) -> Vec<String> {

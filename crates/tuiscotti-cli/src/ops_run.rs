@@ -70,7 +70,7 @@ pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
 pub fn cmd_session(cmd: SessionCmd) -> i32 {
     match cmd {
         SessionCmd::Start { name, force, argv } => {
-                    match proto::session_start_os(&name, &argv, force) {
+            match proto::session_start_os(&name, &argv, force) {
                 Ok(info) => {
                     println!("started: {} (pid {})", info.name, info.pid);
                     0
@@ -120,8 +120,8 @@ pub fn cmd_session(cmd: SessionCmd) -> i32 {
 /// stdin bytes are drained and discarded; EOF on stdin detaches.
 fn cmd_session_attach(name: &str) -> i32 {
     use std::io::Read;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     let info = match proto::session_list() {
         Ok(list) => list.into_iter().find(|s| s.name == *name),
         Err(e) => return op_error(&e),

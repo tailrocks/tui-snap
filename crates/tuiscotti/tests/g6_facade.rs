@@ -10,9 +10,9 @@ use std::error::Error as _;
 use std::fs;
 use std::path::Path;
 
+use tuiscotti::Policy;
 use tuiscotti::assert::{generation_id, png_tag_generation, render_sample};
 use tuiscotti::insta_proto::insta_string;
-use tuiscotti::Policy;
 
 fn write_text_snap(dir: &Path, name: &str, generation: &str, body: &str) {
     let content = format!(
@@ -208,11 +208,7 @@ fn screen_conversions_use_try_from_and_fail_loudly_on_clips() {
     // facade `Error` via `?`.
     struct Clipper;
     impl ratatui::widgets::Widget for Clipper {
-        fn render(
-            self,
-            area: ratatui::layout::Rect,
-            buf: &mut ratatui::buffer::Buffer,
-        ) {
+        fn render(self, area: ratatui::layout::Rect, buf: &mut ratatui::buffer::Buffer) {
             buf[(area.width - 1, 0)].set_symbol("漢");
         }
     }
@@ -231,9 +227,6 @@ fn facade_error_retains_sources() {
     let err = tuiscotti::Error::from(tuiscotti::command::cargo_bin_path("x").unwrap_err());
     assert!(matches!(err, tuiscotti::Error::Spawn(_)));
     assert!(err.source().is_some());
-    let io_err = tuiscotti::Error::from(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "gone",
-    ));
+    let io_err = tuiscotti::Error::from(std::io::Error::new(std::io::ErrorKind::NotFound, "gone"));
     assert_eq!(io_err.to_string(), "I/O error: gone");
 }

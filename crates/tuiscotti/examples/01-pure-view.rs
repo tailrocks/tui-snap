@@ -8,9 +8,9 @@
 //! stays ambient.
 
 use ratatui::widgets::Paragraph;
-use tuiscotti::assert::{generation_id, Policy};
+use tuiscotti::assert::{Policy, generation_id};
 use tuiscotti::insta_proto::insta_string;
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
 fn main() {
     // Production draw closure: the real render path, not a hand-made grid.

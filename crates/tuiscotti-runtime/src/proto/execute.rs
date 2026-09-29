@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // execute(): the library entry
@@ -89,7 +88,6 @@ pub fn execute(op: &Op) -> Result<OpResult, OpError> {
     }
 }
 
-
 fn execute_assert(
     check: &str,
     text: &Option<String>,
@@ -142,7 +140,6 @@ fn execute_assert(
     }
 }
 
-
 fn execute_render(frame_json: &str, format: &str) -> Result<OpResult, OpError> {
     use tuiscotti_render::profile::VENDORED_FACES;
     use tuiscotti_render::render::Renderer;
@@ -194,7 +191,6 @@ fn execute_render(frame_json: &str, format: &str) -> Result<OpResult, OpError> {
     }
 }
 
-
 fn execute_diff(expected_b64: &str, actual_b64: &str) -> Result<OpResult, OpError> {
     let expected = base64_decode(expected_b64)
         .map_err(|e| OpError::new("invalid-input", format!("bad expected PNG base64: {e}")))?;
@@ -208,7 +204,6 @@ fn execute_diff(expected_b64: &str, actual_b64: &str) -> Result<OpResult, OpErro
         score: verdict.score,
     })
 }
-
 
 // ---------------------------------------------------------------------------
 // Screen projections
@@ -239,7 +234,6 @@ pub fn screen_text(screen: &tuiscotti_core::screen::Screen) -> String {
     out
 }
 
-
 #[must_use]
 pub fn screen_view(screen: &tuiscotti_core::screen::Screen) -> ScreenView {
     let cursor = screen.cursor();
@@ -253,7 +247,6 @@ pub fn screen_view(screen: &tuiscotti_core::screen::Screen) -> ScreenView {
     }
 }
 
-
 #[must_use]
 pub fn observation_view(obs: &tuiscotti_core::screen::Observation) -> ObservationView {
     ObservationView {
@@ -263,7 +256,6 @@ pub fn observation_view(obs: &tuiscotti_core::screen::Observation) -> Observatio
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Base64 (no new deps: small local implementation over base64 crate)
 // ---------------------------------------------------------------------------
@@ -272,7 +264,6 @@ pub(crate) fn base64_encode(bytes: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
-
 
 pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
     use base64::Engine;

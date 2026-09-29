@@ -31,9 +31,9 @@
 //!   `DefaultComparator` does. For decoded-pixel equality this is the correct
 //!   behavior anyway: bytes that do not decode as PNG never match.
 
-use tuiscotti_render::diff::AlphaPolicy;
 use tuiscotti_core::frame::{Color, CursorStyle};
 use tuiscotti_core::screen::Screen;
+use tuiscotti_render::diff::AlphaPolicy;
 
 /// Compact lossless color token shared by both projections.
 fn color_token(c: Color) -> String {

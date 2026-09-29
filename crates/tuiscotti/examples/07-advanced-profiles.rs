@@ -8,11 +8,11 @@
 //! (a bad pin is rejected at construction, never rendered).
 
 use tuiscotti::profile::{
-    BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RenderProfile, RENDERER_VERSION,
+    BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RENDERER_VERSION, RenderProfile,
     VENDORED_FACES, VENDORED_FALLBACK_FACES, VENDORED_FONT_BOLD_ITALIC_SHA256,
     VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256,
 };
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::render::Renderer;
 
 fn strict(missing: MissingGlyphPolicy) -> RenderProfile<'static> {

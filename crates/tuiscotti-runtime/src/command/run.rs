@@ -1,3 +1,4 @@
+use super::*;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -5,14 +6,11 @@ use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
-use super::*;
-
 
 /// How often the supervisor polls the child while waiting.
 const POLL_INTERVAL: Duration = Duration::from_millis(2);
 
 impl Command {
-
     /// Export the spawn configuration as a [`std::process::Command`]
     /// (program, args, env, cwd, shell mapping). Stdin bytes, timeout,
     /// output limits, and the drain deadline are [`Command::run`] behavior
@@ -181,7 +179,6 @@ impl Command {
     }
 }
 
-
 #[cfg(unix)]
 fn classify(status: ExitStatus) -> Termination {
     use std::os::unix::process::ExitStatusExt;
@@ -192,13 +189,11 @@ fn classify(status: ExitStatus) -> Termination {
     }
 }
 
-
 #[cfg(not(unix))]
 fn classify(status: ExitStatus) -> Termination {
     // No signal reporting outside unix; do not invent one.
     Termination::Exit(status.code().unwrap_or(-1))
 }
-
 
 /// Drain one pipe on a thread; enforce the per-stream cap.
 fn spawn_drain(

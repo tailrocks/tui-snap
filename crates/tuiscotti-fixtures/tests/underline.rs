@@ -125,7 +125,7 @@ fn ratatui_underlined_maps_to_single_with_color() {
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
     use ratatui::style::{Color as RColor, Modifier, Style};
-    use tuiscotti::ratatui::{screen_from_buffer, EdgePolicy};
+    use tuiscotti::ratatui::{EdgePolicy, screen_from_buffer};
 
     let mut buf = Buffer::empty(Rect::new(0, 0, 2, 1));
     buf.cell_mut((0, 0)).unwrap().set_symbol("A").set_style(

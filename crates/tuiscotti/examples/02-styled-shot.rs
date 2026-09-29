@@ -8,10 +8,8 @@
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Paragraph;
-use tuiscotti::assert::{
-    generation_id, png_generation, png_tag_generation, render_sample, Policy,
-};
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::assert::{Policy, generation_id, png_generation, png_tag_generation, render_sample};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
 fn main() {
     let tmp = tempfile::tempdir().unwrap();

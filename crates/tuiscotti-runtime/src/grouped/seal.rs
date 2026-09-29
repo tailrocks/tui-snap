@@ -1,3 +1,4 @@
+use super::*;
 use crate::snapshot::{
     CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
 };
@@ -6,20 +7,16 @@ use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render::{self, Renderer};
-use super::*;
-
 
 /// Candidate seal: `<name>.manifest.json` under the actual root.
 fn manifest_path(actual_root: &Path, name: &str) -> PathBuf {
     actual_root.join(format!("{name}.manifest.json"))
 }
 
-
 /// Persisted check verdict: `<name>.verdict.json` under the actual root.
 fn verdict_path(actual_root: &Path, name: &str) -> PathBuf {
     actual_root.join(format!("{name}.verdict.json"))
 }
-
 
 /// Lowercase hex SHA-256 of `bytes` (manifest/verdict integrity, not gating).
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -31,7 +28,6 @@ fn sha256_hex(bytes: &[u8]) -> String {
     }
     s
 }
-
 
 /// Inverse of [`Status::as_str`] for persisted verdicts.
 fn status_from_str(s: &str) -> Option<Status> {
@@ -49,7 +45,6 @@ fn status_from_str(s: &str) -> Option<Status> {
 }
 
 impl GroupedStore {
-
     /// Seal the candidate file set AFTER all candidate writes (C08-grouped):
     /// hashes of the four artifacts plus the frame sidecar, the rendering
     /// profile id, and `complete: true`. A crash between the artifact writes

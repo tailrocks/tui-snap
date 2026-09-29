@@ -62,14 +62,14 @@
 //! [`GroupedStore::with_actual_root`], [`GroupedStore::with_diff_root`] and
 //! [`GroupedStore::with_report_path`] (e.g. under `target/`).
 
-mod types;
 mod check;
 mod mutate;
 mod seal;
+mod types;
 
-pub use types::*;
 pub use check::*;
 pub use mutate::*;
 pub use seal::*;
+pub use types::*;
 
 pub use tuiscotti_core::names::{InvalidName, validate_name};

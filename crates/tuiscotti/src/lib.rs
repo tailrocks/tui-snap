@@ -25,31 +25,31 @@ pub use tuiscotti_core::locate::Locator;
 pub use tuiscotti_core::screen::{CaptureProvenance, CaptureReason, Maybe, Observation, Region};
 pub use tuiscotti_core::screen::{RegionPolicy, Screen, ScreenError, TermState};
 pub use tuiscotti_insta::assert::{FrozenError, Policy};
-pub use tuiscotti_insta::{assert_snapshot, assert_screenshot};
+pub use tuiscotti_insta::{assert_screenshot, assert_snapshot};
 pub use tuiscotti_render::profile::Profile;
 pub use tuiscotti_render::render::Renderer;
+#[cfg(feature = "pty")]
+pub use tuiscotti_runtime::bound_locator::{ActionError, BoundLocator};
 pub use tuiscotti_runtime::command::{
     Command, ProcessOutput, SpawnError, SpawnErrorKind, Termination,
 };
 #[cfg(feature = "pty")]
-pub use tuiscotti_runtime::bound_locator::{ActionError, BoundLocator};
-#[cfg(feature = "pty")]
 pub use tuiscotti_runtime::keys::KeyChord;
 #[cfg(feature = "pty")]
 pub use tuiscotti_runtime::tui::{
-    CancelToken, ExitStatus, ExitWait, Key, KeyEventKind, KeyMods, MouseButton, MouseMods,
-    Session, Signal, Tui, TuiError, WaitError,
+    CancelToken, ExitStatus, ExitWait, Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Session,
+    Signal, Tui, TuiError, WaitError,
 };
 
 // Purposeful advanced modules (also the pre-G6 compatibility surface).
 pub use tuiscotti_core::{frame, locate, names, ratatui, screen, semant};
 pub use tuiscotti_insta::{assert, insta_proto};
 pub use tuiscotti_render::{diff, export, profile, render};
+#[cfg(feature = "pty")]
+pub use tuiscotti_runtime::{bound_locator, keys, tui, tui_shell, waits};
 pub use tuiscotti_runtime::{
     command, grouped, import_compat, mcp, observe, proto, runner, snapshot,
 };
-#[cfg(feature = "pty")]
-pub use tuiscotti_runtime::{bound_locator, keys, tui, tui_shell, waits};
 
 // Pre-G6 top-level compatibility re-exports (kept: used out of crate).
 pub use tuiscotti_core::frame::{
@@ -58,7 +58,7 @@ pub use tuiscotti_core::frame::{
 pub use tuiscotti_render::profile::{
     FallbackFace, FontFaces, VENDORED_CJK_FONT, VENDORED_CJK_FONT_SHA256, VENDORED_FACES,
     VENDORED_FALLBACK_FACES, VENDORED_FONT, VENDORED_FONT_BOLD, VENDORED_FONT_BOLD_ITALIC,
-    VENDORED_FONT_ITALIC, VENDORED_SYMBOLS2_FONT, VENDORED_SYMBOLS2_FONT_SHA256,
-    VENDORED_SYMBOLS_FONT, VENDORED_SYMBOLS_FONT_SHA256,
+    VENDORED_FONT_ITALIC, VENDORED_SYMBOLS_FONT, VENDORED_SYMBOLS_FONT_SHA256,
+    VENDORED_SYMBOLS2_FONT, VENDORED_SYMBOLS2_FONT_SHA256,
 };
 pub use tuiscotti_runtime::grouped::{ArtifactPaths, GroupedOutcome, GroupedStore, InvalidName};

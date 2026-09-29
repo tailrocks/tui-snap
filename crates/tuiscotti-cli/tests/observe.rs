@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tuiscotti::observe::{compare_replay_vs_rerun, screen_text, Replay, Rerun, Watcher};
+use tuiscotti::observe::{Replay, Rerun, Watcher, compare_replay_vs_rerun, screen_text};
 use tuiscotti::screen::Screen;
 use tuiscotti::tui::{CancelToken, Tui};
 use tuiscotti::tui_shell::Recording;

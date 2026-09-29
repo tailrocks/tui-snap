@@ -70,11 +70,7 @@ impl AsciiArtifact {
     /// The projected text, but only when nothing was substituted.
     #[must_use]
     pub fn lossless_text(&self) -> Option<&str> {
-        if self.lossy() {
-            None
-        } else {
-            Some(&self.text)
-        }
+        if self.lossy() { None } else { Some(&self.text) }
     }
 }
 
@@ -90,8 +86,12 @@ fn map_scalar(c: char) -> Option<char> {
     let out = match c {
         '─' => '-',
         '│' => '|',
-        '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' | '╭' | '╮' | '╯' | '╰' => '+',
-        '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' => '#',
+        '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' | '╭' | '╮' | '╯' | '╰' => {
+            '+'
+        }
+        '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' => {
+            '#'
+        }
         '█' | '▓' | '▒' | '░' | '▀' | '▄' | '■' | '□' | '▪' | '▫' => '#',
         '→' => '>',
         '←' | '↔' => '<',

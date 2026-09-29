@@ -2,8 +2,8 @@
 
 use tuiscotti::ratatui as tr;
 use tuiscotti::semant::{
-    by_id, by_label, by_role, Harness, HarnessEvent, HitRegion, RatatuiTestAdapter, Role, SemNode,
-    SemanticError, SemanticProvider,
+    Harness, HarnessEvent, HitRegion, RatatuiTestAdapter, Role, SemNode, SemanticError,
+    SemanticProvider, by_id, by_label, by_role,
 };
 
 fn hit(x: u16, y: u16, cols: u16, rows: u16) -> HitRegion {

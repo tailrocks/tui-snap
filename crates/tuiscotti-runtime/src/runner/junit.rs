@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Read-only correlation key joining attempt artifacts to nextest results (N05, N10).
 ///
@@ -23,7 +22,6 @@ pub struct JunitKey {
     /// `NEXTEST_TEST_NAME`.
     pub testcase: String,
 }
-
 
 impl JunitKey {
     /// Correlation key for this process, or `None` outside nextest (or when any
@@ -67,7 +65,6 @@ impl JunitKey {
     }
 }
 
-
 /// Build a child [`Command`] with the context's env applied, without touching
 /// the parent environment or working directory.
 pub fn child_command(ctx: &TestContext, program: impl AsRef<std::ffi::OsStr>) -> Command {
@@ -75,7 +72,6 @@ pub fn child_command(ctx: &TestContext, program: impl AsRef<std::ffi::OsStr>) ->
     ctx.apply_to(&mut cmd);
     cmd
 }
-
 
 #[cfg(test)]
 mod tests {

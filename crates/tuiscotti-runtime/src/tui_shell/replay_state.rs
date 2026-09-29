@@ -12,14 +12,13 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
 
 /// Cap on hyperlinks collected from one replay.
 const MAX_REPLAY_LINKS: usize = 1024;
-
 
 fn replay_modes(mode: &TermMode) -> Vec<u16> {
     let mut out = Vec::new();
@@ -48,7 +47,6 @@ fn replay_modes(mode: &TermMode) -> Vec<u16> {
     out
 }
 
-
 fn vte_to_rgb(c: VteRgb) -> Rgb {
     Rgb {
         r: c.r,
@@ -56,7 +54,6 @@ fn vte_to_rgb(c: VteRgb) -> Rgb {
         b: c.b,
     }
 }
-
 
 /// Full terminal state from a replayed emulator: everything is `Known`.
 pub(crate) fn build_replay_state<T: EventListener>(
@@ -109,7 +106,6 @@ pub(crate) fn build_replay_state<T: EventListener>(
     }
 }
 
-
 fn replay_line_text(
     grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
     line: Line,
@@ -131,7 +127,6 @@ fn replay_line_text(
     }
     s.trim_end().to_string()
 }
-
 
 fn collect_links(
     grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,

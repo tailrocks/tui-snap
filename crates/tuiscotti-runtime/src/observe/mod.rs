@@ -14,8 +14,8 @@
 //! it tails the named session's log as text frames. Assertions remain on
 //! `Observation`s, never on attach output.
 
-mod text;
 mod pty;
+mod text;
 
-pub use text::*;
 pub use pty::*;
+pub use text::*;

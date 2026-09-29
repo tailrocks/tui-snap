@@ -203,7 +203,12 @@ pub fn render(frame: &mut RFrame, model: &Model) {
 fn render_modes(frame: &mut RFrame, model: &Model, area: Rect) {
     let flag = |on: bool| {
         if on {
-            Span::styled("on", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            Span::styled(
+                "on",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
             Span::styled("off", Style::default().add_modifier(Modifier::DIM))
         }
@@ -211,7 +216,9 @@ fn render_modes(frame: &mut RFrame, model: &Model, area: Rect) {
     let focus = if model.focused {
         Span::styled(
             "focused",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )
     } else {
         Span::styled("blurred", Style::default().add_modifier(Modifier::DIM))
@@ -284,7 +291,6 @@ fn render_footer(frame: &mut RFrame, model: &Model, area: Rect) {
         Some(error) => format!("ERROR: {error}"),
         None => format!("size={cols}x{rows} log={} (q quits)", model.log.len()),
     };
-    let footer =
-        Paragraph::new(text).style(Style::default().add_modifier(Modifier::REVERSED));
+    let footer = Paragraph::new(text).style(Style::default().add_modifier(Modifier::REVERSED));
     frame.render_widget(footer, area);
 }

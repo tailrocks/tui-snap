@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Executable resolution failure (N03, N04).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +26,6 @@ pub enum ResolveError {
         candidates: Vec<PathBuf>,
     },
 }
-
 
 impl std::fmt::Display for ResolveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,9 +59,7 @@ impl std::fmt::Display for ResolveError {
     }
 }
 
-
 impl std::error::Error for ResolveError {}
-
 
 /// Resolve a binary target's executable (N03, N04).
 ///
@@ -79,7 +75,6 @@ pub fn resolve_bin(package: &str, bin: &str) -> Result<PathBuf, ResolveError> {
     let env: HashMap<String, String> = std::env::vars().collect();
     resolve_bin_with_map(package, bin, &env)
 }
-
 
 /// [`resolve_bin`] over an injected environment.
 pub fn resolve_bin_with_map(

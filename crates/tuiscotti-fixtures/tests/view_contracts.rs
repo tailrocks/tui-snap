@@ -27,7 +27,10 @@ fn matrix_sizes_themes_validate() {
                 assert_eq!((frame.cols, frame.rows), (cols, rows), "{name}");
                 assert!(!frame.text().is_empty(), "{name} renders content");
                 if frame.cursor.visible {
-                    assert!(frame.cursor.x < cols && frame.cursor.y < rows, "{name} cursor");
+                    assert!(
+                        frame.cursor.x < cols && frame.cursor.y < rows,
+                        "{name} cursor"
+                    );
                 }
             }
         }
@@ -74,9 +77,18 @@ fn color_sources_covered() {
 fn modifiers_independent() {
     let menu = menu_frame(80, 24, Theme::Dark, Scenario::Demo);
     let mods: Vec<_> = menu.cells.iter().map(|c| c.mods).collect();
-    assert!(mods.iter().any(|m| m.bold && !m.italic), "bold alone (title/selection)");
-    assert!(mods.iter().any(|m| m.dim && !m.bold), "dim alone (disabled row)");
-    assert!(mods.iter().any(|m| m.reverse && !m.bold), "reverse alone (status bar)");
+    assert!(
+        mods.iter().any(|m| m.bold && !m.italic),
+        "bold alone (title/selection)"
+    );
+    assert!(
+        mods.iter().any(|m| m.dim && !m.bold),
+        "dim alone (disabled row)"
+    );
+    assert!(
+        mods.iter().any(|m| m.reverse && !m.bold),
+        "reverse alone (status bar)"
+    );
     let streams = streams_frame(80, 24, Theme::Dark, false);
     assert!(
         streams.cells.iter().any(|c| c.mods.underline),
@@ -91,9 +103,10 @@ fn modifiers_independent() {
 #[test]
 fn styled_spaces_carried_in_state_trimmed_in_txt() {
     let frame = streams_frame(80, 24, Theme::Dark, false);
-    let styled_blank = frame.cells.iter().any(|c| {
-        c.symbol == " " && !c.continuation && c.bg == Color::Indexed(236)
-    });
+    let styled_blank = frame
+        .cells
+        .iter()
+        .any(|c| c.symbol == " " && !c.continuation && c.bg == Color::Indexed(236));
     assert!(styled_blank, "warn line trailing spaces carry a background");
     for line in frame.text().lines() {
         assert!(!line.ends_with(' '), "TXT trims styled tails too");
@@ -106,7 +119,9 @@ fn wide_continuations_and_combining() {
     let mut wide_ok = false;
     for y in 0..frame.rows {
         for x in 0..frame.cols {
-            let Some(cell) = frame.get(x, y) else { continue };
+            let Some(cell) = frame.get(x, y) else {
+                continue;
+            };
             if cell.width == 2 {
                 let next = frame.get(x + 1, y).expect("follower in grid");
                 assert!(next.continuation && next.width == 0, "well-formed follower");
@@ -129,7 +144,11 @@ fn cjk_icons_present() {
     for glyph in ["日本語", "한국어", "中文", "→", "✓", "✗", "★", "⠋"] {
         assert!(txt.contains(glyph), "txt carries {glyph:?}");
     }
-    assert!(menu_frame(80, 24, Theme::Dark, Scenario::Demo).text().contains("日本語モード"));
+    assert!(
+        menu_frame(80, 24, Theme::Dark, Scenario::Demo)
+            .text()
+            .contains("日本語モード")
+    );
 }
 
 #[test]
@@ -177,9 +196,21 @@ fn error_empty_focus_selection() {
     assert!(txt.contains("boom: deterministic error"), "popup text");
     let empty = menu_frame(48, 14, Theme::Dark, Scenario::Empty);
     assert!(empty.text().contains("No rows match"), "menu empty state");
-    assert!(streams_frame(60, 12, Theme::Dark, true).text().contains("No log lines"));
-    assert!(protocol_frame(50, 12, Theme::Dark, true).text().contains("No events yet"));
-    assert!(menu_frame(40, 10, Theme::Dark, Scenario::Demo).text().contains("focus=list"));
+    assert!(
+        streams_frame(60, 12, Theme::Dark, true)
+            .text()
+            .contains("No log lines")
+    );
+    assert!(
+        protocol_frame(50, 12, Theme::Dark, true)
+            .text()
+            .contains("No events yet")
+    );
+    assert!(
+        menu_frame(40, 10, Theme::Dark, Scenario::Demo)
+            .text()
+            .contains("focus=list")
+    );
     // Controller: Esc dismisses the error without touching selection.
     let mut model = tuiscotti_fixtures::views::menu::Model::with_error(Theme::Dark, "x");
     let selected = model.selected;

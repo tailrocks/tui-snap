@@ -18,12 +18,12 @@
 //! use [`Command::from_std`] / [`Command::std_command`] to interoperate with
 //! [`std::process::Command`] instead.
 
-mod types;
 mod build;
-mod run;
 mod isolated;
+mod run;
+mod types;
 
-pub use types::*;
 pub use build::*;
-pub use run::*;
 pub use isolated::*;
+pub use run::*;
+pub use types::*;

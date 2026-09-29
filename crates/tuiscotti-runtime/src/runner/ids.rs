@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,12 +6,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Nextest version this adapter was qualified against.
 pub const QUALIFIED_NEXTEST_VERSION: &str = "0.9.143";
-
 
 /// Placeholder used when no package identity is discoverable.
 pub const UNKNOWN_PACKAGE: &str = "unknown-package";
@@ -21,7 +19,6 @@ pub const UNKNOWN_TEST: &str = "unknown-test";
 /// Profile label used outside nextest.
 pub const LOCAL_PROFILE: &str = "local";
 
-
 /// True when the current process runs under cargo-nextest.
 ///
 /// Detection key is `NEXTEST_RUN_ID` (set for every test process since 0.9.138).
@@ -29,17 +26,14 @@ pub fn is_nextest() -> bool {
     std::env::var_os("NEXTEST_RUN_ID").is_some()
 }
 
-
 /// [`is_nextest`] over an injected environment (tests avoid global env mutation).
 pub fn is_nextest_map(env: &HashMap<String, String>) -> bool {
     env.contains_key("NEXTEST_RUN_ID")
 }
 
-
 pub(crate) fn get(env: &HashMap<String, String>, key: &str) -> Option<String> {
     env.get(key).cloned()
 }
-
 
 /// Stable baseline identity: what is under test (N02).
 ///
@@ -63,7 +57,6 @@ pub struct BaselineId {
     /// Optional caller-supplied variant (theme, viewport class, …). Never inferred.
     pub variant: Option<String>,
 }
-
 
 impl BaselineId {
     /// Read identity from the process environment.
@@ -145,10 +138,12 @@ impl BaselineId {
     }
 }
 
-
 /// Split `NEXTEST_BINARY_ID` (`crate` | `crate::bin` | `crate::kind/bin`).
 /// `cargo_pkg` is the `CARGO_PKG_NAME` fallback when no binary id is present.
-pub(crate) fn parse_binary_id(binary_id: Option<&str>, cargo_pkg: Option<&str>) -> (String, String) {
+pub(crate) fn parse_binary_id(
+    binary_id: Option<&str>,
+    cargo_pkg: Option<&str>,
+) -> (String, String) {
     match binary_id {
         Some(id) => match id.split_once("::") {
             Some((pkg, rest)) => (pkg.to_string(), rest.to_string()),
@@ -160,7 +155,6 @@ pub(crate) fn parse_binary_id(binary_id: Option<&str>, cargo_pkg: Option<&str>) 
         }
     }
 }
-
 
 /// Nearest enclosing cargo workspace root for `start` (a package manifest
 /// dir or cwd): the closest ancestor-or-self whose `Cargo.toml` declares
@@ -183,7 +177,6 @@ fn workspace_root_of(start: &Path) -> PathBuf {
     start.to_path_buf()
 }
 
-
 /// Per-attempt identity: which execution of the baseline (N02, N08).
 ///
 /// Under nextest, `run` is the shared run UUID and `attempt` is 1-indexed.
@@ -202,7 +195,6 @@ pub struct AttemptId {
     /// Live-verified format on 0.9.143: `<run-uuid>:<binary-id>$<test-name>`.
     pub attempt_uid: Option<String>,
 }
-
 
 impl AttemptId {
     /// Read attempt identity from the process environment.
@@ -270,9 +262,7 @@ impl AttemptId {
     }
 }
 
-
 static LOCAL_RUN_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 
 pub(crate) fn generate_local_run_id() -> String {
     let pid = std::process::id();
@@ -284,14 +274,12 @@ pub(crate) fn generate_local_run_id() -> String {
     format!("local-{pid}-{nanos:x}-{ctr:x}")
 }
 
-
 fn is_relevant(key: &str) -> bool {
     key.starts_with("NEXTEST_")
         || key.starts_with("CARGO_BIN_EXE_")
         || key == "CARGO_MANIFEST_DIR"
         || key == "CARGO_PKG_NAME"
 }
-
 
 /// Replace path-hostile characters; cap length for deep scratch trees.
 pub(crate) fn sanitize(name: &str) -> String {

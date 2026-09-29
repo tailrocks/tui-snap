@@ -4,10 +4,10 @@
 //! `tests/visual/actual/*.png` + `report.html`, then accept explicitly:
 //! `cargo run -q -- accept --store tests/visual --all`
 
-use tuiscotti_fixtures::fixture_app::{render_model, Model, Screen};
 use std::path::PathBuf;
 use tuiscotti::snapshot::Store;
 use tuiscotti::{Profile, Provenance, VENDORED_FACES};
+use tuiscotti_fixtures::fixture_app::{Model, Screen, render_model};
 
 fn store() -> Store {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/visual");

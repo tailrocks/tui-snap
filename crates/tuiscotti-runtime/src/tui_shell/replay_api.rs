@@ -12,11 +12,10 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use super::*;
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use super::*;
-
 
 // ---------------------------------------------------------------------------
 // R14: bounded raw replay (direction-tagged recordings, fresh emulator)
@@ -27,7 +26,6 @@ pub const MAX_REPLAY_BYTES: usize = 1 << 20;
 
 /// Scrollback lines retained by the replay emulator.
 pub(crate) const REPLAY_HISTORY: usize = 1000;
-
 
 /// One recorded event. The direction tag is structural: [`replay_recording`]
 /// only feeds [`RecEvent::Output`], so recorded input can never be mistaken
@@ -40,7 +38,6 @@ pub enum RecEvent {
     Input(Vec<u8>),
 }
 
-
 /// A bounded, direction-tagged recording of a PTY conversation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recording {
@@ -50,7 +47,6 @@ pub struct Recording {
     bytes: usize,
 }
 
-
 /// Replay failure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReplayError {
@@ -59,7 +55,6 @@ pub enum ReplayError {
     InvalidChunks(String),
     ScreenBuild(String),
 }
-
 
 impl std::fmt::Display for ReplayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,9 +69,7 @@ impl std::fmt::Display for ReplayError {
     }
 }
 
-
 impl std::error::Error for ReplayError {}
-
 
 impl Recording {
     #[must_use]
@@ -152,7 +145,6 @@ impl Recording {
     }
 }
 
-
 /// The result of one replay: final screen + full terminal state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Replayed {
@@ -162,12 +154,10 @@ pub struct Replayed {
     pub chunks: usize,
 }
 
-
 /// Replay raw output bytes through a fresh emulator, fed as one chunk.
 pub fn replay_bytes(output: &[u8], cols: u16, rows: u16) -> Result<Replayed, ReplayError> {
     replay_chunks([output], cols, rows)
 }
-
 
 /// Replay raw output bytes through a fresh emulator, fed in the given
 /// chunks. Splits may fall anywhere, including mid-UTF-8 and mid-escape:
@@ -219,7 +209,6 @@ pub fn replay_chunks<'a>(
     })
 }
 
-
 /// Replay a recording through a fresh emulator: only [`RecEvent::Output`]
 /// bytes are fed, in record order. `chunk_len` re-splits the output stream
 /// (`None` = one chunk); recorded input is always skipped.
@@ -238,12 +227,10 @@ pub fn replay_recording(
     }
 }
 
-
 struct ReplayDims {
     cols: usize,
     rows: usize,
 }
-
 
 impl GridDims for ReplayDims {
     fn total_lines(&self) -> usize {
@@ -257,19 +244,16 @@ impl GridDims for ReplayDims {
     }
 }
 
-
 #[derive(Clone)]
 struct ReplayListener {
     tx: mpsc::Sender<Event>,
 }
-
 
 impl EventListener for ReplayListener {
     fn send_event(&self, event: Event) {
         let _ = self.tx.send(event);
     }
 }
-
 
 #[derive(Default)]
 pub(crate) struct ReplayEvents {

@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Append-only JSONL event journal (N07).
 ///
@@ -21,10 +20,8 @@ pub struct Journal {
     seq: u64,
 }
 
-
 /// Completion marker filename written beside `journal.jsonl`.
 pub const COMPLETE_MARKER: &str = "COMPLETE";
-
 
 impl Journal {
     /// Open (or resume) the journal at `path`, creating parent directories.
@@ -106,7 +103,6 @@ impl Journal {
     }
 }
 
-
 /// Journal completion state (N07).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JournalStatus {
@@ -116,14 +112,12 @@ pub enum JournalStatus {
     Incomplete { reason: String },
 }
 
-
 impl JournalStatus {
     /// True only for [`JournalStatus::Complete`].
     pub fn is_complete(&self) -> bool {
         matches!(self, JournalStatus::Complete { .. })
     }
 }
-
 
 pub(crate) fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -141,11 +135,9 @@ pub(crate) fn json_escape(s: &str) -> String {
     out
 }
 
-
 fn is_complete_event(line: &str) -> bool {
     extract_field(line, "event").as_deref() == Some("complete")
 }
-
 
 /// Extract a top-level string field from a flat JSON object line (handles escapes).
 pub(crate) fn extract_field(line: &str, field: &str) -> Option<String> {

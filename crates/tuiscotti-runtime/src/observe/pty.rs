@@ -1,6 +1,5 @@
 use tuiscotti_core::screen::Screen;
 
-
 // ---------------------------------------------------------------------------
 // A03 + A05 execution paths (need the PTY runtime)
 // ---------------------------------------------------------------------------
@@ -371,7 +370,6 @@ mod pty_paths {
         }
     }
 }
-
 
 #[cfg(feature = "pty")]
 pub use pty_paths::{Replay, Rerun, RerunError, RerunOutput, Watched, Watcher};

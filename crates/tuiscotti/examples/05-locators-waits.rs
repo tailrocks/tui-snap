@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 use tuiscotti::locate::Locator;
-use tuiscotti::ratatui::{render_screen, EdgePolicy};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::screen::{CaptureProvenance, CaptureReason, Observation, TermState};
 
 fn main() {

@@ -44,7 +44,10 @@ fn main() -> anyhow::Result<()> {
     let args = match driver::parse_common(&argv) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("protocol_fixture: {e}\n{}", driver::usage("protocol_fixture"));
+            eprintln!(
+                "protocol_fixture: {e}\n{}",
+                driver::usage("protocol_fixture")
+            );
             std::process::exit(2);
         }
     };
@@ -62,7 +65,11 @@ fn main() -> anyhow::Result<()> {
         frames: args.frames,
         protocol_modes: true,
     };
-    driver::drive(model, &opts, protocol::render, |m, k| {
-        protocol::step(m, k)
-    }, map)
+    driver::drive(
+        model,
+        &opts,
+        protocol::render,
+        |m, k| protocol::step(m, k),
+        map,
+    )
 }

@@ -22,14 +22,14 @@
 //!   processes updating different names are safe (the index report is
 //!   rewritten by whoever finalizes last — data files never clobber).
 
-mod types;
-mod paths;
 mod check;
 mod mutate;
+mod paths;
 mod report;
+mod types;
 
-pub use types::*;
-pub use paths::*;
 pub use check::*;
 pub use mutate::*;
+pub use paths::*;
 pub use report::*;
+pub use types::*;

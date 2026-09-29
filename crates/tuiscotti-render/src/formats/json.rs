@@ -15,7 +15,7 @@
 //!
 //! [`Frame`]: tuiscotti_core::frame::Frame
 
-use tuiscotti_core::frame::{Frame, FrameError, FRAME_VERSION};
+use tuiscotti_core::frame::{FRAME_VERSION, Frame, FrameError};
 
 /// Canonical JSON schema version. Bumps only with [`FRAME_VERSION`].
 pub const CANONICAL_JSON_VERSION: u8 = FRAME_VERSION;

@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Required-scenario inventory: record what ran, verify against what must run (N06).
 ///
@@ -16,7 +15,6 @@ use super::*;
 pub struct ScenarioManifest {
     required: Vec<String>,
 }
-
 
 impl ScenarioManifest {
     /// Build a manifest from required scenario names (deduped, sorted).
@@ -111,7 +109,6 @@ impl ScenarioManifest {
     }
 }
 
-
 /// Gate verdict for a required-scenario manifest (N06).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManifestVerdict {
@@ -123,7 +120,6 @@ pub enum ManifestVerdict {
     Incomplete { reason: String },
 }
 
-
 impl ManifestVerdict {
     /// True only for [`ManifestVerdict::Full`].
     pub fn is_full(&self) -> bool {
@@ -131,14 +127,12 @@ impl ManifestVerdict {
     }
 }
 
-
 fn parse_lines(text: &str) -> Vec<String> {
     text.lines()
         .map(|l| l.trim().to_string())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .collect()
 }
-
 
 fn load_record(path: &Path) -> std::io::Result<Vec<String>> {
     Ok(parse_lines(&fs::read_to_string(path)?))

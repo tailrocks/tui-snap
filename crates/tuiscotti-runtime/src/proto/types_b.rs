@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -17,7 +16,6 @@ pub struct OpError {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
 }
-
 
 impl OpError {
     #[must_use]
@@ -36,7 +34,6 @@ impl OpError {
     }
 }
 
-
 impl std::fmt::Display for OpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.session {
@@ -46,9 +43,7 @@ impl std::fmt::Display for OpError {
     }
 }
 
-
 impl std::error::Error for OpError {}
-
 
 // ---------------------------------------------------------------------------
 // Machine envelope (`--machine` JSON lines)
@@ -63,7 +58,6 @@ pub struct Envelope {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<OpError>,
 }
-
 
 /// Parse one input line and execute it. Returns the output line plus whether
 /// the op succeeded. Never panics on adversarial input.
@@ -94,7 +88,6 @@ pub fn run_machine_line(line: &str) -> (String, bool) {
     });
     (line, ok)
 }
-
 
 /// JSON Schema (draft 2020-12 subset) for [`Op`], [`OpResult`] and the machine
 /// envelope. Hand-written: the protocol makes no promise a codegen schema

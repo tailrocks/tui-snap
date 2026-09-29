@@ -1,10 +1,9 @@
+use super::*;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::{Frame, FrameError};
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
-use super::*;
-
 
 /// Assemble one report row from a check outcome. Free-function form of
 /// [`Store::report_entry`] so non-classic stores can build rows without a
@@ -20,7 +19,6 @@ pub fn report_entry(
     })
 }
 
-
 /// Result of [`Store::report`]/[`Store::report_with`]: the rewritten report
 /// plus every outcome it embeds.
 #[derive(Debug)]
@@ -31,7 +29,6 @@ pub struct StoreReport {
     pub outcomes: Vec<CompareOutcome>,
 }
 
-
 impl StoreReport {
     /// Outcomes that did not match (the CLI turns this into a non-zero exit).
     #[must_use]
@@ -39,7 +36,6 @@ impl StoreReport {
         self.outcomes.iter().filter(|o| !o.status.matched()).count()
     }
 }
-
 
 /// One row of the review HTML report. Images are files on disk; the HTML
 /// only stores relative `href`s so hundreds of captures stay browser-usable.
@@ -49,13 +45,11 @@ pub struct ReportEntry {
     pub font_sha256: String,
 }
 
-
 fn esc_html(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
 }
-
 
 /// JSON embedded in `<script type="application/json">`: escape `<` so a cell
 /// symbol like `</script>` cannot terminate the element (still valid JSON —
@@ -63,7 +57,6 @@ fn esc_html(s: &str) -> String {
 pub fn json_for_script(json: &str) -> String {
     json.replace('<', "\\u003c")
 }
-
 
 /// Write a review index: PNGs linked from disk (never base64-embedded),
 /// failed captures first, frame JSON linked not inlined.
@@ -74,7 +67,6 @@ pub fn write_report(
 ) -> Result<PathBuf, SnapshotError> {
     write_report_at(&store.root.join("report.html"), title, entries)
 }
-
 
 /// [`write_report`] with an explicit output path, for stores whose report
 /// does not live at a fixed location (e.g. [`crate::grouped::GroupedStore`],
@@ -199,11 +191,9 @@ pub fn write_report_at(
     Ok(path.to_path_buf())
 }
 
-
 fn esc_attr(s: &str) -> String {
     esc_html(s).replace('"', "&quot;")
 }
-
 
 fn rel_href(from_dir: &Path, to: &Path) -> String {
     let from = from_dir.components().collect::<Vec<_>>();
@@ -227,7 +217,6 @@ fn rel_href(from_dir: &Path, to: &Path) -> String {
     }
     out.to_string_lossy().replace('\\', "/")
 }
-
 
 fn write_report_sidecar(
     report_dir: &Path,

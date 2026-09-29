@@ -1,15 +1,13 @@
+use super::*;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::{Frame, FrameError};
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
-use super::*;
-
 
 /// Snapshot failure: explicit, never silent.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SnapshotError(pub String);
-
 
 impl std::fmt::Display for SnapshotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -17,9 +15,7 @@ impl std::fmt::Display for SnapshotError {
     }
 }
 
-
 impl std::error::Error for SnapshotError {}
-
 
 impl From<FrameError> for SnapshotError {
     fn from(e: FrameError) -> Self {
@@ -27,20 +23,17 @@ impl From<FrameError> for SnapshotError {
     }
 }
 
-
 impl From<tuiscotti_render::render::RenderError> for SnapshotError {
     fn from(e: tuiscotti_render::render::RenderError) -> Self {
         SnapshotError(e.to_string())
     }
 }
 
-
 impl From<tuiscotti_render::diff::DiffError> for SnapshotError {
     fn from(e: tuiscotti_render::diff::DiffError) -> Self {
         SnapshotError(e.to_string())
     }
 }
-
 
 /// Gate status for one named snapshot.
 #[must_use]
@@ -58,7 +51,6 @@ pub enum Status {
     /// Candidate trio is complete and consistent; no gate verdict yet.
     NotChecked,
 }
-
 
 impl Status {
     #[must_use]
@@ -81,7 +73,6 @@ impl Status {
     }
 }
 
-
 /// One differing cell, summarized for humans.
 #[derive(Debug, Clone)]
 pub struct CellDiff {
@@ -91,10 +82,8 @@ pub struct CellDiff {
     pub actual: String,
 }
 
-
 /// Cap stored per-cell diagnostics (the total is always counted).
 pub const MAX_CELL_DIFFS: usize = 100;
-
 
 /// Outcome of one `check`. Artifacts on disk even when unmatched.
 ///
@@ -128,7 +117,6 @@ pub struct CompareOutcome {
     pub diff_png: Option<PathBuf>,
     pub note: String,
 }
-
 
 impl CompareOutcome {
     /// Fail with an actionable message (artifact paths + first diagnostics).
@@ -179,7 +167,6 @@ impl CompareOutcome {
     }
 }
 
-
 /// Lowercase hex SHA-256 of `bytes` (manifest integrity, not gating).
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
@@ -190,7 +177,6 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     }
     s
 }
-
 
 /// Atomic file write (tmp in same dir + rename). Tmp names carry pid, a
 /// process-wide counter, and the thread id, so same-name writers from
@@ -215,7 +201,6 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
         .map_err(|e| SnapshotError(format!("cannot publish {}: {e}", path.display())))?;
     Ok(())
 }
-
 
 /// Approved/actual/diff artifact store.
 #[derive(Debug, Clone)]

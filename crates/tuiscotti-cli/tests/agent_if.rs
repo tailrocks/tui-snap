@@ -4,7 +4,7 @@
 
 use std::io::{BufReader, Cursor};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tuiscotti::mcp;
 
 // ---------------------------------------------------------------------------
@@ -116,7 +116,10 @@ fn tools_call_version_roundtrip() {
     assert!(!is_error);
     assert_eq!(env["ok"], true);
     assert_eq!(env["result"]["type"], "version");
-    assert_eq!(env["result"]["protocol"], tuiscotti::proto::PROTOCOL_VERSION);
+    assert_eq!(
+        env["result"]["protocol"],
+        tuiscotti::proto::PROTOCOL_VERSION
+    );
 }
 
 #[test]

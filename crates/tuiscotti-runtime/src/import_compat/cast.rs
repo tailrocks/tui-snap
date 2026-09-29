@@ -1,6 +1,5 @@
-use std::path::Path;
 use super::*;
-
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // asciinema v2 cast
@@ -22,7 +21,6 @@ pub struct CastHeader {
     /// Optional `timestamp`.
     pub timestamp: Option<u64>,
 }
-
 
 /// One asciinema event. `Input` is terminal INPUT (keystrokes): marked
 /// non-executable, excluded from [`CastTrace::output_deltas`] and
@@ -52,7 +50,6 @@ pub enum CastEvent {
     },
 }
 
-
 impl CastEvent {
     #[must_use]
     pub fn t(&self) -> f64 {
@@ -64,7 +61,6 @@ impl CastEvent {
     }
 }
 
-
 /// An imported asciinema v2 trace: validated header + all events in file order.
 #[derive(Debug, Clone)]
 pub struct CastTrace {
@@ -75,7 +71,6 @@ pub struct CastTrace {
     /// Non-fatal notes (unknown event codes), each with line + byte offset.
     pub unsupported: Vec<String>,
 }
-
 
 impl CastTrace {
     /// Output events as `(dt, bytes)` with `dt` = seconds since the previous
@@ -115,12 +110,10 @@ impl CastTrace {
     }
 }
 
-
 /// Read-only asciinema v2 import with default limits. See [`import_cast_with`].
 pub fn import_cast(path: &Path) -> Result<CastTrace, CompatError> {
     import_cast_with(path, &ImportLimits::default())
 }
-
 
 /// Read-only asciinema v2 `.cast` import.
 ///
@@ -179,7 +172,6 @@ pub fn import_cast_with(path: &Path, lim: &ImportLimits) -> Result<CastTrace, Co
     })
 }
 
-
 fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
     let v: serde_json::Value = serde_json::from_str(line).map_err(|e| CompatError::Version {
         offset: 0,
@@ -235,7 +227,6 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
     })
 }
 
-
 /// Parse one event line. `Ok(None)` = well-formed but unknown event code
 /// (caller reports it as unsupported, non-fatal).
 fn parse_cast_event(line: &str, off: u64) -> Result<Option<CastEvent>, CompatError> {
@@ -282,7 +273,6 @@ fn parse_cast_event(line: &str, off: u64) -> Result<Option<CastEvent>, CompatErr
         _ => Ok(None),
     }
 }
-
 
 fn line_code_hint(line: &str) -> String {
     serde_json::from_str::<serde_json::Value>(line)

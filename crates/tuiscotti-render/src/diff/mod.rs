@@ -126,14 +126,8 @@ mod tests {
         }
         // Same semi-transparent pixels: StraightRgba equal, Opaque fails.
         let semi = encode(&clear, CompressionType::Best, FilterType::NoFilter)?;
-        assert!(
-            compare_png_with_alpha(&pc, &semi, AlphaPolicy::StraightRgba)?
-                .pixels_equal
-        );
-        assert!(
-            !compare_png_with_alpha(&pc, &semi, AlphaPolicy::Opaque)?
-                .pixels_equal
-        );
+        assert!(compare_png_with_alpha(&pc, &semi, AlphaPolicy::StraightRgba)?.pixels_equal);
+        assert!(!compare_png_with_alpha(&pc, &semi, AlphaPolicy::Opaque)?.pixels_equal);
         Ok(())
     }
 

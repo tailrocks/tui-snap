@@ -34,18 +34,18 @@
 //!   [`Shell::wait_shell_exit`]); [`ShellResult::truncated`] flags spans
 //!   whose start scrolled out of the viewport.
 
-mod state;
+mod guardian;
 mod replay_api;
 mod replay_screen;
 mod replay_state;
 mod shell;
-mod guardian;
+mod state;
 mod unix;
 
-pub use state::*;
+pub use guardian::*;
 pub use replay_api::*;
 pub use replay_screen::*;
 pub use replay_state::*;
 pub use shell::*;
-pub use guardian::*;
+pub use state::*;
 pub use unix::*;

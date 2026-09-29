@@ -17,11 +17,11 @@ use std::path::Path;
 
 use tuiscotti_core::screen::Screen;
 use tuiscotti_insta::assert::{
-    check_consistent, frame_from_screen, generation_id, png_tag_generation, render_sample,
-    Location, Policy,
+    Location, Policy, check_consistent, frame_from_screen, generation_id, png_tag_generation,
+    render_sample,
 };
 use tuiscotti_insta::insta_proto::insta_string;
-use tuiscotti_render::diff::{compare_png_with_alpha, AlphaPolicy};
+use tuiscotti_render::diff::{AlphaPolicy, compare_png_with_alpha};
 use tuiscotti_render::profile::{Profile, VENDORED_FACES};
 use tuiscotti_render::render::Renderer;
 
@@ -93,8 +93,8 @@ fn canonical_identical_render_different_repro() {
     // ... but the pixels differ, and the decoded-pixel comparison — the same
     // function the PNG comparator delegates to — fails loudly.
     assert_ne!(sample.png, rendered.png);
-    let verdict = compare_png_with_alpha(&sample.png, &rendered.png, AlphaPolicy::StraightRgba)
-        .unwrap();
+    let verdict =
+        compare_png_with_alpha(&sample.png, &rendered.png, AlphaPolicy::StraightRgba).unwrap();
     assert!(
         !verdict.pixels_equal,
         "different renders must not compare equal"
@@ -155,10 +155,7 @@ fn partial_acceptance_fails_the_strict_gate() {
     write_text_snap(tmp.path(), "shot", "aaa", &canonical);
     write_binary_snap(tmp.path(), "shot-img", "bbb", &tagged);
     let err = check_consistent(tmp.path(), "shot", "shot-img").unwrap_err();
-    assert!(
-        err.to_string().contains("mixed compound baseline"),
-        "{err}"
-    );
+    assert!(err.to_string().contains("mixed compound baseline"), "{err}");
 }
 
 #[test]

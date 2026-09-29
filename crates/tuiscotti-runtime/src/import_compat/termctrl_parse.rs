@@ -1,12 +1,10 @@
-use std::path::Path;
 use super::*;
-
+use std::path::Path;
 
 /// Read-only `.termctrl` import with default limits. See [`import_termctrl_with`].
 pub fn import_termctrl(path: &Path) -> Result<TermctrlTrace, CompatError> {
     import_termctrl_with(path, &ImportLimits::default())
 }
-
 
 /// Read-only `terminal-control` `.termctrl` JSON Lines import (schema v1 + v2).
 ///
@@ -73,7 +71,6 @@ pub fn import_termctrl_with(path: &Path, lim: &ImportLimits) -> Result<TermctrlT
     })
 }
 
-
 fn parse_termctrl_header(line: &str) -> Result<(u8, u16, u16), CompatError> {
     let verr = |m: String| CompatError::Version { offset: 0, msg: m };
     let v: serde_json::Value =
@@ -106,13 +103,11 @@ fn parse_termctrl_header(line: &str) -> Result<(u8, u16, u16), CompatError> {
     Ok((version as u8, dim("cols")?, dim("rows")?))
 }
 
-
 enum TermctrlParse {
     Event(TermctrlEvent),
     Dropped(String),
     FieldNotes(Vec<String>, TermctrlEvent),
 }
-
 
 fn parse_termctrl_entry(line: &str, off: u64, version: u8) -> Result<TermctrlParse, CompatError> {
     let bad = |m: String| CompatError::Content {

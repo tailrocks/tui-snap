@@ -38,16 +38,16 @@
 //! Nextest ≥ 0.9.116 is required for attempt identity; run correlation
 //! (`NEXTEST_RUN_ID`) needs ≥ 0.9.138. Older runners degrade to local identity.
 
-mod ids;
 mod context;
-mod resolve;
-mod manifest;
+mod ids;
 mod journal;
 mod junit;
+mod manifest;
+mod resolve;
 
-pub use ids::*;
 pub use context::*;
-pub use resolve::*;
-pub use manifest::*;
+pub use ids::*;
 pub use journal::*;
 pub use junit::*;
+pub use manifest::*;
+pub use resolve::*;

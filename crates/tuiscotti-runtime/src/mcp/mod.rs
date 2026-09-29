@@ -27,8 +27,8 @@
 //! A failed op is NOT a JSON-RPC error: it returns `isError: true` content
 //! carrying the [`crate::proto::OpError`], so agents see stable op codes.
 
-mod tools;
 mod serve;
+mod tools;
 
-pub use tools::*;
 pub use serve::*;
+pub use tools::*;

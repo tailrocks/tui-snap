@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use tuiscotti::locate::Locator;
 use tuiscotti::runner::{Journal, JournalStatus, TestContext};
-use tuiscotti::tui::{process_exists, CancelToken, Tui};
+use tuiscotti::tui::{CancelToken, Tui, process_exists};
 
 /// Explicit snapshot dirs: the committed `tests/snapshots` (absolute: the
 /// facade's caller-derived default is a *relative* path, which Insta resolves

@@ -1,3 +1,4 @@
+use super::*;
 use crate::snapshot::{
     CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
 };
@@ -6,10 +7,8 @@ use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render::{self, Renderer};
-use super::*;
 
 impl GroupedStore {
-
     /// Explicitly approve one scenario: the four actual artifacts replace
     /// the approved ones (atomic per file). Sidecars stay in the scratch
     /// area — the approved tree holds the four artifacts and nothing else.

@@ -1,19 +1,16 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 /// Start a named session: spawn `argv` detached (output to the session log),
 /// publish the endpoint. A live same-name session is a `session-exists` error
 /// unless `force` stops it first.
 pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<SessionInfo, OpError> {
-    let owned: Vec<std::ffi::OsString> =
-        argv.iter().map(|a| std::ffi::OsString::from(a)).collect();
+    let owned: Vec<std::ffi::OsString> = argv.iter().map(|a| std::ffi::OsString::from(a)).collect();
     session_start_os(name, &owned, force)
 }
-
 
 /// [`session_start`] with native [`OsString`](std::ffi::OsString) argv: the
 /// child spawns byte-exact. The endpoint record keeps a lossy UTF-8
@@ -96,7 +93,6 @@ pub fn session_start_os(
     })
 }
 
-
 /// Stop a named session: SIGTERM the recorded pid (best effort when already
 /// dead), remove the endpoint. Returns the last known info.
 pub fn session_stop(name: &str) -> Result<SessionInfo, OpError> {
@@ -137,7 +133,6 @@ pub fn session_stop(name: &str) -> Result<SessionInfo, OpError> {
     })
 }
 
-
 /// List all valid endpoints with liveness. Corrupt files are skipped only via
 /// [`session_prune`]'s report; here a corrupt file is an error.
 pub fn session_list() -> Result<Vec<SessionInfo>, OpError> {
@@ -173,7 +168,6 @@ pub fn session_list() -> Result<Vec<SessionInfo>, OpError> {
     }
     Ok(out)
 }
-
 
 /// Remove endpoints whose pid is dead. Returns the pruned names.
 pub fn session_prune() -> Result<Vec<String>, OpError> {

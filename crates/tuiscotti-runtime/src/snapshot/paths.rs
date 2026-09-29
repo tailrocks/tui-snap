@@ -1,9 +1,9 @@
+use super::*;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::{Frame, FrameError};
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
-use super::*;
 
 impl Store {
     #[must_use]

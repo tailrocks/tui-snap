@@ -1,6 +1,5 @@
-use std::path::Path;
 use super::*;
-
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // terminal-control .termctrl recordings
@@ -19,7 +18,6 @@ pub struct LossReport {
     pub dropped_events: Vec<String>,
 }
 
-
 impl LossReport {
     /// True when nothing was lost: no unknown fields, no dropped entries.
     #[must_use]
@@ -27,7 +25,6 @@ impl LossReport {
         self.unsupported_fields.is_empty() && self.dropped_events.is_empty()
     }
 }
-
 
 /// One `.termctrl` entry. `Input`/`Mouse` carry delivered CLIENT input bytes:
 /// non-executable, excluded from [`TermctrlTrace::output_deltas`] and
@@ -75,7 +72,6 @@ pub enum TermctrlEvent {
     },
 }
 
-
 impl TermctrlEvent {
     #[must_use]
     pub fn at_ms(&self) -> u64 {
@@ -88,7 +84,6 @@ impl TermctrlEvent {
         }
     }
 }
-
 
 /// An imported `.termctrl` trace: validated header dims + entries in file
 /// order + the explicit [`LossReport`].
@@ -105,7 +100,6 @@ pub struct TermctrlTrace {
     /// Explicit loss report: unknown fields + dropped entries.
     pub loss: LossReport,
 }
-
 
 impl TermctrlTrace {
     /// Output entries as `(dt, bytes)` with `dt` = seconds since the previous

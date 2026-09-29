@@ -1,3 +1,4 @@
+use super::*;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -5,8 +6,6 @@ use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
-use super::*;
-
 
 /// How a child process run ended.
 ///
@@ -31,7 +30,6 @@ pub enum Termination {
     /// Detail is in [`ProcessOutput::error`].
     SpawnError,
 }
-
 
 impl Termination {
     /// True only for `Exit(0)`.
@@ -59,7 +57,6 @@ impl Termination {
     }
 }
 
-
 /// Why a run never produced child output: resolution or spawn failure.
 ///
 /// Typed context for [`Termination::SpawnError`]: the failure kind plus the
@@ -72,7 +69,6 @@ pub struct SpawnError {
     searched: Vec<PathBuf>,
 }
 
-
 /// Spawn-failure kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnErrorKind {
@@ -83,7 +79,6 @@ pub enum SpawnErrorKind {
     /// Reaping a live child failed after spawn.
     WaitFailed,
 }
-
 
 impl SpawnError {
     /// Typed failure kind.
@@ -140,7 +135,6 @@ impl SpawnError {
     }
 }
 
-
 impl std::fmt::Display for SpawnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kind = match self.kind {
@@ -152,9 +146,7 @@ impl std::fmt::Display for SpawnError {
     }
 }
 
-
 impl std::error::Error for SpawnError {}
-
 
 /// Collected result of one [`Command::run`].
 ///
@@ -180,7 +172,6 @@ pub struct ProcessOutput {
     /// Typed spawn-failure detail for [`Termination::SpawnError`].
     pub error: Option<SpawnError>,
 }
-
 
 impl ProcessOutput {
     /// True only for `status == Exit(0)`.
@@ -228,7 +219,6 @@ impl ProcessOutput {
     }
 }
 
-
 /// Resolution of a `cargo_bin` target dir, for error messages.
 fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -251,7 +241,6 @@ fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
     }
     out
 }
-
 
 /// Resolve the path of a cargo-built binary named `name`.
 ///

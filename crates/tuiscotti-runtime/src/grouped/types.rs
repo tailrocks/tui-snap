@@ -1,3 +1,4 @@
+use super::*;
 use crate::snapshot::{
     CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
 };
@@ -6,15 +7,12 @@ use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render::{self, Renderer};
-use super::*;
-
 
 impl From<InvalidName> for SnapshotError {
     fn from(e: InvalidName) -> Self {
         SnapshotError(e.to_string())
     }
 }
-
 
 /// The on-disk artifact paths of one scenario under one root.
 #[derive(Debug, Clone)]
@@ -26,7 +24,6 @@ pub struct ArtifactPaths {
     /// Canonical frame sidecar (scratch roots only — never approved state).
     pub frame_json: PathBuf,
 }
-
 
 /// Outcome of one grouped [`GroupedStore::check_with`]. The shared
 /// [`CompareOutcome`] carries status, pixel score, diff path and the paths
@@ -47,7 +44,6 @@ pub struct GroupedOutcome {
     pub approved: ArtifactPaths,
 }
 
-
 impl GroupedOutcome {
     pub fn status(&self) -> Status {
         self.outcome.status
@@ -64,7 +60,6 @@ impl GroupedOutcome {
     }
 }
 
-
 /// Grouped approved/actual/diff artifact store. See the module docs for the
 /// layout and gate semantics.
 #[derive(Debug, Clone)]
@@ -74,7 +69,6 @@ pub struct GroupedStore {
     pub(crate) diff_root: PathBuf,
     pub(crate) report_path: Option<PathBuf>,
 }
-
 
 /// `root` with `suffix` appended to its last component
 /// (`snapshots` + `.actual` → `snapshots.actual`).
@@ -153,7 +147,6 @@ impl GroupedStore {
     }
 }
 
-
 /// Recursively collect scenario names below `root`: every `*.ansi` file,
 /// relative to `root`, suffix stripped, segments re-joined with `/`.
 fn list_names(root: &Path) -> Result<Vec<String>, SnapshotError> {
@@ -166,7 +159,6 @@ fn list_names(root: &Path) -> Result<Vec<String>, SnapshotError> {
     out.dedup();
     Ok(out)
 }
-
 
 fn walk_names(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<(), SnapshotError> {
     let entries = std::fs::read_dir(dir)

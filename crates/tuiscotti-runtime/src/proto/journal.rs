@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Bounded recording (A04/A06 partial)
@@ -17,7 +16,6 @@ pub struct JournalEvent {
     pub detail: String,
 }
 
-
 /// Append-only JSONL recorder with hard bounds. Exceeding a bound is an
 /// error, never silent truncation.
 pub struct Recorder {
@@ -27,7 +25,6 @@ pub struct Recorder {
     max_events: u64,
     max_bytes: u64,
 }
-
 
 impl Recorder {
     pub fn create(path: &Path, max_events: u64, max_bytes: u64) -> Result<Self, OpError> {
@@ -90,7 +87,6 @@ impl Recorder {
     }
 }
 
-
 /// Read a journal back (offline; used by `trace`).
 pub fn read_journal(path: &Path) -> Result<Vec<JournalEvent>, OpError> {
     use std::io::BufRead;
@@ -113,7 +109,6 @@ pub fn read_journal(path: &Path) -> Result<Vec<JournalEvent>, OpError> {
     Ok(out)
 }
 
-
 // ---------------------------------------------------------------------------
 // Offline review/report
 // ---------------------------------------------------------------------------
@@ -127,14 +122,12 @@ pub struct Verdict {
     pub detail: String,
 }
 
-
 impl Verdict {
     #[must_use]
     pub fn passed(&self) -> bool {
         self.status == "pass"
     }
 }
-
 
 /// Read all `*.verdict.json` files in `dir` (sorted by name). Non-verdict
 /// files are ignored; a malformed verdict file is an error.
@@ -158,7 +151,6 @@ pub fn read_verdicts(dir: &Path) -> Result<Vec<Verdict>, OpError> {
     }
     Ok(out)
 }
-
 
 /// Write a standalone offline HTML report from `verdicts`. Pure rendering over
 /// the given verdicts; reads nothing else.

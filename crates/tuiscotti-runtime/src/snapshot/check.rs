@@ -1,10 +1,9 @@
+use super::*;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::{Frame, FrameError};
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
-use super::*;
-
 
 fn summarize(cell: &tuiscotti_core::frame::Cell) -> String {
     if cell.continuation {
@@ -62,7 +61,6 @@ fn summarize(cell: &tuiscotti_core::frame::Cell) -> String {
 }
 
 impl Store {
-
     /// Check one actual frame against approval. Writes actual artifacts
     /// BEFORE comparing; on mismatch also writes the diff PNG. The actual
     /// PNG is paired with a `<name>.png.fidelity.json` sidecar listing any

@@ -18,9 +18,9 @@
 //! [`Frame`]: tuiscotti_core::frame::Frame
 
 use crate::formats::FormatError;
+use crate::profile::Profile;
 use crate::render::{escape_html, escape_html_attr, render_svg};
 use tuiscotti_core::frame::Frame;
-use crate::profile::Profile;
 
 /// Render `frame` as static offline HTML. `png` (when given) is embedded as
 /// a `data:` URI image; `generation` labels the capture in an inert HTML
@@ -44,8 +44,15 @@ pub fn html_static(
     });
     // The generation label sits in an HTML comment: admit hex only so the
     // label can never break out of the comment, whatever the caller passes.
-    let gen_label: String = generation.chars().filter(|c| c.is_ascii_hexdigit()).collect();
-    let gen_label = if gen_label.is_empty() { "none".to_string() } else { gen_label };
+    let gen_label: String = generation
+        .chars()
+        .filter(|c| c.is_ascii_hexdigit())
+        .collect();
+    let gen_label = if gen_label.is_empty() {
+        "none".to_string()
+    } else {
+        gen_label
+    };
     let svg = render_svg(frame, profile);
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title><style>body{{background:#141414;margin:24px;color:#eee;font-family:monospace}}.shot{{position:relative;display:inline-block;line-height:0}}.shot>img{{display:block;image-rendering:pixelated}}.shot>svg{{position:absolute;inset:0;width:100%;height:100%}}.shot>svg rect,.shot>svg text{{fill:transparent!important}}pre{{white-space:pre-wrap;word-break:break-all}}</style></head><body><!-- generation: {gen_label} --><div class=\"shot\">{img}{svg}</div><details open><summary>text</summary><pre>{}</pre></details></body></html>",

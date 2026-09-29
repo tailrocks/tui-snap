@@ -1,6 +1,5 @@
-use std::path::Path;
 use super::*;
-
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // Errors + limits
@@ -35,7 +34,6 @@ pub enum CompatError {
     },
 }
 
-
 impl std::fmt::Display for CompatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -53,9 +51,7 @@ impl std::fmt::Display for CompatError {
     }
 }
 
-
 impl std::error::Error for CompatError {}
-
 
 /// Bounds for every importer in this module. Defaults are generous for real
 /// traces but finite so hostile files fail fast instead of exhausting memory.
@@ -69,7 +65,6 @@ pub struct ImportLimits {
     pub max_line_bytes: usize,
 }
 
-
 impl Default for ImportLimits {
     fn default() -> Self {
         Self {
@@ -79,7 +74,6 @@ impl Default for ImportLimits {
         }
     }
 }
-
 
 /// Read a source file with the total-bytes bound applied. Read-only: a single
 /// `read`, no writes, no command execution anywhere in this module.
@@ -106,7 +100,6 @@ pub(crate) fn read_bounded(path: &Path, lim: &ImportLimits) -> Result<String, Co
         msg: format!("source is not UTF-8: {e}"),
     })
 }
-
 
 /// Split into `(byte_offset, line)` pairs, skipping the empty segment after a
 /// trailing newline. Offsets count the stripped `\n` (and `\r` of CRLF).

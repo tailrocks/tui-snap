@@ -7,7 +7,7 @@
 //! Feature-independent ops (version/capabilities/assert/render/diff) work in
 //! every build; PTY ops need the `pty` feature.
 
-use tuiscotti::proto::{capabilities, execute, run_machine_line, Op, OpResult, PROTOCOL_VERSION};
+use tuiscotti::proto::{Op, OpResult, PROTOCOL_VERSION, capabilities, execute, run_machine_line};
 
 fn main() {
     // Linked Rust: version + a passing shared-engine check.

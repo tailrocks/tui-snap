@@ -1,3 +1,4 @@
+use super::*;
 use crate::snapshot::{
     CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
 };
@@ -6,8 +7,6 @@ use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render::{self, Renderer};
-use super::*;
-
 
 /// `root/<name>.<ext>` for the four artifacts plus the frame sidecar.
 /// `name` must be pre-validated ([`validate_name`]).
@@ -21,12 +20,10 @@ pub(crate) fn artifact_paths(root: &Path, name: &str) -> ArtifactPaths {
     }
 }
 
-
 /// Missing-glyph sidecar next to a PNG (`<name>.png.fidelity.json`).
 fn fidelity_sidecar(png: &Path) -> PathBuf {
     png.with_extension("png.fidelity.json")
 }
-
 
 pub(crate) fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, SnapshotError> {
     match std::fs::read(path) {
@@ -38,7 +35,6 @@ pub(crate) fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, SnapshotErro
         ))),
     }
 }
-
 
 /// Locate the first differing byte of two blobs, for human diagnostics.
 fn first_difference(approved: &[u8], actual: &[u8]) -> String {
@@ -56,7 +52,6 @@ fn first_difference(approved: &[u8], actual: &[u8]) -> String {
 }
 
 impl GroupedStore {
-
     /// Check one frame against the approved artifacts. Writes the four
     /// actual artifacts (plus debug sidecars) under the actual root BEFORE
     /// comparing; on pixel mismatch also writes the diff PNG under the diff
@@ -283,7 +278,6 @@ impl GroupedStore {
         Ok(grouped)
     }
 }
-
 
 /// Diff PNG path of one scenario under the diff root (`<name>.png`).
 pub(crate) fn sibling_diff(diff_root: &Path, name: &str) -> PathBuf {

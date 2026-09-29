@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use super::*;
-
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // PTY session registry (feature `pty`)
@@ -15,8 +14,8 @@ pub(crate) mod pty_registry {
     use std::path::PathBuf;
 
     use crate::proto::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
 
     static REGISTRY: Mutex<Option<HashMap<String, crate::tui::Session>>> = Mutex::new(None);
@@ -194,9 +193,11 @@ pub(crate) mod pty_registry {
                 .map_err(|e| tui_err(e).with_session(session))?;
             let canonical = tuiscotti_insta::insta_proto::insta_string(&obs.screen);
             let profile = tuiscotti_render::profile::Profile::default_profile();
-            let mut renderer =
-                tuiscotti_render::render::Renderer::new(&profile, &tuiscotti_render::profile::VENDORED_FACES)
-                    .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
+            let mut renderer = tuiscotti_render::render::Renderer::new(
+                &profile,
+                &tuiscotti_render::profile::VENDORED_FACES,
+            )
+            .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
             let rendered = renderer
                 .render_screen(&obs.screen)
                 .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;

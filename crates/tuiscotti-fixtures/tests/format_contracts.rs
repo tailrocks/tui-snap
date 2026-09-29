@@ -13,11 +13,10 @@ use common::{menu_frame, protocol_frame, renderer, streams_frame};
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
 use tuiscotti_render::formats::{
-    ansi_normalized, ascii_projection, assert_normalized_sgr, assert_no_escapes,
-    assert_opaque_rgb, assert_seven_bit, assert_static_offline, canonical_json,
-    capture_all, changed_pixels, generation_for, generations_match, html_static,
-    parse_canonical, pipe_projection, pipe_strict, require_same_generation,
-    txt_projection,
+    ansi_normalized, ascii_projection, assert_no_escapes, assert_normalized_sgr, assert_opaque_rgb,
+    assert_seven_bit, assert_static_offline, canonical_json, capture_all, changed_pixels,
+    generation_for, generations_match, html_static, parse_canonical, pipe_projection, pipe_strict,
+    require_same_generation, txt_projection,
 };
 
 /// Capture every format of the menu demo in one bundle.
@@ -45,14 +44,20 @@ fn ascii_is_seven_bit_with_exact_substitution_accounting() {
     }
     // Geometry preserved: same row count, same display width per row.
     assert_eq!(ascii.text.lines().count(), 10);
-    assert_eq!(ascii.text, common::read_expected("menu-demo-40x10.ascii.txt"));
+    assert_eq!(
+        ascii.text,
+        common::read_expected("menu-demo-40x10.ascii.txt")
+    );
 }
 
 #[test]
 fn ascii_lossless_only_when_nothing_substituted() {
     let frame = menu_frame(40, 10, Theme::Dark, Scenario::Demo);
     let ascii = ascii_projection(&frame);
-    assert!(ascii.lossless_text().is_none(), "lossy ASCII has no lossless text");
+    assert!(
+        ascii.lossless_text().is_none(),
+        "lossy ASCII has no lossless text"
+    );
     // Pure-ASCII content projects loss-free.
     let plain = tuiscotti::ratatui::draw_frame(12, 3, common::prov("ascii"), |f| {
         use ratatui::widgets::Paragraph;
@@ -150,7 +155,10 @@ fn png_is_opaque_rgb_and_deterministic() {
     let mut first = renderer();
     let a = first.render_png(&frame).expect("render");
     let info = assert_opaque_rgb(&a).expect("opaque RGB evidence");
-    assert_eq!((info.width, info.height), common::profile().image_size(40, 10));
+    assert_eq!(
+        (info.width, info.height),
+        common::profile().image_size(40, 10)
+    );
     let mut second = renderer();
     let b = second.render_png(&frame).expect("render");
     assert_eq!(a, b, "deterministic bytes for identical frame + profile");
@@ -192,10 +200,19 @@ fn changed_pixels_beats_reencode_assumptions() {
 fn html_is_static_offline_with_png_embed() {
     let bundle = menu_bundle();
     assert_static_offline(&bundle.html).expect("static offline");
-    assert!(!bundle.html.to_lowercase().contains("<script"), "no script at all");
-    assert!(bundle.html.contains("data:image/png;base64,"), "offline PNG embed");
+    assert!(
+        !bundle.html.to_lowercase().contains("<script"),
+        "no script at all"
+    );
+    assert!(
+        bundle.html.contains("data:image/png;base64,"),
+        "offline PNG embed"
+    );
     assert!(bundle.html.contains("autosave"), "selectable text present");
-    assert!(bundle.html.contains(&bundle.generation.id), "generation labeled");
+    assert!(
+        bundle.html.contains(&bundle.generation.id),
+        "generation labeled"
+    );
 }
 
 #[test]
@@ -206,9 +223,18 @@ fn html_injection_is_escaped_not_executed() {
         tuiscotti_fixtures::views::menu::render(f, &model);
     });
     let generation = generation_for(&frame, "test").id;
-    let html = html_static(&frame, &common::profile(), "\"><img src=x onerror=alert(1)>", None, &generation);
+    let html = html_static(
+        &frame,
+        &common::profile(),
+        "\"><img src=x onerror=alert(1)>",
+        None,
+        &generation,
+    );
     assert_static_offline(&html).expect("injection neutralized");
-    assert!(!html.to_lowercase().contains("<script"), "no script element smuggled");
+    assert!(
+        !html.to_lowercase().contains("<script"),
+        "no script element smuggled"
+    );
     assert!(html.contains("&lt;script&gt;"), "payload escaped");
     // The validator itself bites: raw smuggled markup is rejected.
     assert_static_offline("<p>x</p><script>alert(1)</script>").expect_err("raw script caught");
@@ -226,17 +252,27 @@ fn canonical_json_round_trips_with_version_and_provenance() {
     let back = parse_canonical(&json).expect("parse");
     assert_eq!(back.to_json(), json, "lossless round-trip");
     tuiscotti_render::formats::json::assert_provenance_complete(&back).expect("provenance");
-    assert_eq!(back.version, tuiscotti_render::formats::CANONICAL_JSON_VERSION);
+    assert_eq!(
+        back.version,
+        tuiscotti_render::formats::CANONICAL_JSON_VERSION
+    );
 }
 
 #[test]
 fn canonical_json_rejects_wrong_version_and_corruption() {
     let frame = menu_frame(10, 4, Theme::Dark, Scenario::Empty);
-    let mut bad_version = serde_json::from_str::<serde_json::Value>(&frame.to_json()).expect("json");
+    let mut bad_version =
+        serde_json::from_str::<serde_json::Value>(&frame.to_json()).expect("json");
     bad_version["version"] = serde_json::Value::from(99);
-    assert!(parse_canonical(&bad_version.to_string()).is_err(), "wrong version rejected");
+    assert!(
+        parse_canonical(&bad_version.to_string()).is_err(),
+        "wrong version rejected"
+    );
     assert!(parse_canonical("{not json").is_err(), "corruption rejected");
-    assert!(parse_canonical("{\"version\":3}").is_err(), "truncation rejected");
+    assert!(
+        parse_canonical("{\"version\":3}").is_err(),
+        "truncation rejected"
+    );
 }
 
 // --- Hidden data ------------------------------------------------------------
@@ -247,7 +283,10 @@ fn hidden_cells_hide_pixels_but_keep_source_text() {
     let mut frame = menu_frame(20, 5, Theme::Dark, Scenario::Empty);
     let mut hidden = Cell::blank(2, 2);
     hidden.symbol = "X".to_string();
-    hidden.mods = Mods { hidden: true, ..Mods::default() };
+    hidden.mods = Mods {
+        hidden: true,
+        ..Mods::default()
+    };
     frame.set(hidden);
     let mut shown = frame.clone();
     let mut cell = Cell::blank(2, 2);
@@ -261,7 +300,9 @@ fn hidden_cells_hide_pixels_but_keep_source_text() {
     let px_hidden = renderer().render_png(&frame).expect("render");
     let px_shown = renderer().render_png(&shown).expect("render");
     assert!(
-        changed_pixels(&px_hidden, &px_shown).expect("diff").is_empty(),
+        changed_pixels(&px_hidden, &px_shown)
+            .expect("diff")
+            .is_empty(),
         "hidden glyph draws no ink"
     );
 }
@@ -275,7 +316,10 @@ fn every_capture_exports_one_identifiable_generation() {
         let frame = streams_frame(60, 12, Theme::Dark, false);
         capture_all(&mut renderer(), &frame, "streams").expect("capture")
     };
-    assert_eq!(bundle.generation.frame_digest, menu_frame(40, 10, Theme::Dark, Scenario::Demo).digest());
+    assert_eq!(
+        bundle.generation.frame_digest,
+        menu_frame(40, 10, Theme::Dark, Scenario::Demo).digest()
+    );
     assert!(!bundle.generation.id.is_empty());
     assert!(generations_match(&bundle.generation, &bundle.generation));
     assert!(!generations_match(&bundle.generation, &other.generation));

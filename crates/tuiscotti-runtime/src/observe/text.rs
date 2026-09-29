@@ -1,9 +1,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use tuiscotti_core::screen::Screen;
 use super::*;
-
+use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
 // Shared helpers (feature-independent)
@@ -33,13 +32,11 @@ pub fn screen_text(screen: &Screen) -> String {
     out
 }
 
-
 fn screen_hash(screen: &Screen) -> u64 {
     let mut h = DefaultHasher::new();
     screen.hash(&mut h);
     h.finish()
 }
-
 
 /// Same/different verdict for [`compare_replay_vs_rerun`], with revision maps.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,7 +50,6 @@ pub struct ReplayRerunComparison {
     /// Human-readable verdict detail.
     pub detail: String,
 }
-
 
 /// Compare replayed screens against a re-run screen.
 ///

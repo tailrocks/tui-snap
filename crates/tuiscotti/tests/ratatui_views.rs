@@ -1,15 +1,15 @@
 //! Production Ratatui → Screen adapters (M05, M06, M03-partial, M07 edge policy).
 
+use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color as RColor, Modifier, Style};
 use ratatui::widgets::{List, ListItem, ListState, Paragraph};
-use ratatui::Terminal;
 use tuiscotti::frame::CursorStyle;
 use tuiscotti::ratatui::{
-    render_screen, screen_from_buffer, screen_from_test_backend, stateful_screen, widget_screen,
-    EdgePolicy, REPLACEMENT,
+    EdgePolicy, REPLACEMENT, render_screen, screen_from_buffer, screen_from_test_backend,
+    stateful_screen, widget_screen,
 };
 
 fn row_text(screen: &tuiscotti::Screen, y: u16) -> String {

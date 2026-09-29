@@ -195,11 +195,7 @@ pub fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
                 "pixels_equal={} dims_equal={} score={}",
                 v.pixels_equal, v.dims_equal, v.score
             );
-            if v.pixels_equal {
-                0
-            } else {
-                EXIT_VERIFY_FAIL
-            }
+            if v.pixels_equal { 0 } else { EXIT_VERIFY_FAIL }
         }
         Err(e) => {
             eprintln!("error: PNG compare failed: {e}");

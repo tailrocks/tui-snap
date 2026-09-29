@@ -239,10 +239,7 @@ pub fn render(frame: &mut RFrame, model: &Model) {
 fn render_title(frame: &mut RFrame, model: &Model, area: Rect) {
     let toggled = model.items.iter().filter(|i| i.toggled).count();
     let title = Paragraph::new(Line::from(vec![
-        Span::styled(
-            "Settings ",
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("Settings ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(format!("(space toggles, q quits, {toggled} on)")),
     ]))
     .block(Block::default().borders(Borders::ALL).title("Menu"));
@@ -295,7 +292,10 @@ fn render_list(frame: &mut RFrame, model: &Model, area: Rect) {
                 style = style.add_modifier(Modifier::DIM);
             }
             if i == model.selected {
-                style = style.bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD);
+                style = style
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD);
             }
             ListItem::new(format!("{marker} {}", item.name)).style(style)
         })
@@ -328,7 +328,10 @@ fn render_error(frame: &mut RFrame, area: Rect, error: &str) {
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         )),
         Line::from(error),
-        Line::from(Span::styled("Esc dismisses", Style::default().add_modifier(Modifier::DIM))),
+        Line::from(Span::styled(
+            "Esc dismisses",
+            Style::default().add_modifier(Modifier::DIM),
+        )),
     ])
     .block(Block::default().borders(Borders::ALL).title("!"));
     frame.render_widget(text, popup);

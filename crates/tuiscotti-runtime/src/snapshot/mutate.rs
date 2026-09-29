@@ -1,12 +1,11 @@
+use super::*;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::{Frame, FrameError};
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
-use super::*;
 
 impl Store {
-
     /// Verify one actual candidate trio (frame + PNG + fidelity sidecar
     /// against the completion manifest `check` seals last). Returns
     /// [`Status::NotChecked`] when the trio is complete and consistent —

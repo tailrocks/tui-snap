@@ -1,3 +1,4 @@
+use super::*;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -5,13 +6,10 @@ use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
-use super::*;
-
 
 /// Default bound for collecting pipe output after the child was reaped.
 /// Covers slow close plus descendants that inherited the pipes.
 const DEFAULT_DRAIN_DEADLINE: Duration = Duration::from_secs(5);
-
 
 /// Program to spawn: direct path/argv0, or a cargo binary resolved eagerly.
 #[derive(Debug, Clone)]
@@ -24,7 +22,6 @@ pub(crate) enum Program {
         resolved: Result<PathBuf, SpawnError>,
     },
 }
-
 
 /// First-class piped child-process builder (backlog R01).
 ///
@@ -46,7 +43,6 @@ pub struct Command {
     pub(crate) drain_deadline: Duration,
     pub(crate) shell: bool,
 }
-
 
 impl std::fmt::Debug for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -222,7 +218,6 @@ impl Command {
         self
     }
 }
-
 
 impl From<&std::process::Command> for Command {
     fn from(cmd: &std::process::Command) -> Self {

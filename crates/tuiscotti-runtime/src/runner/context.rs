@@ -1,3 +1,4 @@
+use super::*;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -5,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use super::*;
-
 
 /// Runner-neutral context for one scenario execution (N02, N09).
 ///
@@ -21,7 +20,6 @@ pub struct TestContext {
     evidence: PathBuf,
     nextest: bool,
 }
-
 
 impl TestContext {
     /// Capture the context for `scenario` from the process environment.
@@ -158,7 +156,6 @@ impl TestContext {
         Ok(cmd)
     }
 }
-
 
 /// Atomically claim `<root>/<leaf>` (or `<leaf>-2`, … on collision).
 /// Existing directories are never reused, so a retry/stress rerun cannot

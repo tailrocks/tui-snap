@@ -12,14 +12,15 @@ use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
 
+use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::{Maybe, Observation, Screen};
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-
 
 #[cfg(unix)]
 pub(crate) mod guardian_unix {
-    use crate::tui_shell::{Containment, GuardianReport, MAX_PS_LINES, MAX_SURVIVORS, MAX_SWEEP_TARGETS};
+    use crate::tui_shell::{
+        Containment, GuardianReport, MAX_PS_LINES, MAX_SURVIVORS, MAX_SWEEP_TARGETS,
+    };
     use std::time::{Duration, Instant};
 
     #[derive(Debug, Clone)]
@@ -82,11 +83,7 @@ pub(crate) mod guardian_unix {
             .output()
             .ok()?;
         let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if line.is_empty() {
-            None
-        } else {
-            Some(line)
-        }
+        if line.is_empty() { None } else { Some(line) }
     }
 
     /// One full process-table snapshot, filtered by the caller.
