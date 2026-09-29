@@ -1,11 +1,12 @@
 //! One rendered sample: canonical text, PNG, and Insta review settings.
 
 use super::{
-    Location, PNG_SNAPSHOT_SUFFIX, description_for, generation_id, png_tag_generation,
-    write_evidence_in,
+    AttemptIdentity, BundlePayload, EvidenceId, Location, PNG_SNAPSHOT_SUFFIX, SnapshotIdentity,
+    active_snapshot_suffix, current_test_name, description_for, generation_id, png_tag_generation,
+    render_identity, sample_binding, write_bundle_in,
 };
 use crate::insta_proto::{PngPixelComparator, insta_string};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::Frame;
 use tuiscotti_core::screen::Screen;
 use tuiscotti_render::diff::AlphaPolicy;
@@ -130,41 +131,115 @@ pub fn prepare_snapshot(screen: &Screen) -> (String, String) {
     (canonical, generation)
 }
 
-/// One prepared screenshot sample: canonical state plus the generation-tagged
-/// PNG, with candidate evidence already on disk (macro backend).
+/// One prepared screenshot sample: canonical state plus the binding-tagged
+/// PNG, with the full candidate bundle already on disk (macro backend).
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct PreparedScreenshot {
     /// Styled canonical state.
     pub canonical: String,
-    /// Content-derived generation binding both artifacts.
-    pub generation: String,
-    /// Generation-tagged PNG bytes.
+    /// Compound sample binding ([`sample_binding`]) carried by both
+    /// artifacts' descriptions and the PNG `tEXt` chunk.
+    pub binding: String,
+    /// Binding-tagged PNG bytes.
     pub png: Vec<u8>,
+    /// Published candidate-bundle directory (for failure diagnostics).
+    pub bundle_dir: PathBuf,
 }
 
-/// Render one sample and write candidate evidence BEFORE any failure (macro
-/// backend for [`crate::assert_screenshot!`]). Panics with context when rendering or
-/// evidence writing fails.
+/// Render one sample and publish the full candidate bundle BEFORE any
+/// failure (macro backend for [`crate::assert_screenshot!`]). `package` is
+/// the caller's `env!("CARGO_PKG_NAME")`. Panics with context when
+/// rendering or bundle publication fails.
 #[doc(hidden)]
 #[must_use]
 #[expect(
     clippy::panic,
     reason = "assert-macro backend panics by contract, like std assert"
 )]
-pub fn prepare_screenshot(name: &str, screen: &Screen, evidence_dir: &Path) -> PreparedScreenshot {
+pub fn prepare_screenshot(
+    name: &str,
+    screen: &Screen,
+    evidence_root: &Path,
+    package: &str,
+    identity: &SnapshotIdentity,
+) -> PreparedScreenshot {
     let sample = render_sample(screen).unwrap_or_else(|e| {
         panic!("tuiscotti assert_screenshot!({name:?}): cannot render sample: {e}")
     });
+    let render = render_identity();
+    let binding = sample_binding(&sample.canonical, &render, &sample.png);
     let generation = generation_id(&sample.canonical);
-    let png = png_tag_generation(&sample.png, &generation);
-    write_evidence_in(evidence_dir, name, &sample, &png).unwrap_or_else(|e| {
+    let png = png_tag_generation(&sample.png, &binding);
+    let id = EvidenceId {
+        package: package.to_string(),
+        test: current_test_name(),
+        scenario: name.to_string(),
+        variant: active_snapshot_suffix(),
+        attempt: AttemptIdentity::from_env(),
+    };
+    let payload = BundlePayload {
+        sample: &sample,
+        png_tagged: &png,
+        binding: &binding,
+        generation: &generation,
+        render_identity: &render,
+    };
+    let bundle_dir = write_bundle_in(evidence_root, &id, identity, &payload).unwrap_or_else(|e| {
         panic!("tuiscotti assert_screenshot!({name:?}): cannot write evidence: {e}")
     });
     PreparedScreenshot {
         canonical: sample.canonical,
-        generation,
+        binding,
         png,
+        bundle_dir,
+    }
+}
+
+/// Aggregate the compound assertion outcome into one failure message
+/// (macro backend): both Insta assertions already ran (a canonical failure
+/// never suppresses the PNG pending), and `gate` is the strict consistency
+/// verdict over the resolved identity. Returns `None` when everything
+/// passed, else the combined message naming the candidate bundle.
+#[doc(hidden)]
+#[must_use]
+pub fn aggregate_compound_result(
+    name: &str,
+    canonical: &std::thread::Result<()>,
+    png: &std::thread::Result<()>,
+    gate: &Result<(), super::ConsistencyError>,
+    bundle_dir: &Path,
+) -> Option<String> {
+    let mut failures = Vec::new();
+    if let Err(payload) = canonical {
+        failures.push(format!("canonical snapshot failed: {}", panic_message(payload)));
+    }
+    if let Err(payload) = png {
+        failures.push(format!("png snapshot failed: {}", panic_message(payload)));
+    }
+    if let Err(e) = gate {
+        failures.push(format!("compound gate failed: {e}"));
+    }
+    if failures.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "tuiscotti assert_screenshot!({name:?}): {}\n(candidate bundle: {})",
+            failures.join("; "),
+            bundle_dir.display()
+        ))
+    }
+}
+
+/// Best-effort rendering of a caught panic payload.
+#[must_use]
+pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else {
+        "<non-string panic>".to_string()
     }
 }
 

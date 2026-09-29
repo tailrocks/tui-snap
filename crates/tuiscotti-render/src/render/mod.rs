@@ -42,7 +42,10 @@ pub mod svg;
 pub mod text;
 
 pub use bundle::{BundleManifest, ContractBytes, check_contract_bytes};
-pub use cache::{RenderCache, render_cache_disabled, screen_content_hash, set_no_cache_override};
+pub use cache::{
+    CACHE_FINGERPRINT_VERSION, CacheKey, RenderCache, render_cache_disabled, screen_content_hash,
+    set_no_cache_override,
+};
 pub(crate) use draw::draw_symbol;
 pub use fidelity::{Artifacts, FallbackGlyph, Fidelity, MissingGlyph, Rendered};
 pub use fonts::{FontSet, GlyphMetrics, LoadedFont, load_font, measure, verify_geometry};

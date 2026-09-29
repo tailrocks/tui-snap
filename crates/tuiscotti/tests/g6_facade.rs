@@ -94,13 +94,52 @@ fn pure_view_matches_proposed_shape() {
 
     let policy = hermetic_policy(&snaps, &evidence);
     tuiscotti::assert_screenshot!("g6_settings", &screen, &policy);
-    // Same-sample evidence landed before any failure could occur.
-    for ext in ["png", "ansi", "txt", "html"] {
-        assert!(
-            evidence.join(format!("g6_settings.{ext}")).is_file(),
-            "missing g6_settings.{ext}"
-        );
+    // Same-sample evidence bundle landed before any failure could occur.
+    let bundle = find_bundle(&evidence, "g6_settings").expect("find_bundle succeeds");
+    for name in [
+        "canonical.txt",
+        "image.png",
+        "sample.ansi",
+        "sample.txt",
+        "sample.html",
+        "manifest.json",
+        "complete.json",
+    ] {
+        assert!(bundle.join(name).is_file(), "missing bundle file {name}");
     }
+    assert_eq!(
+        fs::read_to_string(bundle.join("canonical.txt")).expect("read canonical"),
+        canonical
+    );
+}
+
+/// Find the published bundle for `scenario` under the evidence root.
+fn find_bundle(evidence: &Path, scenario: &str) -> Result<std::path::PathBuf, String> {
+    let mut stack = vec![evidence.to_path_buf()];
+    let mut hits = Vec::new();
+    while let Some(d) = stack.pop() {
+        let entries: Vec<std::path::PathBuf> = fs::read_dir(&d)
+            .map_err(|e| format!("read {}: {e}", d.display()))?
+            .map(|e| e.map(|e| e.path()).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        for path in entries {
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.file_name().is_some_and(|n| n == "complete.json")
+                && path
+                    .strip_prefix(evidence)
+                    .is_ok_and(|rel| rel.components().any(|c| c.as_os_str() == scenario))
+            {
+                hits.push(
+                    path.parent()
+                        .map(std::path::Path::to_path_buf)
+                        .ok_or_else(|| "bundle parent".to_string())?,
+                );
+            }
+        }
+    }
+    assert_eq!(hits.len(), 1, "exactly one bundle for {scenario}");
+    hits.pop().ok_or_else(|| "bundle hit".to_string())
 }
 
 #[test]

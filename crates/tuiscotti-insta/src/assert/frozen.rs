@@ -47,28 +47,6 @@ pub fn check_consistent(dir: &Path, canonical: &str, png: &str) -> Result<(), Co
     }
 }
 
-/// Lenient gate used inside [`crate::assert_screenshot!`]: legacy approvals without
-/// any generation binding keep their per-artifact verdicts; bindings that are
-/// ALL present but disagree fail. Macro backend.
-#[doc(hidden)]
-pub fn check_consistent_lenient(
-    dir: &Path,
-    canonical: &str,
-    png: &str,
-) -> Result<(), ConsistencyError> {
-    let c = snap_generation(&dir.join(format!("{canonical}.snap")));
-    let p = snap_generation(&dir.join(format!("{png}.snap")));
-    let t = std::fs::read(dir.join(format!("{png}.snap.png")))
-        .ok()
-        .and_then(|b| png_generation(&b));
-    match (c, p, t) {
-        (Some(c), Some(p), Some(t)) if c != p || p != t => Err(ConsistencyError(format!(
-            "mixed compound baseline: canonical={c} png-meta={p} png-bytes={t}"
-        ))),
-        _ => Ok(()),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Policy: evolving review vs frozen roots (I06)
 // ---------------------------------------------------------------------------
@@ -88,7 +66,7 @@ pub enum Policy {
     EvolvingIn {
         /// Snapshot directory (approvals are read here, never written).
         snapshots: PathBuf,
-        /// Candidate-evidence root (`<name>.{png,ansi,txt,html}` per assert).
+        /// Candidate-evidence root (one partitioned bundle per assert).
         evidence: PathBuf,
     },
     /// Read-only root holding `<name>.canonical.txt` + `<name>.png` per

@@ -221,5 +221,29 @@ fn readme_macro_gates_pass_preapproved() {
     )
     .expect("write snap png");
     tuiscotti::assert_screenshot!("readme-lock-shot", &screen, &policy);
-    assert!(evidence.join("readme-lock-shot.png").is_file());
+    assert!(bundle_has(&evidence, "readme-lock-shot", "image.png"));
+    assert!(bundle_has(&evidence, "readme-lock-shot", "complete.json"));
+}
+
+/// Whether the evidence root holds `file` inside `scenario`'s bundle partition.
+fn bundle_has(evidence: &std::path::Path, scenario: &str, file: &str) -> bool {
+    let mut stack = vec![evidence.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.file_name().is_some_and(|n| n == file)
+                && p.strip_prefix(evidence).is_ok_and(|rel| {
+                    rel.components().any(|c| c.as_os_str() == scenario)
+                })
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
