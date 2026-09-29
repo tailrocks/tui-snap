@@ -1,21 +1,14 @@
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
+use alacritty_terminal::term::{Config as TermConfig, Term};
+use alacritty_terminal::vte::ansi::Processor;
 
-use super::*;
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use super::{
+    SandboxClipboard, TermSnapshot, build_replay_screen, build_replay_state, drain_replay_events,
+};
+use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
 // R14: bounded raw replay (direction-tagged recordings, fresh emulator)
@@ -50,9 +43,18 @@ pub struct Recording {
 /// Replay failure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReplayError {
-    TooLarge { bytes: usize, max: usize },
+    /// Recording or byte total exceeds [`MAX_REPLAY_BYTES`].
+    TooLarge {
+        /// Observed byte total.
+        bytes: usize,
+        /// Enforced cap.
+        max: usize,
+    },
+    /// Replay dimensions outside 1..=1000.
     InvalidSize(String),
+    /// Bad chunking (`chunk_len` 0).
     InvalidChunks(String),
+    /// Final screen failed validation.
     ScreenBuild(String),
 }
 
@@ -72,6 +74,7 @@ impl std::fmt::Display for ReplayError {
 impl std::error::Error for ReplayError {}
 
 impl Recording {
+    /// Start an empty recording for a `cols`x`rows` viewport.
     #[must_use]
     pub fn new(cols: u16, rows: u16) -> Self {
         Self {
@@ -83,11 +86,19 @@ impl Recording {
     }
 
     /// Record PTY output bytes. Refused past [`MAX_REPLAY_BYTES`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReplayError::TooLarge`] past the byte cap.
     pub fn push_output(&mut self, bytes: &[u8]) -> Result<(), ReplayError> {
         self.push(RecEvent::Output(bytes.to_vec()))
     }
 
     /// Record input bytes (never replayed as output). Counts toward the cap.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReplayError::TooLarge`] past the byte cap.
     pub fn push_input(&mut self, bytes: &[u8]) -> Result<(), ReplayError> {
         self.push(RecEvent::Input(bytes.to_vec()))
     }
@@ -107,26 +118,31 @@ impl Recording {
         Ok(())
     }
 
+    /// Recorded viewport width.
     #[must_use]
     pub fn cols(&self) -> u16 {
         self.cols
     }
 
+    /// Recorded viewport height.
     #[must_use]
     pub fn rows(&self) -> u16 {
         self.rows
     }
 
+    /// Total recorded bytes (input + output).
     #[must_use]
     pub fn total_bytes(&self) -> usize {
         self.bytes
     }
 
+    /// Number of recorded events.
     #[must_use]
     pub fn len(&self) -> usize {
         self.events.len()
     }
 
+    /// True when no events were recorded.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
@@ -148,13 +164,21 @@ impl Recording {
 /// The result of one replay: final screen + full terminal state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Replayed {
+    /// Final viewport screen after replay.
     pub screen: Screen,
+    /// Full terminal state after replay.
     pub state: TermSnapshot,
+    /// Total output bytes fed to the emulator.
     pub bytes_fed: usize,
+    /// Number of chunks the bytes were fed in.
     pub chunks: usize,
 }
 
 /// Replay raw output bytes through a fresh emulator, fed as one chunk.
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] on bad size, over-cap bytes, or screen build.
 pub fn replay_bytes(output: &[u8], cols: u16, rows: u16) -> Result<Replayed, ReplayError> {
     replay_chunks([output], cols, rows)
 }
@@ -162,6 +186,10 @@ pub fn replay_bytes(output: &[u8], cols: u16, rows: u16) -> Result<Replayed, Rep
 /// Replay raw output bytes through a fresh emulator, fed in the given
 /// chunks. Splits may fall anywhere, including mid-UTF-8 and mid-escape:
 /// the streaming parser makes chunking unobservable in the result.
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] on bad size, over-cap bytes, or screen build.
 pub fn replay_chunks<'a>(
     chunks: impl IntoIterator<Item = &'a [u8]>,
     cols: u16,
@@ -212,6 +240,10 @@ pub fn replay_chunks<'a>(
 /// Replay a recording through a fresh emulator: only [`RecEvent::Output`]
 /// bytes are fed, in record order. `chunk_len` re-splits the output stream
 /// (`None` = one chunk); recorded input is always skipped.
+///
+/// # Errors
+///
+/// Returns [`ReplayError`] on bad chunking, bad size, or screen build.
 pub fn replay_recording(
     recording: &Recording,
     chunk_len: Option<usize>,

@@ -1,12 +1,7 @@
-use super::*;
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
-use std::io::{Read, Write};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How a child process run ended.
 ///
@@ -23,9 +18,9 @@ pub enum Termination {
     /// Unix only; on other platforms signal death is reported as
     /// [`Termination::Exit`] with the process status code.
     Signal(i32),
-    /// The configured [`Command::timeout`] elapsed; the child was killed.
+    /// The configured [`Command::timeout`](crate::command::Command) elapsed; the child was killed.
     Timeout,
-    /// A stream exceeded [`Command::output_limit`]; the child was killed.
+    /// A stream exceeded [`Command::output_limit`](crate::command::Command); the child was killed.
     OutputLimit,
     /// The child could not be spawned (missing binary, bad cwd, ...).
     /// Detail is in [`ProcessOutput::error`].
@@ -150,7 +145,7 @@ impl std::fmt::Display for SpawnError {
 
 impl std::error::Error for SpawnError {}
 
-/// Collected result of one [`Command::run`].
+/// Collected result of one [`Command::run`](crate::command::Command).
 ///
 /// `stdout`/`stderr` hold raw bytes exactly as read: no UTF-8 validation,
 /// no newline translation, no cross-stream interleaving.
@@ -163,7 +158,8 @@ pub struct ProcessOutput {
     /// How the run ended.
     pub status: Termination,
     /// True iff produced bytes were not captured: a stream exceeded
-    /// [`Command::output_limit`], or [`Command::drain_deadline`] expired while
+    /// [`Command::output_limit`](crate::command::Command), or
+    /// [`Command::drain_deadline`](crate::command::Command) expired while
     /// pipes were still open (typically descendants inheriting them).
     ///
     /// Killing the child on [`Termination::Timeout`] does not by itself set
@@ -197,6 +193,10 @@ impl ProcessOutput {
     /// Fallible UTF-8 view of stdout; the raw bytes stay authoritative.
     /// Use [`Self::stdout_lossy`] only when loss is explicitly acceptable —
     /// never in equality checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns the UTF-8 error if stdout is not valid UTF-8.
     pub fn stdout_str(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.stdout)
     }
@@ -204,6 +204,10 @@ impl ProcessOutput {
     /// Fallible UTF-8 view of stderr; the raw bytes stay authoritative.
     /// Use [`Self::stderr_lossy`] only when loss is explicitly acceptable —
     /// never in equality checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns the UTF-8 error if stderr is not valid UTF-8.
     pub fn stderr_str(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.stderr)
     }
@@ -246,11 +250,11 @@ pub fn cargo_bin_env_names(name: impl AsRef<OsStr>) -> Vec<String> {
     }
 }
 
-fn push_candidate(out: &mut Vec<PathBuf>, candidate: PathBuf) {
-    out.push(candidate.clone());
+fn push_candidate(out: &mut Vec<PathBuf>, candidate: &Path) {
+    out.push(candidate.to_path_buf());
     #[cfg(windows)]
     {
-        let mut exe = candidate.into_os_string();
+        let mut exe = candidate.as_os_str().to_os_string();
         exe.push(".exe");
         out.push(PathBuf::from(exe));
     }
@@ -264,18 +268,18 @@ fn push_candidate(out: &mut Vec<PathBuf>, candidate: PathBuf) {
 /// candidate is additionally tried with a `.exe` suffix.
 fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(deps) = exe.parent() {
-            push_candidate(&mut out, deps.join(name));
-            if deps.file_name().is_some_and(|n| n == "deps") {
-                if let Some(profile) = deps.parent() {
-                    push_candidate(&mut out, profile.join(name));
-                }
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(deps) = exe.parent()
+    {
+        push_candidate(&mut out, &deps.join(name));
+        if deps.file_name().is_some_and(|n| n == "deps")
+            && let Some(profile) = deps.parent()
+        {
+            push_candidate(&mut out, &profile.join(name));
         }
     }
     for profile in ["debug", "release"] {
-        push_candidate(&mut out, PathBuf::from("target").join(profile).join(name));
+        push_candidate(&mut out, &PathBuf::from("target").join(profile).join(name));
     }
     out
 }
@@ -299,6 +303,10 @@ fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
 ///
 /// Returns the first candidate that exists, else a typed error listing every
 /// location that was searched.
+///
+/// # Errors
+///
+/// Returns [`SpawnError`] listing every searched location when no binary is found.
 pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, SpawnError> {
     let env: HashMap<String, String> = std::env::vars().collect();
     cargo_bin_path_with_map(name, &env)
@@ -307,9 +315,13 @@ pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, SpawnError> {
 /// [`cargo_bin_path`] over an injected environment. The env steps consult
 /// `env`; the filesystem fallbacks still probe the live process layout.
 /// Deterministic for tests: an env hit returns before any probing.
+///
+/// # Errors
+///
+/// Returns [`SpawnError`] listing every searched location when no binary is found.
 pub fn cargo_bin_path_with_map(
     name: impl AsRef<OsStr>,
-    env: &HashMap<String, String>,
+    env: &HashMap<String, String, impl std::hash::BuildHasher>,
 ) -> Result<PathBuf, SpawnError> {
     let name = name.as_ref();
     let file = Path::new(name).file_name().unwrap_or(name);

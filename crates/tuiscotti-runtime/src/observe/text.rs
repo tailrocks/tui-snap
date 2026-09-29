@@ -1,7 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use super::*;
 use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
@@ -18,10 +17,10 @@ pub fn screen_text(screen: &Screen) -> String {
     for y in 0..screen.rows() {
         let mut row = String::new();
         for x in 0..screen.cols() {
-            if let Some(c) = screen.get(x, y) {
-                if !c.continuation {
-                    row.push_str(&c.symbol);
-                }
+            if let Some(c) = screen.get(x, y)
+                && !c.continuation
+            {
+                row.push_str(&c.symbol);
             }
         }
         if y > 0 {

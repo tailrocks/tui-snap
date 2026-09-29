@@ -1,11 +1,8 @@
-use super::*;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use super::{AttemptId, BaselineId, is_nextest_map, sanitize};
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Runner-neutral context for one scenario execution (N02, N09).
 ///
@@ -23,6 +20,9 @@ pub struct TestContext {
 
 impl TestContext {
     /// Capture the context for `scenario` from the process environment.
+    /// # Errors
+    ///
+    /// Returns an I/O error when scratch directories cannot be created.
     pub fn current(scenario: &str) -> std::io::Result<Self> {
         let env: HashMap<String, String> = std::env::vars().collect();
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -31,6 +31,9 @@ impl TestContext {
 
     /// Capture the context from an injected environment and working directory.
     /// Pure with respect to global state; safe under parallel tests.
+    /// # Errors
+    ///
+    /// Returns an I/O error when scratch directories cannot be created.
     pub fn from_map(
         scenario: &str,
         env: &HashMap<String, String>,
@@ -61,37 +64,44 @@ impl TestContext {
     }
 
     /// Stable baseline identity (excludes run/attempt).
+    #[must_use]
     pub fn baseline(&self) -> &BaselineId {
         &self.baseline
     }
 
     /// Current attempt identity.
+    #[must_use]
     pub fn attempt(&self) -> &AttemptId {
         &self.attempt
     }
 
     /// Isolated scratch directory, unique to this attempt (collision-suffixed).
+    #[must_use]
     pub fn scratch_dir(&self) -> &Path {
         &self.scratch
     }
 
     /// Evidence directory (`<scratch>/evidence`) for Journals, captures, diffs.
+    #[must_use]
     pub fn evidence_dir(&self) -> &Path {
         &self.evidence
     }
 
     /// Default journal path (`<scratch>/journal.jsonl`).
+    #[must_use]
     pub fn journal_path(&self) -> PathBuf {
         self.scratch.join("journal.jsonl")
     }
 
     /// Whether this context was captured under cargo-nextest.
+    #[must_use]
     pub fn is_nextest(&self) -> bool {
         self.nextest
     }
 
     /// Child-only environment: identity + locations for spawned processes.
     /// Applying these to a [`Command`] never touches the parent environment.
+    #[must_use]
     pub fn child_env(&self) -> Vec<(String, String)> {
         let mut v = vec![
             ("TUISNAP_RUN_ID".to_string(), self.attempt.run.clone()),
@@ -129,6 +139,7 @@ impl TestContext {
     }
 
     /// HOME/XDG isolation entries rooted at `<scratch>/home`. Child-only.
+    #[must_use]
     pub fn home_isolation(&self) -> Vec<(String, String)> {
         let home = self.scratch.join("home");
         let s = |p: PathBuf| p.to_string_lossy().into_owned();
@@ -143,6 +154,9 @@ impl TestContext {
     }
 
     /// Create the isolated home tree and apply it to a child command.
+    /// # Errors
+    ///
+    /// Returns an I/O error when the home tree cannot be created.
     pub fn apply_home_isolation<'a>(
         &self,
         cmd: &'a mut Command,

@@ -38,12 +38,12 @@ pub(crate) fn build_observation<T: EventListener>(
         .map_err(|e| TuiError::Teardown(format!("built an invalid screen: {e}")))?;
 
     let mut modes = Vec::new();
-    push_modes(term.mode(), &mut modes);
+    push_modes(*term.mode(), &mut modes);
     let palette: Vec<(u8, Rgb)> = (0..256u16)
         .filter_map(|i| {
             term.colors()[i as usize].map(|c| {
                 (
-                    i as u8,
+                    u8::try_from(i).unwrap_or(u8::MAX),
                     Rgb {
                         r: c.r,
                         g: c.g,
@@ -75,7 +75,7 @@ fn collect_grid_cells<T: EventListener>(term: &Term<T>, cols: u16, rows: u16) ->
     let grid = term.grid();
     let mut cells = Vec::with_capacity(cols as usize * rows as usize);
     for y in 0..rows {
-        let line = Line(y as i32);
+        let line = Line(i32::from(y));
         let mut x: u16 = 0;
         while x < cols {
             let cell = &grid[line][Column(x as usize)];
@@ -170,10 +170,7 @@ fn frame_cell(
             strikethrough: flags.contains(CellFlags::STRIKEOUT),
             reverse: flags.contains(CellFlags::INVERSE),
         },
-        underline_color: cell
-            .underline_color()
-            .map(frame_color)
-            .unwrap_or(Color::Default),
+        underline_color: cell.underline_color().map_or(Color::Default, frame_color),
     }
 }
 
@@ -199,14 +196,14 @@ fn frame_underline_style(flags: CellFlags) -> UnderlineStyle {
 fn frame_color(c: VteColor) -> Color {
     match c {
         VteColor::Named(n) => match n {
-            NamedColor::Black => Color::Indexed(0),
-            NamedColor::Red => Color::Indexed(1),
-            NamedColor::Green => Color::Indexed(2),
-            NamedColor::Yellow => Color::Indexed(3),
-            NamedColor::Blue => Color::Indexed(4),
-            NamedColor::Magenta => Color::Indexed(5),
-            NamedColor::Cyan => Color::Indexed(6),
-            NamedColor::White => Color::Indexed(7),
+            NamedColor::Black | NamedColor::DimBlack => Color::Indexed(0),
+            NamedColor::Red | NamedColor::DimRed => Color::Indexed(1),
+            NamedColor::Green | NamedColor::DimGreen => Color::Indexed(2),
+            NamedColor::Yellow | NamedColor::DimYellow => Color::Indexed(3),
+            NamedColor::Blue | NamedColor::DimBlue => Color::Indexed(4),
+            NamedColor::Magenta | NamedColor::DimMagenta => Color::Indexed(5),
+            NamedColor::Cyan | NamedColor::DimCyan => Color::Indexed(6),
+            NamedColor::White | NamedColor::DimWhite => Color::Indexed(7),
             NamedColor::BrightBlack => Color::Indexed(8),
             NamedColor::BrightRed => Color::Indexed(9),
             NamedColor::BrightGreen => Color::Indexed(10),
@@ -215,14 +212,6 @@ fn frame_color(c: VteColor) -> Color {
             NamedColor::BrightMagenta => Color::Indexed(13),
             NamedColor::BrightCyan => Color::Indexed(14),
             NamedColor::BrightWhite => Color::Indexed(15),
-            NamedColor::DimBlack => Color::Indexed(0),
-            NamedColor::DimRed => Color::Indexed(1),
-            NamedColor::DimGreen => Color::Indexed(2),
-            NamedColor::DimYellow => Color::Indexed(3),
-            NamedColor::DimBlue => Color::Indexed(4),
-            NamedColor::DimMagenta => Color::Indexed(5),
-            NamedColor::DimCyan => Color::Indexed(6),
-            NamedColor::DimWhite => Color::Indexed(7),
             NamedColor::Foreground
             | NamedColor::Background
             | NamedColor::Cursor
@@ -254,7 +243,7 @@ fn frame_cursor<T: EventListener>(
     let visible = term.mode().contains(TermMode::SHOW_CURSOR)
         && !matches!(style.shape, CursorShape::Hidden)
         && line >= 0
-        && (line as u32) < rows as u32
+        && line.cast_unsigned() < u32::from(rows)
         && column < cols as usize;
     if !visible {
         return Cursor {
@@ -266,8 +255,8 @@ fn frame_cursor<T: EventListener>(
         };
     }
     Cursor {
-        x: column as u16,
-        y: line as u16,
+        x: u16::try_from(column).unwrap_or(u16::MAX),
+        y: u16::try_from(line).unwrap_or(u16::MAX),
         visible: true,
         style: shape,
         blinking: style.blinking,
@@ -275,7 +264,7 @@ fn frame_cursor<T: EventListener>(
 }
 
 /// Map live `TermMode` bits to DEC/private mode numbers.
-fn push_modes(mode: &TermMode, out: &mut Vec<u16>) {
+fn push_modes(mode: TermMode, out: &mut Vec<u16>) {
     let mut push = |flag: TermMode, n: u16| {
         if mode.contains(flag) {
             out.push(n);
@@ -301,8 +290,7 @@ fn push_modes(mode: &TermMode, out: &mut Vec<u16>) {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64)
-        .unwrap_or(0)
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| {
+        u64::try_from(d.as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX)
+    })
 }

@@ -1,4 +1,4 @@
-use super::*;
+use super::{CompatError, ImportLimits, lines_with_offsets, read_bounded};
 use std::path::Path;
 
 // ---------------------------------------------------------------------------
@@ -51,6 +51,7 @@ pub enum CastEvent {
 }
 
 impl CastEvent {
+    /// Absolute event time in seconds.
     #[must_use]
     pub fn t(&self) -> f64 {
         match self {
@@ -111,6 +112,9 @@ impl CastTrace {
 }
 
 /// Read-only asciinema v2 import with default limits. See [`import_cast_with`].
+/// # Errors
+///
+/// Returns [`CompatError`] when the source cannot be read or parsed.
 pub fn import_cast(path: &Path) -> Result<CastTrace, CompatError> {
     import_cast_with(path, &ImportLimits::default())
 }
@@ -125,6 +129,9 @@ pub fn import_cast(path: &Path) -> Result<CastTrace, CompatError> {
 ///   non-fatal (reported in `unsupported`).
 /// - Bounds from `lim` fail with [`CompatError::TooLarge`], never truncate.
 /// - Reads only; the source is untouched and nothing recorded is executed.
+/// # Errors
+///
+/// Returns [`CompatError`] when the source cannot be read or parsed.
 pub fn import_cast_with(path: &Path, lim: &ImportLimits) -> Result<CastTrace, CompatError> {
     let text = read_bounded(path, lim)?;
     let lines = lines_with_offsets(&text);
@@ -154,15 +161,14 @@ pub fn import_cast_with(path: &Path, lim: &ImportLimits) -> Result<CastTrace, Co
                 limit: lim.max_events as u64,
             });
         }
-        match parse_cast_event(line, *off)? {
-            Some(e) => events.push(e),
-            None => {
-                let code = line_code_hint(line);
-                unsupported.push(format!(
-                    "line {} (byte {off}): unknown event code {code}",
-                    i + 1
-                ));
-            }
+        if let Some(e) = parse_cast_event(line, *off)? {
+            events.push(e);
+        } else {
+            let code = line_code_hint(line);
+            unsupported.push(format!(
+                "line {} (byte {off}): unknown event code {code}",
+                i + 1
+            ));
         }
     }
     Ok(CastTrace {
@@ -181,13 +187,13 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
         offset: 0,
         msg: "header must be a JSON object".to_string(),
     })?;
-    let version =
-        obj.get("version")
-            .and_then(|v| v.as_u64())
-            .ok_or_else(|| CompatError::Version {
-                offset: 0,
-                msg: "header lacks numeric \"version\"".to_string(),
-            })?;
+    let version = obj
+        .get("version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| CompatError::Version {
+            offset: 0,
+            msg: "header lacks numeric \"version\"".to_string(),
+        })?;
     if version != 2 {
         return Err(CompatError::Version {
             offset: 0,
@@ -197,7 +203,7 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
     let dim = |key: &str| -> Result<u16, CompatError> {
         let n = obj
             .get(key)
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .ok_or_else(|| CompatError::Version {
                 offset: 0,
                 msg: format!("header lacks numeric {key:?}"),
@@ -208,7 +214,7 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
                 msg: format!("header {key} out of range: {n}"),
             });
         }
-        Ok(n as u16)
+        Ok(u16::try_from(n).unwrap_or(0))
     };
     Ok(CastHeader {
         version,
@@ -223,7 +229,7 @@ fn parse_cast_header(line: &str) -> Result<CastHeader, CompatError> {
             .and_then(|e| e.get("TERM"))
             .and_then(|v| v.as_str())
             .map(str::to_string),
-        timestamp: obj.get("timestamp").and_then(|v| v.as_u64()),
+        timestamp: obj.get("timestamp").and_then(serde_json::Value::as_u64),
     })
 }
 
@@ -278,6 +284,5 @@ fn line_code_hint(line: &str) -> String {
     serde_json::from_str::<serde_json::Value>(line)
         .ok()
         .and_then(|v| v.get(1).cloned())
-        .map(|c| c.to_string())
-        .unwrap_or_else(|| "<unparseable>".to_string())
+        .map_or_else(|| "<unparseable>".to_string(), |c| c.to_string())
 }

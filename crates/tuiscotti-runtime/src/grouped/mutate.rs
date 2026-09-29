@@ -1,18 +1,20 @@
-use super::*;
+use super::{GroupedStore, artifact_paths, validate_name};
 use crate::snapshot::{
-    CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
+    CompareOutcome, SnapshotError, StoreReport, report_entry, write_atomic, write_report_at,
 };
-use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::Frame;
-use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render::{self, Renderer};
+use tuiscotti_render::render::Renderer;
 
 impl GroupedStore {
     /// Explicitly approve one scenario: the four actual artifacts replace
     /// the approved ones (atomic per file). Sidecars stay in the scratch
     /// area — the approved tree holds the four artifacts and nothing else.
     /// There is deliberately no environment-variable auto-accept.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when actual artifacts are missing or writes fail.
     pub fn accept(&self, name: &str) -> Result<(), SnapshotError> {
         validate_name(name)?;
         let actual = artifact_paths(&self.actual_root, name);
@@ -36,6 +38,10 @@ impl GroupedStore {
 
     /// Accept every scenario with actual artifacts, recursively. Returns the
     /// accepted names (sorted).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when listing actuals or any accept fails.
     pub fn accept_all(&self) -> Result<Vec<String>, SnapshotError> {
         let names = self.actual_names()?;
         for name in &names {
@@ -47,6 +53,10 @@ impl GroupedStore {
     /// Rewrite the HTML review index from on-disk actual vs approved
     /// artifacts. Does not re-render. Unmatched gates do not error here:
     /// inspect [`StoreReport::failed`] and the outcomes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering or writing the report fails.
     pub fn report(
         &self,
         profile: &Profile,
@@ -63,9 +73,13 @@ impl GroupedStore {
     /// files on disk and the pixel threshold matches; anything stale is
     /// recomputed via `check`, never silently reused — so report status
     /// equals check status on the same inputs. Candidates with a missing
-    /// manifest member report [`Status::MissingApproval`] (C08-grouped),
+    /// manifest member report [`crate::snapshot::Status::MissingApproval`] (C08-grouped),
     /// never a pixel verdict. HTML links the PNG files; it does not embed
     /// them.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering or writing the report fails.
     pub fn report_with(
         &self,
         renderer: &mut Renderer,

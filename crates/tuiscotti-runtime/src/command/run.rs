@@ -1,7 +1,5 @@
-use super::*;
-use std::ffi::{OsStr, OsString};
+use super::{Command, ProcessOutput, Program, SpawnError, Termination};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
 use std::process::{Child, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
@@ -15,14 +13,14 @@ impl Command {
     /// (program, args, env, cwd, shell mapping). Stdin bytes, timeout,
     /// output limits, and the drain deadline are [`Command::run`] behavior
     /// and are not represented in the returned value.
+    #[must_use]
     pub fn std_command(&self) -> std::process::Command {
         let mut cmd = match &self.program {
             Program::Direct(p) => std::process::Command::new(p),
             Program::CargoBin { name, resolved } => std::process::Command::new(
                 resolved
                     .as_ref()
-                    .map(|p| p.as_os_str())
-                    .unwrap_or(name.as_os_str()),
+                    .map_or(name.as_os_str(), |p| p.as_os_str()),
             ),
         };
         if self.shell {
@@ -32,8 +30,7 @@ impl Command {
                 Program::Direct(p) => p.clone(),
                 Program::CargoBin { name, resolved } => resolved
                     .as_ref()
-                    .map(|p| p.as_os_str().to_os_string())
-                    .unwrap_or_else(|_| name.clone()),
+                    .map_or_else(|_| name.clone(), |p| p.as_os_str().to_os_string()),
             };
             cmd = std::process::Command::new("/bin/sh");
             cmd.arg("-c").arg(script).arg("sh");
@@ -64,6 +61,7 @@ impl Command {
     /// child filling both pipes (or a large stdin while pipes fill) cannot
     /// deadlock against buffer limits. Infallible: even spawn failure is
     /// data ([`Termination::SpawnError`] with [`ProcessOutput::error`]).
+    #[must_use]
     pub fn run(&self) -> ProcessOutput {
         let start = Instant::now();
         let mut out = ProcessOutput {
@@ -178,18 +176,18 @@ fn spawn_drain(
         let mut chunk = [0u8; 8192];
         loop {
             match pipe.read(&mut chunk) {
-                Ok(0) => break, // EOF: all writers closed.
+                // EOF (all writers closed) or pipe error: return what we have.
+                Ok(0) | Err(_) => break,
                 Ok(n) => {
                     buf.extend_from_slice(&chunk[..n]);
-                    if let Some(max) = limit {
-                        if buf.len() > max {
-                            buf.truncate(max);
-                            limit_hit.store(true, Ordering::SeqCst);
-                            break;
-                        }
+                    if let Some(max) = limit
+                        && buf.len() > max
+                    {
+                        buf.truncate(max);
+                        limit_hit.store(true, Ordering::SeqCst);
+                        break;
                     }
                 }
-                Err(_) => break, // Pipe error: return what we have.
             }
         }
         // The supervisor may have stopped listening (drain deadline);

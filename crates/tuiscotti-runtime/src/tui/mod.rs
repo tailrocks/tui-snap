@@ -55,6 +55,7 @@ mod exit;
 mod frame;
 mod input_types;
 mod limits;
+mod profile;
 mod session;
 mod session_input;
 mod session_teardown;
@@ -64,11 +65,12 @@ mod tests;
 mod worker;
 mod worker_ctx;
 
-pub use builder::{TerminalProfile, Tui};
+pub use builder::Tui;
 pub use error::{CancelToken, TuiError, WaitError};
 pub use exit::{ExitStatus, ExitWait, process_exists};
 pub use input_types::{
-    Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Signal, Wheel, parse_chord,
+    Key, KeyEventKind, KeyExtMods, KeyMods, MouseButton, MouseMods, Signal, Wheel, parse_chord,
 };
 pub use limits::{DEFAULT_STABLE_QUIET, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
+pub use profile::{MouseProfile, TerminalProfile, TrackedModes};
 pub use session::Session;

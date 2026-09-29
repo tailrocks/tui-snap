@@ -14,7 +14,7 @@ use super::shared::Shared;
 use super::worker::{Op, WorkerEventState, cols_of, rows_of};
 
 /// Blocking PTY reads forwarded as ops.
-pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: mpsc::Sender<Op>) {
+pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::Sender<Op>) {
     let mut buf = vec![0u8; 8192];
     loop {
         match reader.read(&mut buf) {
@@ -64,18 +64,18 @@ pub(crate) fn drain_term_events<T: EventListener>(
             }
             Event::ClipboardLoad(_, respond) => {
                 // The harness holds no clipboard: answer honestly empty.
-                if let Some(w) = writer.as_deref_mut() {
-                    if w.write_all(respond("").as_bytes()).is_err() {
-                        // PTY write failed; keep draining.
-                    }
+                if let Some(w) = writer.as_deref_mut()
+                    && w.write_all(respond("").as_bytes()).is_err()
+                {
+                    // PTY write failed; keep draining.
                 }
             }
             Event::ColorRequest(index, respond) => {
                 let rgb = resolve_color(term, index);
-                if let Some(w) = writer.as_deref_mut() {
-                    if w.write_all(respond(rgb).as_bytes()).is_err() {
-                        // PTY write failed; keep draining.
-                    }
+                if let Some(w) = writer.as_deref_mut()
+                    && w.write_all(respond(rgb).as_bytes()).is_err()
+                {
+                    // PTY write failed; keep draining.
                 }
             }
             Event::TextAreaSizeRequest(respond) => {
@@ -86,10 +86,10 @@ pub(crate) fn drain_term_events<T: EventListener>(
                     cell_width: 8,
                     cell_height: 16,
                 };
-                if let Some(w) = writer.as_deref_mut() {
-                    if w.write_all(respond(size).as_bytes()).is_err() {
-                        // PTY write failed; keep draining.
-                    }
+                if let Some(w) = writer.as_deref_mut()
+                    && w.write_all(respond(size).as_bytes()).is_err()
+                {
+                    // PTY write failed; keep draining.
                 }
             }
             Event::ClipboardStore(_, _)
@@ -117,28 +117,9 @@ fn resolve_color<T: EventListener>(term: &Term<T>, index: usize) -> VteRgb {
         }
     };
     match index {
-        0..=255 => def(index as u8),
+        0..=255 => def(u8::try_from(index).unwrap_or(u8::MAX)),
         256 | 258 => def(7),
         _ => def(0),
-    }
-}
-
-pub(crate) fn publish_current<T: EventListener>(
-    term: &mut Term<T>,
-    events: &mut WorkerEventState,
-    event_rx: &mpsc::Receiver<Event>,
-    writer: Option<&mut (dyn std::io::Write + Send + 'static)>,
-    shared: &Shared,
-    revision: u64,
-    reason: CaptureReason,
-    pid: Option<u32>,
-    cols: u16,
-    rows: u16,
-) {
-    drain_term_events(term, event_rx, events, writer);
-    match build_observation(term, events, revision, reason, pid, cols, rows) {
-        Ok(obs) => shared.publish(obs, None),
-        Err(e) => shared.record_teardown(&format!("observation build failed: {e}")),
     }
 }
 

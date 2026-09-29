@@ -1,21 +1,3 @@
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
-
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
-
 #[cfg(unix)]
 pub(crate) mod guardian_unix {
     use crate::tui_shell::{
@@ -43,21 +25,21 @@ pub(crate) mod guardian_unix {
             .ok()?;
         let text = String::from_utf8_lossy(&out.stdout);
         let mut parts = text.split_whitespace();
-        let (pgid, sid) = match (parts.next(), parts.next()) {
+        let (group, sid) = match (parts.next(), parts.next()) {
             (Some(g), Some(s)) => (g.parse::<i32>().ok()?, s.parse::<i32>().ok()?),
             _ => return None,
         };
         let own = own_pgid()?;
-        if pgid <= 1 || sid < 0 {
+        if group <= 1 || sid < 0 {
             return None;
         }
-        if pgid == own {
+        if group == own {
             // The child shares OUR group: a group sweep would suicide.
             return None;
         }
         Some(crate::tui_shell::ChildIds {
             pid,
-            pgid,
+            pgid: group,
             sid,
             start: lstart_of(pid),
         })
@@ -99,19 +81,19 @@ pub(crate) mod guardian_unix {
         let mut rows = Vec::new();
         for line in text.lines().take(MAX_PS_LINES) {
             let mut parts = line.split_whitespace();
-            let (Some(pid), Some(pgid), Some(sid)) = (parts.next(), parts.next(), parts.next())
+            let (Some(pid), Some(group), Some(sid)) = (parts.next(), parts.next(), parts.next())
             else {
                 continue;
             };
-            let (Ok(pid), Ok(pgid), Ok(sid)) =
-                (pid.parse::<u32>(), pgid.parse::<i32>(), sid.parse::<i32>())
+            let (Ok(pid), Ok(group), Ok(sid)) =
+                (pid.parse::<u32>(), group.parse::<i32>(), sid.parse::<i32>())
             else {
                 continue;
             };
             let lstart: String = parts.collect::<Vec<_>>().join(" ");
             rows.push(ProcRow {
                 pid,
-                pgid,
+                pgid: group,
                 sid,
                 lstart,
             });
@@ -121,18 +103,17 @@ pub(crate) mod guardian_unix {
 
     /// Fresh single-pid identity check, used to re-verify each target
     /// immediately before signalling (closes the scan/kill TOCTOU).
-    pub(super) fn reverify(pid: u32, pgid: i32, sid: i32) -> bool {
-        let out = match std::process::Command::new("ps")
+    pub(super) fn reverify(pid: u32, group: i32, sid: i32) -> bool {
+        let Ok(out) = std::process::Command::new("ps")
             .args(["-o", "pgid=,sess=", "-p", &pid.to_string()])
             .output()
-        {
-            Ok(o) => o,
-            Err(_) => return false,
+        else {
+            return false;
         };
         let text = String::from_utf8_lossy(&out.stdout);
         let mut parts = text.split_whitespace();
         match (parts.next(), parts.next()) {
-            (Some(g), Some(s)) => g.parse::<i32>() == Ok(pgid) && s.parse::<i32>() == Ok(sid),
+            (Some(g), Some(s)) => g.parse::<i32>() == Ok(group) && s.parse::<i32>() == Ok(sid),
             _ => false,
         }
     }
@@ -143,11 +124,11 @@ pub(crate) mod guardian_unix {
     ///    only when its start time still matches; 5. every other target
     ///    re-verified (pgid+sid) immediately before the signal.
     pub(crate) fn sweep(
-        child: &Option<crate::tui_shell::ChildIds>,
+        child: Option<&crate::tui_shell::ChildIds>,
         deadline: Option<Instant>,
         teardown_error: Option<String>,
     ) -> GuardianReport {
-        let Some(child) = child.as_ref() else {
+        let Some(child) = child else {
             return empty_report(
                 None,
                 None,
@@ -260,8 +241,7 @@ pub(crate) mod guardian_unix {
                 .arg("-KILL")
                 .arg(m.pid.to_string())
                 .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+                .is_ok_and(|s| s.success());
             if delivered {
                 signalled.push(m.pid);
             }
@@ -280,11 +260,10 @@ pub(crate) mod guardian_unix {
         own: u32,
     ) -> Vec<u32> {
         let settle = deadline
-            .map(|d| {
+            .map_or(crate::tui_shell::SWEEP_SETTLE, |d| {
                 d.saturating_duration_since(Instant::now())
                     .min(crate::tui_shell::SWEEP_SETTLE)
             })
-            .unwrap_or(crate::tui_shell::SWEEP_SETTLE)
             .min(Duration::from_secs(5));
         let start = Instant::now();
         let mut survivors = Vec::new();

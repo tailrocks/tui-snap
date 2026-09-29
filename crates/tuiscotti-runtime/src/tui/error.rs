@@ -65,25 +65,34 @@ impl std::error::Error for TuiError {}
 /// snapshots are large and only travel on failure paths.
 #[derive(Debug, Clone)]
 pub enum WaitError {
+    /// Deadline passed before the condition held.
     Timeout {
+        /// Time spent waiting.
         waited: Duration,
+        /// Latest snapshot when the wait gave up.
         evidence: Box<Observation>,
     },
+    /// Cancelled via the token.
     Cancelled {
+        /// Latest snapshot when the wait gave up.
         evidence: Box<Observation>,
     },
-    /// wait_frame only: the backend cannot track synchronized frames.
+    /// `wait_frame` only: the backend cannot track synchronized frames.
     Unsupported {
+        /// Capability the backend lacks.
         capability: &'static str,
+        /// Latest snapshot when the wait gave up.
         evidence: Box<Observation>,
     },
     /// The session closed before the condition held.
     Closed {
+        /// Latest snapshot, if any was published.
         evidence: Option<Box<Observation>>,
     },
 }
 
 impl WaitError {
+    /// Evidence snapshot carried by this failure, if any.
     #[must_use]
     pub fn evidence(&self) -> Option<&Observation> {
         match self {
@@ -131,15 +140,18 @@ pub struct CancelToken {
 }
 
 impl CancelToken {
+    /// Fresh uncancelled token.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Cancel: unblock every wait holding a clone.
     pub fn cancel(&self) {
         self.flag.store(true, Ordering::SeqCst);
     }
 
+    /// True once [`CancelToken::cancel`] ran.
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.flag.load(Ordering::SeqCst)

@@ -109,17 +109,31 @@ impl WorkerEventState {
     }
 }
 
-pub(crate) fn run_worker(
-    master: Box<dyn MasterPty + Send>,
-    child: Box<dyn PtyChild + Send + Sync>,
-    writer: Box<dyn std::io::Write + Send>,
-    term_config: TermConfig,
-    cols: u16,
-    rows: u16,
-    pid: Option<u32>,
-    op_rx: mpsc::Receiver<Op>,
-    shared: Arc<Shared>,
-) {
+/// Owned worker inputs: PTY handles, emulator config, and channels.
+pub(crate) struct WorkerParams {
+    pub(crate) master: Box<dyn MasterPty + Send>,
+    pub(crate) child: Box<dyn PtyChild + Send + Sync>,
+    pub(crate) writer: Box<dyn std::io::Write + Send>,
+    pub(crate) term_config: TermConfig,
+    pub(crate) cols: u16,
+    pub(crate) rows: u16,
+    pub(crate) pid: Option<u32>,
+    pub(crate) op_rx: mpsc::Receiver<Op>,
+    pub(crate) shared: Arc<Shared>,
+}
+
+pub(crate) fn run_worker(p: WorkerParams) {
+    let WorkerParams {
+        master,
+        child,
+        writer,
+        term_config,
+        cols,
+        rows,
+        pid,
+        op_rx,
+        shared,
+    } = p;
     let (event_tx, event_rx) = mpsc::channel::<Event>();
     let dims = WorkerDims {
         cols: cols as usize,
@@ -131,12 +145,12 @@ pub(crate) fn run_worker(
 
     loop {
         match op_rx.recv_timeout(WORKER_TICK) {
-            Ok(Op::Feed(bytes)) => ctx.handle_feed(bytes),
-            Ok(Op::Eof(read_err)) => ctx.handle_eof(read_err),
-            Ok(Op::Observe { reply }) => ctx.handle_observe(reply),
-            Ok(Op::Input { input, reply }) => ctx.handle_input(input, reply),
-            Ok(Op::Resize { cols, rows, reply }) => ctx.handle_resize(cols, rows, reply),
-            Ok(Op::CloseInput { reply }) => ctx.handle_close_input(reply),
+            Ok(Op::Feed(bytes)) => ctx.handle_feed(&bytes),
+            Ok(Op::Eof(read_err)) => ctx.handle_eof(read_err.as_deref()),
+            Ok(Op::Observe { reply }) => ctx.handle_observe(&reply),
+            Ok(Op::Input { input, reply }) => ctx.handle_input(&input, &reply),
+            Ok(Op::Resize { cols, rows, reply }) => ctx.handle_resize(cols, rows, &reply),
+            Ok(Op::CloseInput { reply }) => ctx.handle_close_input(&reply),
             Ok(Op::Shutdown) => {
                 ctx.handle_shutdown();
                 return;
@@ -152,18 +166,20 @@ pub(crate) fn run_worker(
 }
 
 pub(crate) fn cols_of<T: EventListener>(term: &Term<T>) -> u16 {
-    term.columns().min(u16::MAX as usize) as u16
+    u16::try_from(term.columns().min(usize::from(u16::MAX))).unwrap_or(u16::MAX)
 }
 
 pub(crate) fn rows_of<T: EventListener>(term: &Term<T>) -> u16 {
-    term.screen_lines().min(u16::MAX as usize) as u16
+    u16::try_from(term.screen_lines().min(usize::from(u16::MAX))).unwrap_or(u16::MAX)
 }
 
 /// Best-effort child poll under the lifecycle guard.
 pub(crate) fn poll_child(
     child: &mut Box<dyn PtyChild + Send + Sync>,
 ) -> Option<portable_pty::ExitStatus> {
-    let _guard = PTY_LIFECYCLE.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = PTY_LIFECYCLE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     child.try_wait().unwrap_or(None)
 }
 
@@ -172,7 +188,9 @@ pub(crate) fn poll_child(
 /// unrelated session's spawn. Records teardown errors instead of failing.
 pub(crate) fn shutdown_child(child: &mut Box<dyn PtyChild + Send + Sync>, shared: &Shared) {
     {
-        let _guard = PTY_LIFECYCLE.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = PTY_LIFECYCLE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match child.try_wait() {
             Ok(Some(_)) => return,
             Ok(None) => {}
@@ -187,7 +205,9 @@ pub(crate) fn shutdown_child(child: &mut Box<dyn PtyChild + Send + Sync>, shared
     let deadline = Instant::now() + KILL_GRACE;
     loop {
         {
-            let _guard = PTY_LIFECYCLE.lock().unwrap_or_else(|e| e.into_inner());
+            let _guard = PTY_LIFECYCLE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match child.try_wait() {
                 Ok(Some(_)) => return,
                 Ok(None) => {}

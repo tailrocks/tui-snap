@@ -35,7 +35,10 @@ impl Shared {
     }
 
     pub(crate) fn publish(&self, obs: Observation, exit: Option<ExitStatus>) {
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if exit.is_some() {
             s.exit = exit;
         }
@@ -51,7 +54,7 @@ impl Shared {
     pub(crate) fn latest(&self) -> Option<Observation> {
         self.state
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .latest
             .clone()
     }
@@ -59,7 +62,7 @@ impl Shared {
     pub(crate) fn revision(&self) -> u64 {
         self.state
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .latest
             .as_ref()
             .map_or(0, |o| o.revision)
@@ -68,24 +71,33 @@ impl Shared {
     pub(crate) fn exit(&self) -> Option<ExitStatus> {
         self.state
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .exit
             .clone()
     }
 
     pub(crate) fn is_closed(&self) -> bool {
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).closed
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .closed
     }
 
     pub(crate) fn mark_closed(&self) {
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.closed = true;
         drop(s);
         self.changed.notify_all();
     }
 
     pub(crate) fn record_teardown(&self, msg: &str) {
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if s.teardown_error.is_none() {
             s.teardown_error = Some(msg.to_string());
         }
@@ -94,7 +106,7 @@ impl Shared {
     pub(crate) fn teardown_error(&self) -> Option<String> {
         self.state
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .teardown_error
             .clone()
     }
@@ -102,7 +114,10 @@ impl Shared {
     /// Wait (bounded by `deadline`, `cancel`, and [`WAIT_SLICE`]) for any
     /// publication. Returns immediately on cancel/deadline.
     pub(crate) fn wait_changed(&self, deadline: Instant, cancel: &CancelToken) {
-        let s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Instant::now();
         if cancel.is_cancelled() || now >= deadline {
             return;
@@ -111,7 +126,7 @@ impl Shared {
         let (guard, _) = self
             .changed
             .wait_timeout(s, slice)
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         drop(guard);
     }
 
@@ -124,11 +139,14 @@ impl Shared {
         cancel: &CancelToken,
     ) -> Option<Observation> {
         // One slice per call: the caller owns quiet/deadline accounting.
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(o) = s.latest.clone() {
-            if o.revision > seen {
-                return Some(o);
-            }
+        let mut s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(o) = s.latest.clone()
+            && o.revision > seen
+        {
+            return Some(o);
         }
         if s.closed || cancel.is_cancelled() {
             return None;
@@ -142,10 +160,10 @@ impl Shared {
             Ok((guard, _)) => guard,
             Err(e) => e.into_inner().0,
         };
-        if let Some(o) = s.latest.clone() {
-            if o.revision > seen {
-                return Some(o);
-            }
+        if let Some(o) = s.latest.clone()
+            && o.revision > seen
+        {
+            return Some(o);
         }
         None
     }

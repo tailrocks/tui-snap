@@ -16,11 +16,14 @@ impl Session {
     /// Graceful shutdown: EOF stdin, wait for natural exit until `deadline`,
     /// reap. On timeout the child is killed and a timeout error (with the
     /// final evidence revision noted) is returned; teardown still completes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` on timeout, close races, or teardown failures.
     pub fn finish(mut self, deadline: Instant) -> Result<ExitStatus, TuiError> {
         let cancel = CancelToken::new();
         match self.close_input() {
-            Ok(()) => {}
-            Err(TuiError::ChildExited(_)) => {}
+            Ok(()) | Err(TuiError::ChildExited(_)) => {}
             Err(e) => return Err(e),
         }
         match self.wait_exit(deadline, &cancel) {
@@ -66,6 +69,10 @@ impl Session {
 
     /// Forceful idempotent teardown: kill a living child (bounded grace),
     /// reap, join threads. Returns the first teardown error, if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError::Teardown` when teardown recorded a failure.
     pub fn close(&mut self) -> Result<(), TuiError> {
         self.teardown();
         if let Some(msg) = self.shared.teardown_error() {
@@ -77,7 +84,7 @@ impl Session {
     pub(crate) fn close_input(&self) -> Result<(), TuiError> {
         let (tx, rx) = mpsc::channel();
         self.send(Op::CloseInput { reply: tx })?;
-        recv_reply(rx, "close stdin")
+        recv_reply(&rx, "close stdin")
     }
 
     /// Run teardown exactly once; never panics (safe from `Drop`).
@@ -98,8 +105,8 @@ impl Session {
     }
 
     pub(crate) fn join_threads(&mut self) {
-        let worker = self.worker.lock().map(|mut g| g.take()).unwrap_or(None);
-        let reader = self.reader.lock().map(|mut g| g.take()).unwrap_or(None);
+        let worker = self.worker.lock().map_or(None, |mut g| g.take());
+        let reader = self.reader.lock().map_or(None, |mut g| g.take());
         if let Some(h) = worker {
             join_one(h, &self.shared, "worker", JOIN_GRACE);
         }
@@ -153,7 +160,7 @@ impl Drop for Session {
 }
 
 pub(crate) fn recv_reply(
-    rx: mpsc::Receiver<Result<(), TuiError>>,
+    rx: &mpsc::Receiver<Result<(), TuiError>>,
     what: &str,
 ) -> Result<(), TuiError> {
     rx.recv_timeout(Duration::from_secs(10))

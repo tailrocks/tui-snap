@@ -1,14 +1,18 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-use super::*;
-use serde::{Deserialize, Serialize};
+use super::{
+    OpError, SESSION_ENDPOINT_VERSION, SessionBackend, SessionEndpoint, SessionInfo, SessionStatus,
+    current_uid, endpoint_path, kill_pid, now_unix, pid_alive, read_endpoint, runtime_dir,
+    validate_session_name, write_endpoint,
+};
 
 /// Start a named session: spawn `argv` detached (output to the session log),
 /// publish the endpoint. A live same-name session is a `session-exists` error
 /// unless `force` stops it first.
+///
+/// # Errors
+///
+/// Returns [`OpError`] for a bad name, a live same-name session, or spawn failure.
 pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<SessionInfo, OpError> {
-    let owned: Vec<std::ffi::OsString> = argv.iter().map(|a| std::ffi::OsString::from(a)).collect();
+    let owned: Vec<std::ffi::OsString> = argv.iter().map(std::ffi::OsString::from).collect();
     session_start_os(name, &owned, force)
 }
 
@@ -16,6 +20,10 @@ pub fn session_start(name: &str, argv: &[String], force: bool) -> Result<Session
 /// child spawns byte-exact. The endpoint record keeps a lossy UTF-8
 /// projection (`argv_display`) because endpoint JSON and the machine-protocol
 /// schema are UTF-8; the record is diagnostic, never re-spawned.
+///
+/// # Errors
+///
+/// Returns [`OpError`] for a bad name, a live same-name session, or spawn failure.
 pub fn session_start_os(
     name: &str,
     argv: &[std::ffi::OsString],
@@ -100,6 +108,10 @@ pub fn session_start_os(
 
 /// Stop a named session: SIGTERM the recorded pid (best effort when already
 /// dead), remove the endpoint. Returns the last known info.
+///
+/// # Errors
+///
+/// Returns [`OpError`] for a bad name, a missing endpoint, or removal failure.
 pub fn session_stop(name: &str) -> Result<SessionInfo, OpError> {
     validate_session_name(name)?;
     let dir = runtime_dir()?;
@@ -145,6 +157,10 @@ pub fn session_stop(name: &str) -> Result<SessionInfo, OpError> {
 
 /// List all valid endpoints with liveness. Corrupt files are skipped only via
 /// [`session_prune`]'s report; here a corrupt file is an error.
+///
+/// # Errors
+///
+/// Returns [`OpError`] when the runtime dir cannot be listed or read.
 pub fn session_list() -> Result<Vec<SessionInfo>, OpError> {
     let dir = runtime_dir()?;
     let mut out = Vec::new();
@@ -152,13 +168,13 @@ pub fn session_list() -> Result<Vec<SessionInfo>, OpError> {
         .map_err(|e| OpError::new("io", format!("list {}: {e}", dir.display())))?
         .collect::<Result<_, _>>()
         .map_err(|e| OpError::new("io", format!("list {}: {e}", dir.display())))?;
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
         let name = entry.file_name().to_string_lossy().into_owned();
         let Some(stem) = name.strip_suffix(".json") else {
             continue;
         };
-        if stem.contains('.') || entry.file_type().map(|t| !t.is_file()).unwrap_or(true) {
+        if stem.contains('.') || entry.file_type().map_or(true, |t| !t.is_file()) {
             continue;
         }
         if let Some(ep) = read_endpoint(&dir, stem)? {
@@ -180,6 +196,10 @@ pub fn session_list() -> Result<Vec<SessionInfo>, OpError> {
 }
 
 /// Remove endpoints whose pid is dead. Returns the pruned names.
+///
+/// # Errors
+///
+/// Returns [`OpError`] when the session list or an endpoint removal fails.
 pub fn session_prune() -> Result<Vec<String>, OpError> {
     let dir = runtime_dir()?;
     let mut pruned = Vec::new();

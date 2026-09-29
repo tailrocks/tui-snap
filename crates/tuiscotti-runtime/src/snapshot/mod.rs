@@ -28,8 +28,5 @@ mod paths;
 mod report;
 mod types;
 
-pub use check::*;
-pub use mutate::*;
-pub use paths::*;
 pub use report::*;
 pub use types::*;

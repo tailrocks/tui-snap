@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use super::*;
+use super::{OpError, PROTOCOL_VERSION};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -11,13 +10,17 @@ use serde::{Deserialize, Serialize};
 /// One journal event.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JournalEvent {
+    /// Monotonic event number within the journal.
     pub seq: u64,
+    /// Event kind string.
     pub kind: String,
+    /// Human-readable event detail.
     pub detail: String,
 }
 
 /// Append-only JSONL recorder with hard bounds. Exceeding a bound is an
 /// error, never silent truncation.
+#[derive(Debug)]
 pub struct Recorder {
     file: std::fs::File,
     seq: u64,
@@ -27,6 +30,11 @@ pub struct Recorder {
 }
 
 impl Recorder {
+    /// Create a recorder appending to `path`, creating parent dirs as needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpError`] for zero bounds or when the file cannot be created.
     pub fn create(path: &Path, max_events: u64, max_bytes: u64) -> Result<Self, OpError> {
         if max_events == 0 || max_bytes == 0 {
             return Err(OpError::new(
@@ -34,11 +42,11 @@ impl Recorder {
                 "record bounds must be nonzero",
             ));
         }
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| OpError::new("io", format!("mkdir {}: {e}", parent.display())))?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| OpError::new("io", format!("mkdir {}: {e}", parent.display())))?;
         }
         let file = std::fs::File::create(path)
             .map_err(|e| OpError::new("io", format!("create {}: {e}", path.display())))?;
@@ -51,7 +59,13 @@ impl Recorder {
         })
     }
 
+    /// Append one event; exceeding a bound is an error, never truncation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OpError`] when a bound is exceeded or the append fails.
     pub fn record(&mut self, kind: &str, detail: &str) -> Result<(), OpError> {
+        use std::io::Write;
         if self.seq >= self.max_events {
             return Err(OpError::new(
                 "bound-exceeded",
@@ -72,7 +86,6 @@ impl Recorder {
                 format!("byte cap {} reached", self.max_bytes),
             ));
         }
-        use std::io::Write;
         self.file
             .write_all(&line)
             .map_err(|e| OpError::new("io", format!("append journal: {e}")))?;
@@ -81,6 +94,7 @@ impl Recorder {
         Ok(())
     }
 
+    /// Number of events recorded so far.
     #[must_use]
     pub fn events(&self) -> u64 {
         self.seq
@@ -88,6 +102,10 @@ impl Recorder {
 }
 
 /// Read a journal back (offline; used by `trace`).
+///
+/// # Errors
+///
+/// Returns [`OpError`] when the file cannot be read or holds a bad event.
 pub fn read_journal(path: &Path) -> Result<Vec<JournalEvent>, OpError> {
     use std::io::BufRead;
     let file = std::fs::File::open(path)
@@ -116,13 +134,17 @@ pub fn read_journal(path: &Path) -> Result<Vec<JournalEvent>, OpError> {
 /// One offline verdict file (`<name>.verdict.json`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Verdict {
+    /// Verdict name (file stem).
     pub name: String,
+    /// Verdict status (`pass` or `fail`).
     pub status: String,
+    /// Human-readable verdict detail.
     #[serde(default)]
     pub detail: String,
 }
 
 impl Verdict {
+    /// True when the status is `pass`.
     #[must_use]
     pub fn passed(&self) -> bool {
         self.status == "pass"
@@ -131,12 +153,16 @@ impl Verdict {
 
 /// Read all `*.verdict.json` files in `dir` (sorted by name). Non-verdict
 /// files are ignored; a malformed verdict file is an error.
+///
+/// # Errors
+///
+/// Returns [`OpError`] when the dir cannot be read or a verdict is malformed.
 pub fn read_verdicts(dir: &Path) -> Result<Vec<Verdict>, OpError> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .map_err(|e| OpError::new("io", format!("read {}: {e}", dir.display())))?
         .collect::<Result<_, _>>()
         .map_err(|e| OpError::new("io", format!("read {}: {e}", dir.display())))?;
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     let mut out = Vec::new();
     for entry in entries {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -144,7 +170,7 @@ pub fn read_verdicts(dir: &Path) -> Result<Vec<Verdict>, OpError> {
             continue;
         }
         let bytes = std::fs::read(entry.path())
-            .map_err(|e| OpError::new("io", format!("read {}: {e}", name)))?;
+            .map_err(|e| OpError::new("io", format!("read {name}: {e}")))?;
         let v: Verdict = serde_json::from_slice(&bytes)
             .map_err(|e| OpError::new("invalid-input", format!("{name}: bad verdict: {e}")))?;
         out.push(v);
@@ -154,7 +180,9 @@ pub fn read_verdicts(dir: &Path) -> Result<Vec<Verdict>, OpError> {
 
 /// Write a standalone offline HTML report from `verdicts`. Pure rendering over
 /// the given verdicts; reads nothing else.
+#[must_use]
 pub fn write_html_report(verdicts: &[Verdict], title: &str) -> String {
+    use std::fmt::Write as _;
     fn esc(s: &str) -> String {
         s.replace('&', "&amp;")
             .replace('<', "&lt;")
@@ -166,12 +194,14 @@ pub fn write_html_report(verdicts: &[Verdict], title: &str) -> String {
     let mut rows = String::new();
     for v in verdicts {
         let cls = if v.passed() { "pass" } else { "fail" };
-        rows.push_str(&format!(
-            "<tr class=\"{cls}\"><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+        writeln!(
+            rows,
+            "<tr class=\"{cls}\"><td>{}</td><td>{}</td><td>{}</td></tr>",
             esc(&v.name),
             esc(&v.status),
             esc(&v.detail)
-        ));
+        )
+        .ok();
     }
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{t}</title>\

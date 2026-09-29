@@ -1,12 +1,9 @@
-use super::*;
-use crate::snapshot::{
-    CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
+use super::{
+    ArtifactPaths, GroupedOutcome, GroupedStore, artifact_paths, read_optional, sibling_diff,
 };
+use crate::snapshot::{CompareOutcome, SnapshotError, Status, write_atomic};
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::Frame;
-use tuiscotti_render::diff;
-use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render::{self, Renderer};
 
 /// Candidate seal: `<name>.manifest.json` under the actual root.
 fn manifest_path(actual_root: &Path, name: &str) -> PathBuf {
@@ -21,10 +18,11 @@ fn verdict_path(actual_root: &Path, name: &str) -> PathBuf {
 /// Lowercase hex SHA-256 of `bytes` (manifest/verdict integrity, not gating).
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
     let digest = Sha256::digest(bytes);
     let mut s = String::with_capacity(digest.len() * 2);
     for b in digest {
-        s.push_str(&format!("{b:02x}"));
+        write!(s, "{b:02x}").ok();
     }
     s
 }
@@ -167,14 +165,11 @@ impl GroupedStore {
             }
         }
         let seal = manifest_path(&self.actual_root, name);
-        let text = match std::fs::read_to_string(&seal) {
-            Ok(t) => t,
-            Err(_) => {
-                return Ok(Some(format!(
-                    "candidate `{name}` incomplete: {} missing (interrupted write?)",
-                    seal.display()
-                )));
-            }
+        let Ok(text) = std::fs::read_to_string(&seal) else {
+            return Ok(Some(format!(
+                "candidate `{name}` incomplete: {} missing (interrupted write?)",
+                seal.display()
+            )));
         };
         let manifest: serde_json::Value = match serde_json::from_str(&text) {
             Ok(v) => v,
@@ -185,7 +180,11 @@ impl GroupedStore {
                 )));
             }
         };
-        if manifest.get("complete").and_then(|v| v.as_bool()) != Some(true) {
+        if manifest
+            .get("complete")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        {
             return Ok(Some(format!(
                 "candidate `{name}` incomplete: {} not sealed (complete != true)",
                 seal.display()
@@ -241,23 +240,26 @@ impl GroupedStore {
             Ok(v) => v,
             Err(_) => return Ok(None),
         };
-        let status = match verdict
+        let Some(status) = verdict
             .get("status")
             .and_then(|v| v.as_str())
             .and_then(status_from_str)
-        {
-            Some(s) => s,
-            None => return Ok(None),
+        else {
+            return Ok(None);
         };
         if verdict.get("name").and_then(|v| v.as_str()) != Some(name) {
             return Ok(None);
         }
-        if verdict.get("pixel_threshold").and_then(|v| v.as_f64()) != Some(pixel_threshold) {
+        if verdict
+            .get("pixel_threshold")
+            .and_then(serde_json::Value::as_f64)
+            != Some(pixel_threshold)
+        {
             return Ok(None);
         }
         if !verdict
             .get("checks_performed")
-            .is_some_and(|v| v.is_array())
+            .is_some_and(serde_json::Value::is_array)
         {
             return Ok(None);
         }
@@ -324,7 +326,9 @@ impl GroupedStore {
             status,
             cell_diffs: Vec::new(),
             cell_diff_total: 0,
-            pixel_score: verdict.get("pixel_score").and_then(|v| v.as_f64()),
+            pixel_score: verdict
+                .get("pixel_score")
+                .and_then(serde_json::Value::as_f64),
             approved_png_regenerated: false,
             digest_expected: None,
             digest_actual: verdict

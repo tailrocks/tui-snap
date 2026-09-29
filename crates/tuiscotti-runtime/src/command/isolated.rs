@@ -1,11 +1,7 @@
-use super::*;
-use std::ffi::{OsStr, OsString};
-use std::io::{Read, Write};
+use super::Command;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::time::{Duration, Instant};
+use std::sync::atomic::Ordering;
 
 /// Dynamic-library search paths scrubbed from isolated children by default.
 const DYLIB_VARS: &[&str] = &[
@@ -29,6 +25,10 @@ pub struct IsolatedEnv {
 
 impl IsolatedEnv {
     /// Create the fixture; same as [`isolated_env`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the OS error if the temp fixture cannot be created.
     pub fn new() -> std::io::Result<Self> {
         isolated_env()
     }
@@ -38,6 +38,7 @@ impl IsolatedEnv {
     /// child under test cannot start without them (e.g. rustup shims or a
     /// toolchain libdir). macOS SIP still strips `DYLD_*` for system binaries
     /// regardless of this setting; that is platform behavior, not this API.
+    #[must_use]
     pub fn preserve_dylib_path(mut self, preserve: bool) -> Self {
         self.preserve_dylib_path = preserve;
         self
@@ -132,6 +133,10 @@ impl Drop for IsolatedEnv {
 /// Create an [`IsolatedEnv`] fixture: a unique `0700` temp root with `home/`,
 /// `work/`, `tmp/`, and the XDG dirs pre-created. Std-only unique naming
 /// (pid + nanos + counter); retries on collision.
+///
+/// # Errors
+///
+/// Returns the OS error if the temp fixture cannot be created.
 pub fn isolated_env() -> std::io::Result<IsolatedEnv> {
     use std::sync::atomic::AtomicU64;
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -142,8 +147,7 @@ pub fn isolated_env() -> std::io::Result<IsolatedEnv> {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_nanos());
         let root = base.join(format!("tuisnap-env-{pid}-{nanos}-{n}"));
         match std::fs::create_dir(&root) {
             Ok(()) => {

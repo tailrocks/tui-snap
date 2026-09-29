@@ -1,6 +1,10 @@
-use super::*;
+use super::{
+    CellDiff, CompareOutcome, MAX_CELL_DIFFS, SnapshotError, Status, Store, sha256_hex,
+    write_atomic,
+};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::{Frame, FrameError};
+use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
@@ -50,7 +54,7 @@ fn summarize(cell: &tuiscotti_core::frame::Cell) -> String {
             tuiscotti_core::frame::Color::Indexed(i) => tuiscotti_core::frame::Rgb::from_indexed(i),
             tuiscotti_core::frame::Color::Rgb(r) => r,
         };
-        mods.push_str(&format!("+ulc={}", uc.to_hex()));
+        write!(mods, "+ulc={}", uc.to_hex()).ok();
     }
     format!(
         "{:?} fg={} bg={}{mods}",
@@ -71,6 +75,10 @@ impl Store {
     ///
     /// This constructs a fresh [`render::Renderer`] per call; bulk gates
     /// should build one and call [`Self::check_with`] instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering, reading, or writing artifacts fails.
     pub fn check(
         &self,
         name: &str,
@@ -85,6 +93,10 @@ impl Store {
 
     /// [`Self::check`] through a caller-owned [`render::Renderer`], so a
     /// suite reuses the parsed faces and the glyph cache across checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering, reading, or writing artifacts fails.
     pub fn check_with(
         &self,
         renderer: &mut render::Renderer,
@@ -95,7 +107,7 @@ impl Store {
         let candidate = self.write_candidate(renderer, name, actual, pixel_threshold)?;
         let approved_frame_path = self.approved_frame(name);
         let mut outcome = fresh_outcome(name, actual, &candidate, &approved_frame_path);
-        let Some(approved) = self.load_approved_frame(&approved_frame_path, &mut outcome)? else {
+        let Some(approved) = Self::load_approved_frame(&approved_frame_path, &mut outcome)? else {
             return Ok(outcome);
         };
         outcome.digest_expected = Some(format!("{:016x}", approved.digest()));
@@ -126,13 +138,13 @@ impl Store {
         // leniency lives only on this validated perceptual policy.
         let perceptual = diff::PerceptualPolicy::new(pixel_threshold)?;
         actual.validate().map_err(SnapshotError::from)?;
-        let rendered = renderer.render(actual).map_err(SnapshotError::from)?;
+        let artifacts = renderer.render(actual).map_err(SnapshotError::from)?;
         let actual_frame_path = self.actual_frame(name);
         let actual_png_path = self.actual_png(name);
         let frame_bytes = actual.to_json();
-        let fidelity_bytes = rendered.fidelity.to_json();
+        let fidelity_bytes = artifacts.fidelity.to_json();
         write_atomic(&actual_frame_path, frame_bytes.as_bytes())?;
-        write_atomic(&actual_png_path, &rendered.png)?;
+        write_atomic(&actual_png_path, &artifacts.png)?;
         write_atomic(
             &Self::fidelity_sidecar(&actual_png_path),
             fidelity_bytes.as_bytes(),
@@ -144,7 +156,7 @@ impl Store {
         let manifest = serde_json::json!({
             "name": name,
             "frame_sha256": sha256_hex(frame_bytes.as_bytes()),
-            "png_sha256": sha256_hex(&rendered.png),
+            "png_sha256": sha256_hex(&artifacts.png),
             "fidelity_sha256": sha256_hex(fidelity_bytes.as_bytes()),
             "profile": renderer.profile().name,
             "complete": true,
@@ -153,7 +165,7 @@ impl Store {
             .map_err(|e| SnapshotError(format!("candidate manifest failed to serialize: {e}")))?;
         write_atomic(&self.actual_manifest(name), manifest_json.as_bytes())?;
         Ok(CandidateWrites {
-            png_bytes: rendered.png,
+            png_bytes: artifacts.png,
             actual_frame: actual_frame_path,
             actual_png: actual_png_path,
             perceptual,
@@ -163,7 +175,6 @@ impl Store {
     /// Load the approved frame. `None` (missing file, or a corrupt file
     /// recorded on the outcome) ends the check with the outcome as-is.
     fn load_approved_frame(
-        &self,
         approved_frame_path: &Path,
         outcome: &mut CompareOutcome,
     ) -> Result<Option<Frame>, SnapshotError> {
@@ -192,7 +203,7 @@ impl Store {
 
     /// Pixel comparison over decoded PNGs. C06: expected bytes come
     /// from disk or the check fails — a missing approved PNG is
-    /// MissingApproval, never regenerated in memory (frozen visual
+    /// `MissingApproval`, never regenerated in memory (frozen visual
     /// mode: a renderer upgrade must fail loudly, not silently
     /// re-render the expectation it is supposed to gate).
     /// Returns `true` when the outcome is final (missing approved PNG).
@@ -224,9 +235,7 @@ impl Store {
         outcome.expected_png = Some(approved_png_path);
         let verdict = diff::compare_png(&approved_png_bytes, &candidate.png_bytes)?;
         outcome.expected_png_bytes = Some(approved_png_bytes);
-        if !verdict.dims_equal {
-            outcome.status = Status::DimensionMismatch;
-        } else {
+        if verdict.dims_equal {
             outcome.pixel_score = Some(verdict.score);
             if !candidate.perceptual.allows(verdict.score)
                 && !matches!(
@@ -241,6 +250,8 @@ impl Store {
                 write_atomic(&path, &verdict.diff_png)?;
                 outcome.diff_png = Some(path);
             }
+        } else {
+            outcome.status = Status::DimensionMismatch;
         }
         Ok(false)
     }
@@ -303,14 +314,8 @@ fn compare_cells(actual: &Frame, approved: &Frame, outcome: &mut CompareOutcome)
                 });
             } else {
                 for (x, y) in positions.into_iter().take(MAX_CELL_DIFFS) {
-                    let e = approved
-                        .get(x, y)
-                        .map(summarize)
-                        .unwrap_or_else(|| "∅".into());
-                    let a = actual
-                        .get(x, y)
-                        .map(summarize)
-                        .unwrap_or_else(|| "∅".into());
+                    let e = approved.get(x, y).map_or_else(|| "∅".into(), summarize);
+                    let a = actual.get(x, y).map_or_else(|| "∅".into(), summarize);
                     outcome.cell_diffs.push(CellDiff {
                         x,
                         y,

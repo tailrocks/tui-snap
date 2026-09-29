@@ -1,12 +1,6 @@
-use super::*;
-use crate::snapshot::{
-    CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
-};
+use super::{InvalidName, validate_name};
+use crate::snapshot::{CompareOutcome, SnapshotError, Status};
 use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::Frame;
-use tuiscotti_render::diff;
-use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render::{self, Renderer};
 
 impl From<InvalidName> for SnapshotError {
     fn from(e: InvalidName) -> Self {
@@ -17,9 +11,13 @@ impl From<InvalidName> for SnapshotError {
 /// The on-disk artifact paths of one scenario under one root.
 #[derive(Debug, Clone)]
 pub struct ArtifactPaths {
+    /// Colored terminal text (normalized SGR dump).
     pub ansi: PathBuf,
+    /// Plain black-and-white text.
     pub txt: PathBuf,
+    /// Colored image (authoritative pixel gate).
     pub png: PathBuf,
+    /// Standalone colored HTML render.
     pub html: PathBuf,
     /// Canonical frame sidecar (scratch roots only — never approved state).
     pub frame_json: PathBuf,
@@ -31,6 +29,7 @@ pub struct ArtifactPaths {
 /// gate individually (`None` = the approved artifact is missing).
 #[derive(Debug, Clone)]
 pub struct GroupedOutcome {
+    /// Shared check outcome (status, scores, paths).
     pub outcome: CompareOutcome,
     /// `.ansi` byte gate (the cell-exact gate).
     pub ansi_match: Option<bool>,
@@ -45,16 +44,22 @@ pub struct GroupedOutcome {
 }
 
 impl GroupedOutcome {
+    /// Gate status of this grouped check.
     pub fn status(&self) -> Status {
         self.outcome.status
     }
 
+    /// Whether the grouped check matched on every gate.
     #[must_use]
     pub fn matched(&self) -> bool {
         self.outcome.status.matched()
     }
 
     /// Fail with an actionable message (artifact paths + which gates fell).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when any gate did not match.
     pub fn ensure_matched(&self) -> Result<(), SnapshotError> {
         self.outcome.ensure_matched()
     }
@@ -92,12 +97,14 @@ impl GroupedStore {
         }
     }
 
+    /// Override the actual-artifacts root.
     #[must_use]
     pub fn with_actual_root(mut self, root: &Path) -> Self {
         self.actual_root = root.to_path_buf();
         self
     }
 
+    /// Override the diff-PNG root.
     #[must_use]
     pub fn with_diff_root(mut self, root: &Path) -> Self {
         self.diff_root = root.to_path_buf();
@@ -112,16 +119,19 @@ impl GroupedStore {
         self
     }
 
+    /// Approved-artifacts root.
     #[must_use]
     pub fn approved_root(&self) -> &Path {
         &self.approved_root
     }
 
+    /// Actual-artifacts root.
     #[must_use]
     pub fn actual_root(&self) -> &Path {
         &self.actual_root
     }
 
+    /// Diff-PNG root.
     #[must_use]
     pub fn diff_root(&self) -> &Path {
         &self.diff_root
@@ -137,11 +147,19 @@ impl GroupedStore {
 
     /// Scenario names with actual artifacts, recursively, sorted. An absent
     /// actual root lists nothing (a fresh store is empty, not an error).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when the actual root cannot be listed.
     pub fn actual_names(&self) -> Result<Vec<String>, SnapshotError> {
         list_names(&self.actual_root)
     }
 
     /// Scenario names with approved artifacts, recursively, sorted.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when the approved root cannot be listed.
     pub fn approved_names(&self) -> Result<Vec<String>, SnapshotError> {
         list_names(&self.approved_root)
     }

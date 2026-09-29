@@ -1,11 +1,7 @@
-use super::*;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashSet;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::Path;
 
 /// Required-scenario inventory: record what ran, verify against what must run (N06).
 ///
@@ -26,24 +22,31 @@ impl ScenarioManifest {
     /// assert!(matches!(m.evaluate(&["a".into()]), ManifestVerdict::Partial { .. }));
     /// ```
     pub fn new(required: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        let mut v: Vec<String> = required.into_iter().map(|s| s.into()).collect();
+        let mut v: Vec<String> = required.into_iter().map(Into::into).collect();
         v.sort();
         v.dedup();
         Self { required: v }
     }
 
     /// Required scenario names.
+    #[must_use]
     pub fn required(&self) -> &[String] {
         &self.required
     }
 
     /// Load a manifest file: one scenario per line; blank lines and `#` comments skipped.
+    /// # Errors
+    ///
+    /// Returns an I/O error when the manifest file cannot be read.
     pub fn load(path: &Path) -> std::io::Result<Self> {
         let text = fs::read_to_string(path)?;
         Ok(Self::new(parse_lines(&text)))
     }
 
     /// Save the manifest in [`ScenarioManifest::load`] format.
+    /// # Errors
+    ///
+    /// Returns an I/O error when the manifest file cannot be written.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -59,13 +62,14 @@ impl ScenarioManifest {
     /// Verify `executed` against the required set. Full only when every required
     /// scenario was executed; an empty manifest is [`ManifestVerdict::Incomplete`]
     /// (a vacuous "full" would be a fake-full gate).
+    #[must_use]
     pub fn evaluate(&self, executed: &[String]) -> ManifestVerdict {
         if self.required.is_empty() {
             return ManifestVerdict::Incomplete {
                 reason: "manifest lists no required scenarios".to_string(),
             };
         }
-        let have: HashSet<&str> = executed.iter().map(|s| s.as_str()).collect();
+        let have: HashSet<&str> = executed.iter().map(String::as_str).collect();
         let missing: Vec<String> = self
             .required
             .iter()
@@ -83,6 +87,7 @@ impl ScenarioManifest {
 
     /// Verify an execution record file (see [`ScenarioManifest::record_execution`]).
     /// A missing or unreadable record is [`ManifestVerdict::Incomplete`], never full.
+    #[must_use]
     pub fn evaluate_record(&self, record_path: &Path) -> ManifestVerdict {
         match load_record(record_path) {
             Ok(executed) => self.evaluate(&executed),
@@ -96,6 +101,9 @@ impl ScenarioManifest {
     }
 
     /// Append one executed scenario to the record file (created with parents).
+    /// # Errors
+    ///
+    /// Returns an I/O error when the record file cannot be created or written.
     pub fn record_execution(record_path: &Path, scenario: &str) -> std::io::Result<()> {
         if let Some(parent) = record_path.parent() {
             fs::create_dir_all(parent)?;
@@ -113,15 +121,25 @@ impl ScenarioManifest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManifestVerdict {
     /// Every required scenario executed.
-    Full { executed: usize },
+    Full {
+        /// How many required scenarios executed.
+        executed: usize,
+    },
     /// Filtered/partial run: these required scenarios never executed.
-    Partial { missing: Vec<String> },
+    Partial {
+        /// Required scenarios that never executed.
+        missing: Vec<String>,
+    },
     /// No trustworthy evidence (missing record, empty manifest, …).
-    Incomplete { reason: String },
+    Incomplete {
+        /// Why no trustworthy verdict exists.
+        reason: String,
+    },
 }
 
 impl ManifestVerdict {
     /// True only for [`ManifestVerdict::Full`].
+    #[must_use]
     pub fn is_full(&self) -> bool {
         matches!(self, ManifestVerdict::Full { .. })
     }

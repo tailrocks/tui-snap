@@ -1,12 +1,6 @@
-use super::*;
-use crate::snapshot::{
-    CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
-};
-use std::path::{Path, PathBuf};
+use super::{ArtifactPaths, GroupedOutcome};
+use crate::snapshot::{CompareOutcome, Status};
 use tuiscotti_core::frame::Frame;
-use tuiscotti_render::diff;
-use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render::{self, Renderer};
 
 /// Locate the first differing byte of two blobs, for human diagnostics.
 fn first_difference(approved: &[u8], actual: &[u8]) -> String {
@@ -15,7 +9,12 @@ fn first_difference(approved: &[u8], actual: &[u8]) -> String {
     while i < n && approved[i] == actual[i] {
         i += 1;
     }
-    let line = approved[..i].iter().filter(|&&c| c == b'\n').count() + 1;
+    let mut line = 1;
+    for &b in &approved[..i] {
+        if b == b'\n' {
+            line += 1;
+        }
+    }
     format!(
         "first difference at byte {i} (approved line {line}); approved {} bytes, actual {} bytes",
         approved.len(),
@@ -62,27 +61,15 @@ pub(crate) fn fresh_grouped(name: &str, cheap: &CheapActuals, actual: &Frame) ->
     }
 }
 
-/// Which approved artifacts are absent (empty = all present).
-pub(crate) fn missing_approved_names(
-    ansi_missing: bool,
-    txt_missing: bool,
-    html_missing: bool,
-    png_missing: bool,
-) -> Vec<&'static str> {
-    let mut missing = Vec::new();
-    if ansi_missing {
-        missing.push(".ansi");
-    }
-    if txt_missing {
-        missing.push(".txt");
-    }
-    if html_missing {
-        missing.push(".html");
-    }
-    if png_missing {
-        missing.push(".png");
-    }
-    missing
+/// Which approved artifacts are absent (empty = all present). `approved`
+/// holds `.ansi`/`.txt`/`.html`/`.png` in that order (`None` = missing).
+pub(crate) fn missing_approved_names(approved: [Option<&[u8]>; 4]) -> Vec<&'static str> {
+    const LABELS: [&str; 4] = [".ansi", ".txt", ".html", ".png"];
+    approved
+        .iter()
+        .zip(LABELS)
+        .filter_map(|(slot, label)| slot.is_none().then_some(label))
+        .collect()
 }
 
 /// ANSI + TXT byte gates: cell-exact, then content-only.
@@ -121,7 +108,7 @@ pub(crate) fn run_byte_gates(
 }
 
 /// HTML byte gate: identical cells with a changed renderer/font fail
-/// here — a render-level event, reported as PixelsDiffer.
+/// here — a render-level event, reported as `PixelsDiffer`.
 pub(crate) fn run_html_gate(
     grouped: &mut GroupedOutcome,
     approved_html: &[u8],

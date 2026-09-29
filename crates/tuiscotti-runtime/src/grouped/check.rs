@@ -1,7 +1,8 @@
-use super::*;
-use crate::snapshot::{
-    CompareOutcome, SnapshotError, Status, StoreReport, report_entry, write_atomic, write_report_at,
+use super::{
+    ArtifactPaths, CheapActuals, GroupedOutcome, GroupedStore, fresh_grouped,
+    missing_approved_names, run_byte_gates, run_html_gate, validate_name,
 };
+use crate::snapshot::{SnapshotError, Status, write_atomic};
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::Frame;
 use tuiscotti_render::diff;
@@ -44,6 +45,10 @@ impl GroupedStore {
     ///
     /// This constructs a fresh [`Renderer`] per call; bulk gates should
     /// build one and call [`Self::check_with`] instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering, reading, or writing artifacts fails.
     pub fn check(
         &self,
         name: &str,
@@ -59,6 +64,10 @@ impl GroupedStore {
     /// [`Self::check`] through a caller-owned [`Renderer`], so a suite
     /// reuses the parsed faces and the glyph cache across checks. PNG/HTML
     /// always render fresh from the candidate frame (C02).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when rendering, reading, or writing artifacts fails.
     pub fn check_with(
         &self,
         renderer: &mut Renderer,
@@ -74,12 +83,12 @@ impl GroupedStore {
         let approved_txt = read_optional(&grouped.approved.txt)?;
         let approved_html = read_optional(&grouped.approved.html)?;
         let approved_png = read_optional(&grouped.approved.png)?;
-        let missing = missing_approved_names(
-            approved_ansi.is_none(),
-            approved_txt.is_none(),
-            approved_html.is_none(),
-            approved_png.is_none(),
-        );
+        let missing = missing_approved_names([
+            approved_ansi.as_deref(),
+            approved_txt.as_deref(),
+            approved_html.as_deref(),
+            approved_png.as_deref(),
+        ]);
         if !missing.is_empty() {
             self.seal_missing_approval(
                 renderer,
@@ -118,7 +127,7 @@ impl GroupedStore {
         // approved-side tamper. There is no skip-render path anymore, so
         // there is nothing to mark not-checked: every tier renders.
         let (actual_html_bytes, actual_png_bytes) =
-            self.render_actual_artifacts(renderer, name, actual, &grouped.actual)?;
+            Self::render_actual_artifacts(renderer, name, actual, &grouped.actual)?;
         run_html_gate(&mut grouped, &approved_html, &actual_html_bytes, &mut notes);
         self.run_png_gate(
             name,
@@ -129,7 +138,7 @@ impl GroupedStore {
             &mut notes,
         )?;
 
-        self.finalize_check(renderer, name, &mut grouped, pixel_threshold, notes)?;
+        self.finalize_check(renderer, name, &mut grouped, pixel_threshold, &notes)?;
         Ok(grouped)
     }
 
@@ -160,7 +169,6 @@ impl GroupedStore {
     /// Render the expensive actuals (png/html/fidelity) fresh from the
     /// candidate frame and write them. Returns `(html_bytes, png_bytes)`.
     fn render_actual_artifacts(
-        &self,
         renderer: &mut Renderer,
         name: &str,
         actual: &Frame,
@@ -224,13 +232,7 @@ impl GroupedStore {
     ) -> Result<(), SnapshotError> {
         let outcome = &mut grouped.outcome;
         let verdict = diff::compare_png(approved_png, actual_png_bytes)?;
-        if !verdict.dims_equal {
-            outcome.status = Status::DimensionMismatch;
-            notes.push(format!(
-                "png dimensions differ: approved {:?}, actual {:?}",
-                verdict.expected_dims, verdict.actual_dims
-            ));
-        } else {
+        if verdict.dims_equal {
             outcome.pixel_score = Some(verdict.score);
             if verdict.score < pixel_threshold
                 && !matches!(
@@ -245,6 +247,12 @@ impl GroupedStore {
                 write_atomic(&path, &verdict.diff_png)?;
                 outcome.diff_png = Some(path);
             }
+        } else {
+            outcome.status = Status::DimensionMismatch;
+            notes.push(format!(
+                "png dimensions differ: approved {:?}, actual {:?}",
+                verdict.expected_dims, verdict.actual_dims
+            ));
         }
         Ok(())
     }
@@ -257,7 +265,7 @@ impl GroupedStore {
         name: &str,
         grouped: &mut GroupedOutcome,
         pixel_threshold: f64,
-        notes: Vec<String>,
+        notes: &[String],
     ) -> Result<(), SnapshotError> {
         if matches!(grouped.outcome.status, Status::MissingApproval) {
             grouped.outcome.status = Status::Matched;

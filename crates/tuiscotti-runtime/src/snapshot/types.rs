@@ -1,9 +1,6 @@
-use super::*;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::{Frame, FrameError};
-use tuiscotti_render::diff;
-use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render;
+use tuiscotti_core::frame::FrameError;
 
 /// Snapshot failure: explicit, never silent.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,11 +36,17 @@ impl From<tuiscotti_render::diff::DiffError> for SnapshotError {
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
+    /// Every gate passed.
     Matched,
+    /// Cell-exact gate failed.
     CellsDiffer,
+    /// Render-level or pixel gate failed.
     PixelsDiffer,
+    /// Actual and approved dimensions differ.
     DimensionMismatch,
+    /// An approved artifact is absent (fail-closed).
     MissingApproval,
+    /// An approved artifact cannot be parsed.
     CorruptApproval,
     /// Actual candidate trio (frame/PNG/manifest) is inconsistent — an
     /// interrupted write, never a pass.
@@ -53,6 +56,7 @@ pub enum Status {
 }
 
 impl Status {
+    /// Machine-readable status slug (e.g. `cells-differ`).
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -67,6 +71,7 @@ impl Status {
         }
     }
 
+    /// Whether this status is a pass.
     #[must_use]
     pub fn matched(self) -> bool {
         matches!(self, Status::Matched)
@@ -76,9 +81,13 @@ impl Status {
 /// One differing cell, summarized for humans.
 #[derive(Debug, Clone)]
 pub struct CellDiff {
+    /// Cell column.
     pub x: u16,
+    /// Cell row.
     pub y: u16,
+    /// Human summary of the approved cell.
     pub expected: String,
+    /// Human summary of the actual cell.
     pub actual: String,
 }
 
@@ -92,20 +101,29 @@ pub const MAX_CELL_DIFFS: usize = 100;
 #[must_use]
 #[derive(Debug, Clone)]
 pub struct CompareOutcome {
+    /// Snapshot name.
     pub name: String,
+    /// Gate status.
     pub status: Status,
+    /// First differing cells (capped at `MAX_CELL_DIFFS`).
     pub cell_diffs: Vec<CellDiff>,
+    /// Total differing cells (always fully counted).
     pub cell_diff_total: usize,
+    /// Pixel similarity score, when the pixel gate ran.
     pub pixel_score: Option<f64>,
     /// C06 removed in-memory regeneration of missing approved PNGs: the gate
     /// fails closed instead, so this is always `false`. Kept so existing
     /// readers (`expected_png_bytes` consumers, report sidecars) keep compiling.
     pub approved_png_regenerated: bool,
+    /// Digest of the approved frame, when one was loaded.
     pub digest_expected: Option<String>,
+    /// Digest of the actual frame.
     pub digest_actual: String,
-    /// Extra context (e.g. why an approval file is corrupt).
+    /// Actual frame path.
     pub actual_frame: PathBuf,
+    /// Actual PNG path.
     pub actual_png: PathBuf,
+    /// Approved frame path.
     pub expected_frame: PathBuf,
     /// The approved PNG path, but only when it actually exists on disk.
     pub expected_png: Option<PathBuf>,
@@ -114,12 +132,18 @@ pub struct CompareOutcome {
     /// (missing/corrupt approval, missing approved PNG). Reports fall back
     /// to sidecar bytes when present, else a "missing approval" panel.
     pub expected_png_bytes: Option<Vec<u8>>,
+    /// Diff PNG path, written on sub-1.0 pixel scores.
     pub diff_png: Option<PathBuf>,
+    /// Extra context (e.g. why an approval file is corrupt).
     pub note: String,
 }
 
 impl CompareOutcome {
     /// Fail with an actionable message (artifact paths + first diagnostics).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` describing the mismatch when not matched.
     pub fn ensure_matched(&self) -> Result<(), SnapshotError> {
         if self.status.matched() {
             return Ok(());
@@ -129,40 +153,48 @@ impl CompareOutcome {
             self.name,
             self.status.as_str()
         );
-        msg.push_str(&format!(
+        write!(
+            msg,
             "\n  actual:   {} {}",
             self.actual_frame.display(),
             self.actual_png.display()
-        ));
+        )
+        .ok();
         if let Some(p) = &self.expected_png {
-            msg.push_str(&format!("\n  expected: {}", p.display()));
+            write!(msg, "\n  expected: {}", p.display()).ok();
         }
         if let Some(p) = &self.diff_png {
-            msg.push_str(&format!("\n  diff:     {}", p.display()));
+            write!(msg, "\n  diff:     {}", p.display()).ok();
         }
         if self.cell_diff_total > 0 {
-            msg.push_str(&format!(
+            write!(
+                msg,
                 "\n  {} differing cell(s), first {}:",
                 self.cell_diff_total,
                 self.cell_diffs.len()
-            ));
+            )
+            .ok();
             for d in &self.cell_diffs {
-                msg.push_str(&format!(
+                write!(
+                    msg,
                     "\n    ({},{}): expected {} | actual {}",
                     d.x, d.y, d.expected, d.actual
-                ));
+                )
+                .ok();
             }
         }
         if let Some(s) = self.pixel_score {
-            msg.push_str(&format!("\n  pixel similarity: {s:.6}"));
+            write!(msg, "\n  pixel similarity: {s:.6}").ok();
         }
         if !self.note.is_empty() {
-            msg.push_str(&format!("\n  note: {}", self.note));
+            write!(msg, "\n  note: {}", self.note).ok();
         }
-        msg.push_str(&format!(
+        write!(
+            msg,
             "\n  review the report, then accept explicitly: tuisnap accept {}",
             self.name
-        ));
+        )
+        .ok();
         Err(SnapshotError(msg))
     }
 }
@@ -173,7 +205,7 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut s = String::with_capacity(digest.len() * 2);
     for b in digest {
-        s.push_str(&format!("{b:02x}"));
+        write!(s, "{b:02x}").ok();
     }
     s
 }
@@ -181,13 +213,17 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
 /// Atomic file write (tmp in same dir + rename). Tmp names carry pid, a
 /// process-wide counter, and the thread id, so same-name writers from
 /// different threads never share a tmp file.
+///
+/// # Errors
+///
+/// Returns `SnapshotError` when the write or publish fails.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    if let Some(dir) = path.parent() {
-        if !dir.as_os_str().is_empty() {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| SnapshotError(format!("cannot create {}: {e}", dir.display())))?;
-        }
+    if let Some(dir) = path.parent()
+        && !dir.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| SnapshotError(format!("cannot create {}: {e}", dir.display())))?;
     }
     let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp = path.with_extension(format!(

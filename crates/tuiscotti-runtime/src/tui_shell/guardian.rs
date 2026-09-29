@@ -1,21 +1,9 @@
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
-
-use super::*;
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use super::Shell;
+#[cfg(unix)]
+use super::guardian_unix;
+use crate::tui::{Session, TuiError};
 
 // ---------------------------------------------------------------------------
 // R09: scoped guardian (process-group containment with PID-reuse guards)
@@ -43,9 +31,15 @@ pub enum Containment {
     Partial,
     /// The sweep refused to signal: killing would have risked unrelated
     /// pids (foreign/reused group id, unresolvable identity, ...).
-    Refused { reason: String },
+    Refused {
+        /// Why the sweep refused to signal.
+        reason: String,
+    },
     /// Identity or enumeration failed; nothing was signalled.
-    Unknown { reason: String },
+    Unknown {
+        /// Why identity or enumeration failed.
+        reason: String,
+    },
     /// Platform cannot enumerate process groups.
     Unsupported,
 }
@@ -55,7 +49,9 @@ pub enum Containment {
 /// [`GuardianReport::escape_boundary_note`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuardianReport {
+    /// Direct child's pid, when its identity was captured.
     pub child_pid: Option<u32>,
+    /// Child's process-group id, when known.
     pub pgid: Option<i32>,
     /// Every signalled pid was re-verified in the expected session.
     pub sid_verified: bool,
@@ -66,7 +62,9 @@ pub struct GuardianReport {
     pub signalled: Vec<u32>,
     /// Group members still alive after the sweep (bounded).
     pub survivors: Vec<u32>,
+    /// How completely the sweep contained the group.
     pub containment: Containment,
+    /// Session-close failure, if the close failed before the sweep.
     pub teardown_error: Option<String>,
 }
 
@@ -105,6 +103,7 @@ pub(crate) struct ChildIds {
 impl std::fmt::Debug for Guardian {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Guardian")
+            .field("session", &self.session.as_ref().and_then(Session::pid))
             .field("child", &self.child)
             .field("swept", &self.swept)
             .finish()
@@ -125,6 +124,7 @@ impl Guardian {
         }
     }
 
+    /// Borrow the owned session, if not yet finished.
     #[must_use]
     pub fn session(&self) -> Option<&Session> {
         self.session.as_ref()
@@ -132,15 +132,23 @@ impl Guardian {
 
     /// Close the session and sweep the child's process group (bounded by
     /// `deadline`), returning the per-pid report.
+    ///
+    /// # Errors
+    ///
+    /// This function never fails; teardown faults land in the report.
     pub fn finish(mut self, deadline: Instant) -> Result<GuardianReport, TuiError> {
         let mut teardown_error = None;
-        if let Some(mut s) = self.session.take() {
-            if let Err(e) = s.close() {
-                teardown_error = Some(e.to_string());
-            }
+        if let Some(mut s) = self.session.take()
+            && let Err(e) = s.close()
+        {
+            teardown_error = Some(e.to_string());
         }
         self.swept = true;
-        Ok(sweep_group(&self.child, Some(deadline), teardown_error))
+        Ok(sweep_group(
+            self.child.as_ref(),
+            Some(deadline),
+            teardown_error,
+        ))
     }
 }
 
@@ -155,7 +163,7 @@ impl Drop for Guardian {
         }
         if !self.swept {
             self.swept = true;
-            let _ = sweep_group(&self.child, None, None);
+            let _ = sweep_group(self.child.as_ref(), None, None);
         }
     }
 }
@@ -169,7 +177,7 @@ impl ChildIds {
 
 #[cfg(unix)]
 fn sweep_group(
-    child: &Option<ChildIds>,
+    child: Option<&ChildIds>,
     deadline: Option<Instant>,
     teardown_error: Option<String>,
 ) -> GuardianReport {
@@ -185,12 +193,12 @@ impl ChildIds {
 
 #[cfg(not(unix))]
 fn sweep_group(
-    child: &Option<ChildIds>,
+    child: Option<&ChildIds>,
     _deadline: Option<Instant>,
     teardown_error: Option<String>,
 ) -> GuardianReport {
     GuardianReport {
-        child_pid: child.as_ref().map(|c| c.pid),
+        child_pid: child.map(|c| c.pid),
         pgid: None,
         sid_verified: false,
         start_verified: None,

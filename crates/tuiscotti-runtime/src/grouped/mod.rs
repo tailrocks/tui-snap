@@ -68,10 +68,8 @@ mod mutate;
 mod seal;
 mod types;
 
-pub use check::*;
-pub use check_gates::*;
-pub use mutate::*;
-pub use seal::*;
+pub(crate) use check::*;
+pub(crate) use check_gates::*;
 pub use types::*;
 
 pub use tuiscotti_core::names::{InvalidName, validate_name};

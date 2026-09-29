@@ -37,7 +37,7 @@ impl std::fmt::Debug for Session {
             .field("revision", &self.revision())
             .field("closed", &self.closed.load(Ordering::SeqCst))
             .field("exited", &self.poll_exit().is_some())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -71,6 +71,10 @@ impl Session {
     // -- observation ------------------------------------------------------
 
     /// Fresh atomic capture at the worker's current revision (R06).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the session is closed or the worker stalls.
     pub fn observe_now(&self) -> Result<Observation, TuiError> {
         let (tx, rx) = mpsc::channel();
         self.send(Op::Observe { reply: tx })?;
@@ -79,12 +83,20 @@ impl Session {
     }
 
     /// Fresh grid snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the session is closed or the worker stalls.
     pub fn snapshot(&self) -> Result<Screen, TuiError> {
         Ok(self.observe_now()?.screen)
     }
 
     /// Wait until `predicate` holds, the deadline passes, or `cancel` fires.
     /// Timeout/cancel yield evidence; they never report success.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
     pub fn wait_predicate<F>(
         &self,
         predicate: F,
@@ -101,6 +113,10 @@ impl Session {
 
     /// Wait until no new revision arrives for `quiet` (default
     /// [`DEFAULT_STABLE_QUIET`]): output settled, not business completion.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
     pub fn wait_stable(
         &self,
         deadline: Instant,
@@ -110,6 +126,10 @@ impl Session {
     }
 
     /// [`Session::wait_stable`] with an explicit quiet period.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
     pub fn wait_stable_quiet(
         &self,
         deadline: Instant,
@@ -132,27 +152,24 @@ impl Session {
                     evidence: Box::new(self.latest_or_closed()?),
                 });
             }
-            match self.shared.wait_for_newer_than(seen, deadline, cancel) {
-                Some(obs) => {
-                    seen = obs.revision;
-                    quiet_since = Instant::now();
+            if let Some(obs) = self.shared.wait_for_newer_than(seen, deadline, cancel) {
+                seen = obs.revision;
+                quiet_since = Instant::now();
+            } else {
+                if cancel.is_cancelled() {
+                    return Err(WaitError::Cancelled {
+                        evidence: Box::new(self.latest_or_closed()?),
+                    });
                 }
-                None => {
-                    if cancel.is_cancelled() {
-                        return Err(WaitError::Cancelled {
-                            evidence: Box::new(self.latest_or_closed()?),
-                        });
-                    }
-                    if Instant::now() >= deadline {
-                        return Err(WaitError::Timeout {
-                            waited: start.elapsed(),
-                            evidence: Box::new(self.latest_or_closed()?),
-                        });
-                    }
-                    // No newer revision within the slice: check quiet.
-                    if quiet_since.elapsed() >= quiet {
-                        return self.latest_or_closed();
-                    }
+                if Instant::now() >= deadline {
+                    return Err(WaitError::Timeout {
+                        waited: start.elapsed(),
+                        evidence: Box::new(self.latest_or_closed()?),
+                    });
+                }
+                // No newer revision within the slice: check quiet.
+                if quiet_since.elapsed() >= quiet {
+                    return self.latest_or_closed();
                 }
             }
         }
@@ -161,6 +178,10 @@ impl Session {
     /// Wait for the next synchronized frame (DEC 2026). The backend does
     /// not track synchronized output, so this always fails closed with
     /// [`WaitError::Unsupported`] plus an evidence snapshot (R10).
+    ///
+    /// # Errors
+    ///
+    /// Always fails: `Unsupported`, or `Cancelled`/`Closed` if raced.
     pub fn wait_frame(
         &self,
         _deadline: Instant,
@@ -177,6 +198,10 @@ impl Session {
     }
 
     /// Wait until the direct child exits and is reaped.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
     pub fn wait_exit(
         &self,
         deadline: Instant,
@@ -207,6 +232,10 @@ impl Session {
 
     /// [`Session::wait_exit`] as an assertion entry point; the returned
     /// [`ExitWait`] offers `.success()` / `.code(n)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
     pub fn expect_exit(
         &self,
         deadline: Instant,
@@ -232,7 +261,7 @@ impl Session {
     pub(crate) fn send_input(&self, input: Input) -> Result<(), TuiError> {
         let (tx, rx) = mpsc::channel();
         self.send(Op::Input { input, reply: tx })?;
-        recv_reply(rx, "input")
+        recv_reply(&rx, "input")
     }
 
     pub(crate) fn await_initial(&self) -> Result<(), TuiError> {

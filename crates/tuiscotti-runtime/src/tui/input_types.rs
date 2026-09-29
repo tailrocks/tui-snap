@@ -7,64 +7,92 @@ use super::error::TuiError;
 pub enum Key {
     /// A Unicode character (letters, digits, punctuation, space, ...).
     Char(char),
+    /// Enter/Return.
     Enter,
+    /// Tab.
     Tab,
+    /// Backspace.
     Backspace,
+    /// Escape.
     Escape,
+    /// Up arrow.
     Up,
+    /// Down arrow.
     Down,
+    /// Left arrow.
     Left,
+    /// Right arrow.
     Right,
+    /// Home.
     Home,
+    /// End.
     End,
+    /// Page up.
     PageUp,
+    /// Page down.
     PageDown,
+    /// Insert.
     Insert,
+    /// Delete (forward delete).
     Delete,
     /// Function key 1..=12.
     F(u8),
 }
 
-/// Modifier set for [`Key`] input.
+/// Extra modifiers beyond ctrl/alt/shift.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct KeyMods {
-    pub ctrl: bool,
-    pub alt: bool,
-    pub shift: bool,
-    /// Super/Cmd/Win. Legacy encodings cannot carry it: with super held and
-    /// no kitty keyboard active, key input fails closed with `Unsupported`.
+pub struct KeyExtMods {
+    /// Super/Cmd/Win: needs the kitty keyboard protocol, else `Unsupported`.
     pub sup: bool,
 }
 
+/// Modifier set for [`Key`] input.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KeyMods {
+    /// Control held.
+    pub ctrl: bool,
+    /// Alt/Opt held.
+    pub alt: bool,
+    /// Shift held.
+    pub shift: bool,
+    /// Extra modifiers.
+    pub ext: KeyExtMods,
+}
+
 impl KeyMods {
+    /// No modifiers.
     pub const NONE: KeyMods = KeyMods {
         ctrl: false,
         alt: false,
         shift: false,
-        sup: false,
+        ext: KeyExtMods { sup: false },
     };
+    /// Control only.
     pub const CTRL: KeyMods = KeyMods {
         ctrl: true,
         alt: false,
         shift: false,
-        sup: false,
+        ext: KeyExtMods { sup: false },
     };
+    /// Alt only.
     pub const ALT: KeyMods = KeyMods {
         ctrl: false,
         alt: true,
         shift: false,
-        sup: false,
+        ext: KeyExtMods { sup: false },
     };
+    /// Shift only.
     pub const SHIFT: KeyMods = KeyMods {
         ctrl: false,
         alt: false,
         shift: true,
-        sup: false,
+        ext: KeyExtMods { sup: false },
     };
 
+    /// True when no modifier is held.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        !self.ctrl && !self.alt && !self.shift && !self.sup
+        !self.ctrl && !self.alt && !self.shift && !self.ext.sup
     }
 }
 
@@ -92,6 +120,10 @@ pub enum KeyEventKind {
 /// `Esc`/`Escape`, `Space`, arrows, `Home`/`End`, `PageUp`/`PgUp`,
 /// `PageDown`/`PgDn`, `Insert`/`Ins`, `Delete`/`Del`, `F1`..`F12`, or any
 /// single character.
+///
+/// # Errors
+///
+/// Returns `TuiError::Chord` for empty/unknown modifiers or keys.
 pub fn parse_chord(text: &str) -> Result<(Key, KeyMods), TuiError> {
     let bad = |m: String| TuiError::Chord(m);
     let mut parts: Vec<&str> = text.split('+').collect();
@@ -108,7 +140,7 @@ pub fn parse_chord(text: &str) -> Result<(Key, KeyMods), TuiError> {
             "ctrl" | "control" | "ctl" => mods.ctrl = true,
             "alt" | "opt" | "meta" => mods.alt = true,
             "shift" => mods.shift = true,
-            "super" | "cmd" | "win" | "windows" | "command" => mods.sup = true,
+            "super" | "cmd" | "win" | "windows" | "command" => mods.ext.sup = true,
             "" => return Err(bad(format!("empty modifier in chord {text:?}"))),
             other => return Err(bad(format!("unknown modifier {other:?} in chord {text:?}"))),
         }
@@ -148,29 +180,40 @@ pub fn parse_chord(text: &str) -> Result<(Key, KeyMods), TuiError> {
 /// Mouse button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
+    /// Left button.
     Left,
+    /// Middle button.
     Middle,
+    /// Right button.
     Right,
 }
 
 /// Wheel direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Wheel {
+    /// Wheel up.
     Up,
+    /// Wheel down.
     Down,
+    /// Wheel left.
     Left,
+    /// Wheel right.
     Right,
 }
 
 /// Modifier set for mouse input.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MouseMods {
+    /// Shift held.
     pub shift: bool,
+    /// Alt held.
     pub alt: bool,
+    /// Control held.
     pub ctrl: bool,
 }
 
 impl MouseMods {
+    /// No modifiers.
     pub const NONE: MouseMods = MouseMods {
         shift: false,
         alt: false,
@@ -181,11 +224,17 @@ impl MouseMods {
 /// Process signal for [`Session::signal`](super::session::Session::signal). Unix only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
+    /// SIGINT.
     Int,
+    /// SIGTERM.
     Term,
+    /// SIGKILL.
     Kill,
+    /// SIGQUIT.
     Quit,
+    /// SIGHUP.
     Hup,
+    /// Raw signal number.
     Custom(i32),
 }
 

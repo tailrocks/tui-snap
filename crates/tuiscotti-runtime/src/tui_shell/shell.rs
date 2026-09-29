@@ -1,21 +1,8 @@
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
-
-use super::*;
 use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
 // R12: explicit shell sessions with command-boundary integration
@@ -40,9 +27,11 @@ pub enum Markers {
 /// the direct child's; the shell usually keeps running afterwards.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellResult {
+    /// Shell command's exit code (not the direct child's).
     pub exit_code: i32,
     /// Command output lines between the start/end attestations (exclusive).
     pub output_span: Vec<String>,
+    /// Integration state that produced this result.
     pub markers: Markers,
     /// True when the start attestation scrolled out of the viewport: the
     /// span is a truncated tail, not the full output.
@@ -52,10 +41,15 @@ pub struct ShellResult {
 /// Shell failure.
 #[derive(Debug)]
 pub enum ShellError {
+    /// Underlying session failure.
     Tui(TuiError),
+    /// Wait/predicate failure.
     Wait(WaitError),
+    /// Integration unavailable; the command was refused, not guessed.
     NoIntegration(&'static str),
+    /// Empty or multi-line command.
     BadCommand(String),
+    /// Attestation/exit-code protocol violation.
     Protocol(String),
 }
 
@@ -112,17 +106,26 @@ impl std::fmt::Debug for Shell {
             .field("pid", &self.session.pid())
             .field("markers", &self.markers)
             .field("runs", &self.runs.load(Ordering::SeqCst))
+            .field("tag", &self.tag)
             .finish()
     }
 }
 
 impl Shell {
     /// Spawn `/bin/sh` (80x24) and establish the integration handshake.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] if spawn or the handshake fails.
     pub fn sh() -> Result<Self, ShellError> {
         Self::sh_sized(80, 24)
     }
 
     /// Spawn `/bin/sh` at `cols`x`rows` and establish the handshake.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] if spawn or the handshake fails.
     pub fn sh_sized(cols: u16, rows: u16) -> Result<Self, ShellError> {
         let session = Tui::new(["/bin/sh"])
             .size(cols, rows)
@@ -147,8 +150,7 @@ impl Shell {
     pub fn wrap(session: Session) -> Self {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_nanos());
         Self {
             session,
             markers: Markers::Unavailable,
@@ -157,16 +159,19 @@ impl Shell {
         }
     }
 
+    /// Current integration state of this shell.
     #[must_use]
     pub fn markers(&self) -> Markers {
         self.markers
     }
 
+    /// Borrow the underlying session.
     #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }
 
+    /// Release the underlying session, dropping shell state.
     #[must_use]
     pub fn into_session(self) -> Session {
         self.session
@@ -174,6 +179,10 @@ impl Shell {
 
     /// Run the integration handshake: install the wrapper functions and wait
     /// for their confirmation. On success markers become available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] if setup output or confirmation times out.
     pub fn setup(&mut self, deadline: Instant) -> Result<(), ShellError> {
         const SETUP: &str = "__tuisnap_c(){ printf '__TUISNAP_C__ %s\\n' \"$1\"; printf '\\033]133;C\\a'; }; __tuisnap_d(){ printf '\\033]133;D;%s\\a' \"$2\"; printf '__TUISNAP_D__ %s %s\\n' \"$1\" \"$2\"; }; echo __TUISNAP_SETUP_OK__";
         self.session.send_text(&format!("{SETUP}\n"))?;
@@ -193,6 +202,10 @@ impl Shell {
 
     /// Run one single-line shell command, delimited by the protocol.
     /// Fails without integration; never infers spans from prompt text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShellError`] if integration, command, wait, or parse fails.
     pub fn run(&self, cmd: &str, deadline: Instant) -> Result<ShellResult, ShellError> {
         if self.markers != Markers::Available {
             return Err(ShellError::NoIntegration(
@@ -253,6 +266,10 @@ impl Shell {
 
     /// Wait for the shell itself to exit, preserving the final observation
     /// (final grid + terminal state survive the child).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WaitError`] if the wait times out or is cancelled.
     pub fn wait_shell_exit(
         &self,
         deadline: Instant,
@@ -268,10 +285,10 @@ fn screen_rows(screen: &Screen) -> Vec<String> {
     for y in 0..screen.rows() {
         let mut s = String::new();
         for x in 0..screen.cols() {
-            if let Some(c) = screen.get(x, y) {
-                if !c.continuation {
-                    s.push_str(&c.symbol);
-                }
+            if let Some(c) = screen.get(x, y)
+                && !c.continuation
+            {
+                s.push_str(&c.symbol);
             }
         }
         out.push(s.trim_end().to_string());

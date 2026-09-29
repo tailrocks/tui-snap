@@ -9,8 +9,11 @@ pub(crate) static PTY_LIFECYCLE: Mutex<()> = Mutex::new(());
 
 /// Backend grid limits (alacritty minimum columns = 2; generous maximum).
 pub const MIN_COLS: u16 = 2;
+/// Minimum PTY rows.
 pub const MIN_ROWS: u16 = 1;
+/// Maximum PTY columns.
 pub const MAX_COLS: u16 = 1000;
+/// Maximum PTY rows.
 pub const MAX_ROWS: u16 = 1000;
 
 /// How long after child exit the worker still accepts trailing reader bytes.

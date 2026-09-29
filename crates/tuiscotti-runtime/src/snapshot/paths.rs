@@ -1,11 +1,8 @@
-use super::*;
+use super::{SnapshotError, Store};
 use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::{Frame, FrameError};
-use tuiscotti_render::diff;
-use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render;
 
 impl Store {
+    /// Store rooted at `root` (approved/actual/diff/report.html beneath it).
     #[must_use]
     pub fn new(root: &Path) -> Self {
         Self {
@@ -55,6 +52,10 @@ impl Store {
     }
 
     /// Names with actual frames (for `--all` acceptance).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when the actual directory cannot be listed.
     pub fn actual_names(&self) -> Result<Vec<String>, SnapshotError> {
         let dir = self.root.join("actual");
         let mut out = Vec::new();
@@ -63,12 +64,11 @@ impl Store {
         for entry in entries {
             let entry =
                 entry.map_err(|e| SnapshotError(format!("cannot list {}: {e}", dir.display())))?;
-            if let Some(name) = entry.path().file_stem().and_then(|s| s.to_str()) {
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Some(base) = name.strip_suffix(".frame") {
-                        out.push(base.to_string());
-                    }
-                }
+            if let Some(name) = entry.path().file_stem().and_then(|s| s.to_str())
+                && entry.path().extension().and_then(|s| s.to_str()) == Some("json")
+                && let Some(base) = name.strip_suffix(".frame")
+            {
+                out.push(base.to_string());
             }
         }
         out.sort();

@@ -91,6 +91,9 @@ impl BoundLocator<'_> {
 
     /// Fresh observation, resolved to the UNIQUE viewport match. Ambiguous,
     /// missing, or scrollback-only targets fail without side effects.
+    /// # Errors
+    ///
+    /// Returns [`ActionError`] when observation fails or no unique target resolves.
     pub fn expect_visible(&self) -> Result<Span, ActionError> {
         let obs = self.session.observe_now()?;
         Ok(self.locator.resolve_unique(&obs.screen, obs.revision)?)
@@ -100,6 +103,9 @@ impl BoundLocator<'_> {
     /// then stale-check against the current revision before delivery. The
     /// click is delivered at most once; a moved target fails with
     /// [`LocateError::StaleTarget`] and is never delivered.
+    /// # Errors
+    ///
+    /// Returns [`ActionError`] when observation, resolution, or delivery fails.
     pub fn click(&self) -> Result<(), ActionError> {
         let obs = self.session.observe_now()?;
         let pending = self.locator.prepare_action(&obs)?;

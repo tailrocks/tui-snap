@@ -61,7 +61,7 @@ impl std::fmt::Display for KeyChord {
         if self.mods.shift {
             write!(f, "Shift+")?;
         }
-        if self.mods.sup {
+        if self.mods.ext.sup {
             write!(f, "Super+")?;
         }
         write!(f, "{}", self.key)

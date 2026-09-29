@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-use super::*;
+use super::{Op, OpResult, execute};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -11,13 +8,17 @@ use serde::{Deserialize, Serialize};
 /// Machine-readable op failure. `code` is stable; `message` is human detail.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OpError {
+    /// Stable machine-readable failure code.
     pub code: String,
+    /// Human-readable failure detail.
     pub message: String,
+    /// Session the failure belongs to, when any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
 }
 
 impl OpError {
+    /// Build an error with a stable `code` and human `message`.
     #[must_use]
     pub fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
@@ -27,6 +28,7 @@ impl OpError {
         }
     }
 
+    /// Attach the session this failure belongs to.
     #[must_use]
     pub fn with_session(mut self, session: &str) -> Self {
         self.session = Some(session.to_string());
@@ -52,15 +54,19 @@ impl std::error::Error for OpError {}
 /// One output line of machine mode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope {
+    /// True when the op succeeded.
     pub ok: bool,
+    /// The op result, on success.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<OpResult>,
+    /// The op error, on failure.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<OpError>,
 }
 
 /// Parse one input line and execute it. Returns the output line plus whether
 /// the op succeeded. Never panics on adversarial input.
+#[must_use]
 pub fn run_machine_line(line: &str) -> (String, bool) {
     let env = match serde_json::from_str::<Op>(line) {
         Ok(op) => match execute(&op) {

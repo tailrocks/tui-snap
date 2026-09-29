@@ -23,13 +23,13 @@ pub(crate) fn apply_input<T: EventListener>(
     let mode = *term.mode();
     let bytes: Option<Vec<u8>> = match input {
         Input::Bytes(b) => Some(b.clone()),
-        Input::Paste(text) => Some(encode_paste(text, &mode)?),
-        Input::Key { key, mods, kind } => encode_key(key, mods, *kind, &mode)?,
+        Input::Paste(text) => Some(encode_paste(text, mode)?),
+        Input::Key { key, mods, kind } => encode_key(key, *mods, *kind, mode)?,
         Input::Mouse { action, x, y, mods } => {
             let (cols, rows) = (term.columns(), term.screen_lines());
-            Some(encode_mouse(action, *x, *y, *mods, &mode, cols, rows)?)
+            Some(encode_mouse(action, *x, *y, *mods, mode, cols, rows)?)
         }
-        Input::Focus(focused) => Some(encode_focus(*focused, &mode)?),
+        Input::Focus(focused) => Some(encode_focus(*focused, mode)?),
     };
     match bytes {
         Some(b) if !b.is_empty() => writer
@@ -66,7 +66,7 @@ pub(crate) fn apply_resize<T: EventListener>(
 const PASTE_START: &str = "\x1b[200~";
 const PASTE_END: &str = "\x1b[201~";
 
-fn encode_paste(text: &str, mode: &TermMode) -> Result<Vec<u8>, TuiError> {
+fn encode_paste(text: &str, mode: TermMode) -> Result<Vec<u8>, TuiError> {
     if text.contains(PASTE_START) || text.contains(PASTE_END) {
         return Err(TuiError::PasteRejected(
             "content contains bracketed-paste delimiters".to_string(),
@@ -81,7 +81,7 @@ fn encode_paste(text: &str, mode: &TermMode) -> Result<Vec<u8>, TuiError> {
 
 // -- focus ---------------------------------------------------------------
 
-fn encode_focus(focused: bool, mode: &TermMode) -> Result<Vec<u8>, TuiError> {
+fn encode_focus(focused: bool, mode: TermMode) -> Result<Vec<u8>, TuiError> {
     if !mode.contains(TermMode::FOCUS_IN_OUT) {
         return Err(TuiError::ModeNotEnabled(
             "focus tracking (DEC 1004) not enabled by the application",
@@ -114,7 +114,7 @@ fn mouse_mode_gate(action: &MouseAction) -> (TermMode, &'static str) {
         MouseAction::Move { held: Some(_) } => TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION,
     };
     let what = match action {
-        MouseAction::Press(_) | MouseAction::Release => {
+        MouseAction::Press(_) | MouseAction::Release | MouseAction::Wheel(_) => {
             "mouse reporting (DEC 1000/1002/1003) not enabled by the application"
         }
         MouseAction::Move { held: None } => {
@@ -122,9 +122,6 @@ fn mouse_mode_gate(action: &MouseAction) -> (TermMode, &'static str) {
         }
         MouseAction::Move { held: Some(_) } => {
             "mouse drag reporting (DEC 1002/1003) not enabled by the application"
-        }
-        MouseAction::Wheel(_) => {
-            "mouse reporting (DEC 1000/1002/1003) not enabled by the application"
         }
     };
     (required, what)
@@ -135,7 +132,7 @@ fn encode_mouse(
     x: u16,
     y: u16,
     mods: MouseMods,
-    mode: &TermMode,
+    term_mode: TermMode,
     cols: usize,
     rows: usize,
 ) -> Result<Vec<u8>, TuiError> {
@@ -145,7 +142,7 @@ fn encode_mouse(
         )));
     }
     let (required, what) = mouse_mode_gate(action);
-    if !mode.intersects(required) {
+    if !term_mode.intersects(required) {
         return Err(TuiError::ModeNotEnabled(what));
     }
 
@@ -171,7 +168,7 @@ fn encode_mouse(
     let cx = u32::from(x) + 1;
     let cy = u32::from(y) + 1;
 
-    if mode.contains(TermMode::SGR_MOUSE) {
+    if term_mode.contains(TermMode::SGR_MOUSE) {
         let marker = if matches!(action, MouseAction::Release) {
             'm'
         } else {
@@ -179,7 +176,7 @@ fn encode_mouse(
         };
         return Ok(format!("\x1b[<{cb};{cx};{cy}{marker}").into_bytes());
     }
-    if mode.contains(TermMode::UTF8_MOUSE) {
+    if term_mode.contains(TermMode::UTF8_MOUSE) {
         let mut out = b"\x1b[M".to_vec();
         for v in [cb + 32, cx + 32, cy + 32] {
             let ch = char::from_u32(v).ok_or_else(|| {
@@ -202,8 +199,8 @@ fn encode_mouse(
         0x1b,
         b'[',
         b'M',
-        (cb + 32) as u8,
-        (cx + 32) as u8,
-        (cy + 32) as u8,
+        u8::try_from(cb + 32).unwrap_or(u8::MAX),
+        u8::try_from(cx + 32).unwrap_or(u8::MAX),
+        u8::try_from(cy + 32).unwrap_or(u8::MAX),
     ])
 }

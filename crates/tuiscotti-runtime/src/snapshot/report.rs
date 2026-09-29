@@ -1,13 +1,15 @@
-use super::*;
+use super::{CompareOutcome, SnapshotError, Store, write_atomic};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::{Frame, FrameError};
-use tuiscotti_render::diff;
 use tuiscotti_render::profile::Profile;
-use tuiscotti_render::render;
 
 /// Assemble one report row from a check outcome. Free-function form of
 /// [`Store::report_entry`] so non-classic stores can build rows without a
 /// [`Store`]. Does not read PNG bytes.
+///
+/// # Errors
+///
+/// Returns `SnapshotError` when the report row cannot be assembled.
 pub fn report_entry(
     outcome: &CompareOutcome,
     profile: &Profile,
@@ -39,9 +41,13 @@ impl StoreReport {
 
 /// One row of the review HTML report. Images are files on disk; the HTML
 /// only stores relative `href`s so hundreds of captures stay browser-usable.
+#[derive(Debug)]
 pub struct ReportEntry {
+    /// Check outcome this row renders.
     pub outcome: CompareOutcome,
+    /// Rendering profile name.
     pub profile_desc: String,
+    /// SHA-256 of the font stack used.
     pub font_sha256: String,
 }
 
@@ -54,12 +60,17 @@ fn esc_html(s: &str) -> String {
 /// JSON embedded in `<script type="application/json">`: escape `<` so a cell
 /// symbol like `</script>` cannot terminate the element (still valid JSON —
 /// `\u003c` re-parses to `<`, keeping lossless re-import).
+#[must_use]
 pub fn json_for_script(json: &str) -> String {
     json.replace('<', "\\u003c")
 }
 
 /// Write a review index: PNGs linked from disk (never base64-embedded),
 /// failed captures first, frame JSON linked not inlined.
+///
+/// # Errors
+///
+/// Returns `SnapshotError` when the report cannot be written.
 pub fn write_report(
     store: &Store,
     title: &str,
@@ -71,6 +82,10 @@ pub fn write_report(
 /// [`write_report`] with an explicit output path, for stores whose report
 /// does not live at a fixed location (e.g. [`crate::grouped::GroupedStore`],
 /// which keeps its report out of the approved tree).
+///
+/// # Errors
+///
+/// Returns `SnapshotError` when the report cannot be written.
 pub fn write_report_at(
     path: &Path,
     title: &str,
@@ -125,43 +140,53 @@ fn append_entry_section(
     e: &ReportEntry,
 ) -> Result<(), SnapshotError> {
     let o = &e.outcome;
-    body.push_str(&format!(
-        "<section id=\"{}\"><h2>{} — {}</h2>\n",
+    writeln!(
+        body,
+        "<section id=\"{}\"><h2>{} — {}</h2>",
         esc_attr(&o.name),
         esc_html(&o.name),
         o.status.as_str()
-    ));
+    )
+    .ok();
     append_entry_images(body, report_dir, o)?;
     if o.cell_diff_total > 0 {
-        body.push_str(&format!(
+        write!(
+            body,
             "<p>{} differing cell(s):</p><table><tr><th>x</th><th>y</th><th>expected</th><th>actual</th></tr>",
             o.cell_diff_total
-        ));
+        )
+        .ok();
         for d in &o.cell_diffs {
-            body.push_str(&format!(
+            write!(
+                body,
                 "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
                 d.x,
                 d.y,
                 esc_html(&d.expected),
                 esc_html(&d.actual)
-            ));
+            )
+            .ok();
         }
         body.push_str("</table>");
     }
     if let Some(s) = o.pixel_score {
-        body.push_str(&format!("<p>pixel similarity: {s:.6}</p>"));
+        write!(body, "<p>pixel similarity: {s:.6}</p>").ok();
     }
     if o.actual_frame.exists() {
-        body.push_str(&format!(
+        write!(
+            body,
             "<p><a href=\"{}\">actual frame.json</a></p>",
             rel_href(report_dir, &o.actual_frame)
-        ));
+        )
+        .ok();
     }
     if o.expected_frame.exists() {
-        body.push_str(&format!(
+        write!(
+            body,
             "<p><a href=\"{}\">expected frame.json</a></p>",
             rel_href(report_dir, &o.expected_frame)
-        ));
+        )
+        .ok();
     }
     body.push_str("</section>");
     Ok(())
@@ -186,26 +211,32 @@ fn append_entry_images(
         },
     };
     if let Some(src) = expected_src {
-        body.push_str(&format!(
+        write!(
+            body,
             "<figure><figcaption>expected</figcaption><img src=\"{src}\" alt=\"expected {}\"></figure>",
             esc_attr(&o.name)
-        ));
+        )
+        .ok();
     } else {
         body.push_str("<figure><figcaption>expected</figcaption><p>missing approval</p></figure>");
     }
     if o.actual_png.exists() {
         let src = rel_href(report_dir, &o.actual_png);
-        body.push_str(&format!(
+        write!(
+            body,
             "<figure><figcaption>actual</figcaption><img src=\"{src}\" alt=\"actual {}\"></figure>",
             esc_attr(&o.name)
-        ));
+        )
+        .ok();
     }
     if let Some(p) = o.diff_png.as_ref().filter(|p| p.exists()) {
         let src = rel_href(report_dir, p);
-        body.push_str(&format!(
+        write!(
+            body,
             "<figure><figcaption>diff</figcaption><img src=\"{src}\" alt=\"diff {}\"></figure>",
             esc_attr(&o.name)
-        ));
+        )
+        .ok();
     }
     body.push_str("</div>");
     Ok(())
@@ -230,10 +261,10 @@ fn rel_href(from_dir: &Path, to: &Path) -> String {
         out.push(*c);
     }
     if out.as_os_str().is_empty() {
-        return to
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| to.display().to_string());
+        return to.file_name().map_or_else(
+            || to.display().to_string(),
+            |s| s.to_string_lossy().into_owned(),
+        );
     }
     out.to_string_lossy().replace('\\', "/")
 }

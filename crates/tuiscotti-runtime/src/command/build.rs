@@ -1,11 +1,7 @@
-use super::*;
+use super::{SpawnError, cargo_bin_path};
 use std::ffi::{OsStr, OsString};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Default bound for collecting pipe output after the child was reaped.
 /// Covers slow close plus descendants that inherited the pipes.
@@ -16,7 +12,7 @@ const DEFAULT_DRAIN_DEADLINE: Duration = Duration::from_secs(5);
 pub(crate) enum Program {
     Direct(OsString),
     /// `Err` holds the resolution failure; [`Command::run`] reports it as
-    /// [`Termination::SpawnError`] instead of spawning.
+    /// [`Termination::SpawnError`](crate::command::Termination) instead of spawning.
     CargoBin {
         name: OsString,
         resolved: Result<PathBuf, SpawnError>,
@@ -85,7 +81,7 @@ impl Command {
 
     /// Spawn a binary built by cargo (see [`cargo_bin_path`] for the lookup
     /// order). Resolution happens now; if it fails, [`Command::run`] returns
-    /// [`Termination::SpawnError`] with the searched locations.
+    /// [`Termination::SpawnError`](crate::command::Termination) with the searched locations.
     pub fn cargo_bin(name: impl AsRef<OsStr>) -> Self {
         let name = name.as_ref().to_os_string();
         let resolved = cargo_bin_path(&name);
@@ -106,24 +102,26 @@ impl Command {
     /// Import spawn configuration (program, args, env, cwd) from a
     /// [`std::process::Command`]. Timeout/stdin/limits/shell are runtime
     /// behavior of this type and are left at defaults.
+    #[must_use]
     pub fn from_std(cmd: &std::process::Command) -> Self {
         let mut out = Command::new(cmd.get_program());
-        out.args.extend(cmd.get_args().map(|a| a.to_os_string()));
+        out.args.extend(cmd.get_args().map(OsStr::to_os_string));
         for (k, v) in cmd.get_envs() {
-            out.env
-                .push((k.to_os_string(), v.map(|v| v.to_os_string())));
+            out.env.push((k.to_os_string(), v.map(OsStr::to_os_string)));
         }
-        out.cwd = cmd.get_current_dir().map(|p| p.to_path_buf());
+        out.cwd = cmd.get_current_dir().map(Path::to_path_buf);
         out
     }
 
     /// Append one argument.
+    #[must_use]
     pub fn arg(mut self, arg: impl AsRef<OsStr>) -> Self {
         self.args.push(arg.as_ref().to_os_string());
         self
     }
 
     /// Append several arguments.
+    #[must_use]
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -136,6 +134,7 @@ impl Command {
     }
 
     /// Set one child-only environment variable.
+    #[must_use]
     pub fn env(mut self, key: impl AsRef<OsStr>, val: impl AsRef<OsStr>) -> Self {
         self.env.push((
             key.as_ref().to_os_string(),
@@ -145,6 +144,7 @@ impl Command {
     }
 
     /// Set several child-only environment variables.
+    #[must_use]
     pub fn envs<I, K, V>(mut self, vars: I) -> Self
     where
         I: IntoIterator<Item = (K, V)>,
@@ -159,18 +159,21 @@ impl Command {
     }
 
     /// Remove one variable from the child's environment.
+    #[must_use]
     pub fn env_remove(mut self, key: impl AsRef<OsStr>) -> Self {
         self.env.push((key.as_ref().to_os_string(), None));
         self
     }
 
     /// Start the child with an empty environment (then apply `.env(...)`).
+    #[must_use]
     pub fn env_clear(mut self, clear: bool) -> Self {
         self.env_clear = clear;
         self
     }
 
     /// Set the child's working directory.
+    #[must_use]
     pub fn current_dir(mut self, dir: impl AsRef<Path>) -> Self {
         self.cwd = Some(dir.as_ref().to_path_buf());
         self
@@ -181,13 +184,15 @@ impl Command {
     /// Without this, stdin is null (immediate EOF). A child that exits
     /// without reading stdin does not fail the run; unwritten input is
     /// silently dropped.
+    #[must_use]
     pub fn stdin(mut self, bytes: impl Into<Vec<u8>>) -> Self {
         self.stdin_bytes = Some(bytes.into());
         self
     }
 
-    /// Kill the child and report [`Termination::Timeout`] after this long.
+    /// Kill the child and report [`Termination::Timeout`](crate::command::Termination) after this long.
     /// No timeout by default.
+    #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
@@ -195,7 +200,8 @@ impl Command {
 
     /// Cap captured bytes per stream (stdout and stderr independently).
     /// When a stream exceeds the cap the child is killed and the run reports
-    /// [`Termination::OutputLimit`] with `truncated: true`. No cap by default.
+    /// [`Termination::OutputLimit`](crate::command::Termination) with `truncated: true`. No cap by default.
+    #[must_use]
     pub fn output_limit(mut self, bytes: usize) -> Self {
         self.output_limit = Some(bytes);
         self
@@ -206,6 +212,7 @@ impl Command {
     /// true`; reader threads detach and finish if the pipes ever close.
     /// This is also the bound for descendants that inherited the pipes:
     /// this module reaps only the direct child, never the process group.
+    #[must_use]
     pub fn drain_deadline(mut self, deadline: Duration) -> Self {
         self.drain_deadline = deadline;
         self
@@ -213,6 +220,7 @@ impl Command {
 
     /// Opt in to `/bin/sh -c <program>` with builder args passed as
     /// positional parameters (`$1`, ...; `$0` is `sh`).
+    #[must_use]
     pub fn shell(mut self, enable: bool) -> Self {
         self.shell = enable;
         self

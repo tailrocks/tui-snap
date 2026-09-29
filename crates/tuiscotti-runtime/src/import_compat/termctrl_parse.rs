@@ -1,7 +1,13 @@
-use super::*;
+use super::{
+    CompatError, ImportLimits, LossReport, TermctrlEvent, TermctrlTrace, lines_with_offsets,
+    read_bounded,
+};
 use std::path::Path;
 
 /// Read-only `.termctrl` import with default limits. See [`import_termctrl_with`].
+/// # Errors
+///
+/// Returns [`CompatError`] when the source cannot be read or parsed.
 pub fn import_termctrl(path: &Path) -> Result<TermctrlTrace, CompatError> {
     import_termctrl_with(path, &ImportLimits::default())
 }
@@ -19,6 +25,9 @@ pub fn import_termctrl(path: &Path) -> Result<TermctrlTrace, CompatError> {
 ///   [`LossReport::unsupported_fields`].
 /// - Bounds from `lim` fail with [`CompatError::TooLarge`], never truncate.
 /// - Reads only; the source is untouched and nothing recorded is executed.
+/// # Errors
+///
+/// Returns [`CompatError`] when the source cannot be read or parsed.
 pub fn import_termctrl_with(path: &Path, lim: &ImportLimits) -> Result<TermctrlTrace, CompatError> {
     let text = read_bounded(path, lim)?;
     let lines = lines_with_offsets(&text);
@@ -83,7 +92,7 @@ fn parse_termctrl_header(line: &str) -> Result<(u8, u16, u16), CompatError> {
     }
     let version = obj
         .get("version")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| verr("header lacks numeric \"version\"".to_string()))?;
     if version != 1 && version != 2 {
         return Err(verr(format!(
@@ -93,14 +102,18 @@ fn parse_termctrl_header(line: &str) -> Result<(u8, u16, u16), CompatError> {
     let dim = |key: &str| -> Result<u16, CompatError> {
         let n = obj
             .get(key)
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .ok_or_else(|| verr(format!("header lacks numeric {key:?}")))?;
         if n == 0 || n > u64::from(u16::MAX) {
             return Err(verr(format!("header {key} out of range: {n}")));
         }
-        Ok(n as u16)
+        Ok(u16::try_from(n).unwrap_or(0))
     };
-    Ok((version as u8, dim("cols")?, dim("rows")?))
+    Ok((
+        u8::try_from(version).unwrap_or(0),
+        dim("cols")?,
+        dim("rows")?,
+    ))
 }
 
 enum TermctrlParse {
@@ -163,7 +176,7 @@ fn entry_at_ms(
     off: u64,
 ) -> Result<u64, CompatError> {
     obj.get("at_ms")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| CompatError::Content {
             offset: off,
             msg: "entry lacks numeric \"at_ms\"".to_string(),
@@ -191,7 +204,7 @@ fn entry_byte_array(
         if n > 255 {
             return Err(bad(format!("byte out of range: {n}")));
         }
-        out.push(n as u8);
+        out.push(u8::try_from(n).unwrap_or(0));
     }
     Ok(out)
 }
@@ -233,12 +246,12 @@ fn build_termctrl_event(
             let dim = |key: &str| -> Result<u16, CompatError> {
                 let n = obj
                     .get(key)
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .ok_or_else(|| bad(format!("resize lacks numeric {key:?}")))?;
                 if n == 0 || n > u64::from(u16::MAX) {
                     return Err(bad(format!("resize {key} out of range: {n}")));
                 }
-                Ok(n as u16)
+                Ok(u16::try_from(n).unwrap_or(0))
             };
             Ok(TermctrlEvent::Resize {
                 at_ms: entry_at_ms(obj, off)?,

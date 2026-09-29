@@ -1,6 +1,3 @@
-use super::*;
-use std::path::Path;
-
 // ---------------------------------------------------------------------------
 // terminal-control .termctrl recordings
 // ---------------------------------------------------------------------------
@@ -73,6 +70,7 @@ pub enum TermctrlEvent {
 }
 
 impl TermctrlEvent {
+    /// Milliseconds since recording start.
     #[must_use]
     pub fn at_ms(&self) -> u64 {
         match self {
@@ -111,7 +109,7 @@ impl TermctrlTrace {
         let mut prev = 0u64;
         for e in &self.events {
             if let TermctrlEvent::Output { at_ms, bytes } = e {
-                out.push((at_ms.saturating_sub(prev) as f64 / 1000.0, bytes.clone()));
+                out.push((ms_to_secs(at_ms.saturating_sub(prev)), bytes.clone()));
                 prev = *at_ms;
             }
         }
@@ -137,4 +135,11 @@ impl TermctrlTrace {
         }
         out
     }
+}
+
+/// Milliseconds as fractional seconds via exact 32-bit halves (no lossy cast).
+fn ms_to_secs(ms: u64) -> f64 {
+    let hi = u32::try_from(ms >> 32).unwrap_or(u32::MAX);
+    let lo = u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX);
+    (f64::from(hi) * 4_294_967_296.0 + f64::from(lo)) / 1000.0
 }

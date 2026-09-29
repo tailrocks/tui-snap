@@ -17,25 +17,25 @@ fn cancel() -> CancelToken {
 }
 
 /// Plain-text rows of a screen (trailing blanks trimmed per row).
-fn rows(screen: &Screen) -> Vec<String> {
+fn rows(screen: &Screen) -> Result<Vec<String>, String> {
     let mut out = Vec::with_capacity(screen.rows() as usize);
     for y in 0..screen.rows() {
         let mut s = String::new();
         for x in 0..screen.cols() {
             let c = screen
                 .get(x, y)
-                .unwrap_or_else(|| panic!("missing cell {x},{y}"));
+                .ok_or_else(|| format!("missing cell {x},{y}"))?;
             if !c.continuation {
                 s.push_str(&c.symbol);
             }
         }
         out.push(s.trim_end().to_string());
     }
-    out
+    Ok(out)
 }
 
-fn contains(screen: &Screen, needle: &str) -> bool {
-    rows(screen).iter().any(|r| r.contains(needle))
+fn contains(screen: &Screen, needle: &str) -> Result<bool, String> {
+    Ok(rows(screen)?.iter().any(|r| r.contains(needle)))
 }
 
 #[path = "tui/session.rs"]

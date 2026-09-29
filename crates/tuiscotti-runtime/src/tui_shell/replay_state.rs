@@ -1,26 +1,20 @@
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use alacritty_terminal::event::{Event, EventListener};
+use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions as GridDims;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
+use alacritty_terminal::term::{Term, TermMode};
+use alacritty_terminal::vte::ansi::{NamedColor, Rgb as VteRgb};
 
-use super::*;
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use super::{DefaultColors, Hyperlink, REPLAY_HISTORY, ReplayEvents, TermSnapshot};
+use tuiscotti_core::frame::Rgb;
+use tuiscotti_core::screen::Maybe;
 
 /// Cap on hyperlinks collected from one replay.
 const MAX_REPLAY_LINKS: usize = 1024;
 
-fn replay_modes(mode: &TermMode) -> Vec<u16> {
+fn replay_modes(mode: TermMode) -> Vec<u16> {
     let mut out = Vec::new();
     let mut push = |flag: TermMode, n: u16| {
         if mode.contains(flag) {
@@ -62,7 +56,10 @@ pub(crate) fn build_replay_state<T: EventListener>(
     cols: u16,
 ) -> TermSnapshot {
     let palette: Vec<(u8, Rgb)> = (0..256u16)
-        .filter_map(|i| term.colors()[i as usize].map(|c| (i as u8, vte_to_rgb(c))))
+        .filter_map(|i| {
+            term.colors()[usize::from(i)]
+                .map(|c| (u8::try_from(i).unwrap_or(u8::MAX), vte_to_rgb(c)))
+        })
         .collect();
     let defaults = DefaultColors {
         fg: term.colors()[NamedColor::Foreground].map(vte_to_rgb),
@@ -75,21 +72,18 @@ pub(crate) fn build_replay_state<T: EventListener>(
     let grid = term.grid();
     let mut scrollback = Vec::with_capacity(history);
     for h in (0..history).rev() {
-        scrollback.push(replay_line_text(grid, Line(-(h as i32) - 1), cols));
+        let back = i32::try_from(h).unwrap_or(i32::MAX);
+        scrollback.push(replay_line_text(grid, Line(-back - 1), cols));
     }
     let mut seen = HashSet::new();
     let mut hyperlinks = Vec::new();
     for h in (0..history).rev() {
-        collect_links(
-            grid,
-            Line(-(h as i32) - 1),
-            cols,
-            &mut seen,
-            &mut hyperlinks,
-        );
+        let back = i32::try_from(h).unwrap_or(i32::MAX);
+        collect_links(grid, Line(-back - 1), cols, &mut seen, &mut hyperlinks);
     }
     for y in 0..term.screen_lines() {
-        collect_links(grid, Line(y as i32), cols, &mut seen, &mut hyperlinks);
+        let row = i32::try_from(y).unwrap_or(i32::MAX);
+        collect_links(grid, Line(row), cols, &mut seen, &mut hyperlinks);
     }
     TermSnapshot {
         title: match &events.title {
@@ -97,7 +91,7 @@ pub(crate) fn build_replay_state<T: EventListener>(
             None => Maybe::Unknown,
         },
         bells: Maybe::Known(events.bells),
-        modes: Maybe::Known(replay_modes(term.mode())),
+        modes: Maybe::Known(replay_modes(*term.mode())),
         palette: Maybe::Known(palette),
         defaults: Maybe::Known(defaults),
         clipboard: Maybe::Known(events.clipboard.clone()),

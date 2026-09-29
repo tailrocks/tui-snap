@@ -17,13 +17,17 @@ fn guardian_contains_group() {
         .spawn()
         .expect("spawn succeeds");
     let child_pid = session.pid().expect("pid succeeds");
-    assert!(!wait_found("29371", 5).is_empty());
+    assert!(
+        !wait_found("29371", 5)
+            .expect("wait_found succeeds")
+            .is_empty()
+    );
     let guardian = Guardian::wrap(session);
     let report: GuardianReport = guardian.finish(deadline(10)).expect("finish succeeds");
     assert_eq!(report.child_pid, Some(child_pid));
     assert_eq!(report.containment, Containment::Full);
     assert!(report.teardown_error.is_none());
-    assert!(pgrep("29371").is_empty());
+    assert!(pgrep("29371").expect("pgrep succeeds").is_empty());
     assert!(!process_exists(child_pid));
 }
 
@@ -40,9 +44,13 @@ fn guardian_escape_boundary_setsid_outlives() {
         .spawn()
         .expect("spawn succeeds");
     let child_pgid = pgid_of(session.pid().expect("pid succeeds")).expect("child pgid resolvable");
-    let found = wait_found("29372", 10);
+    let found = wait_found("29372", 10).expect("wait_found succeeds");
     assert!(!found.is_empty(), "escapee never started");
-    assert!(!wait_found("29373", 5).is_empty());
+    assert!(
+        !wait_found("29373", 5)
+            .expect("wait_found succeeds")
+            .is_empty()
+    );
     // A pgrep match is NOT the escape: it also fires for the pre-exec
     // `sh -c`, whose script text holds the token. Teardown legitimately
     // kills anything still in the group (kernel SIGHUP to the foreground
@@ -53,6 +61,7 @@ fn guardian_escape_boundary_setsid_outlives() {
     let escape_dl = deadline(10);
     let escaped = loop {
         let outside: Vec<u32> = pgrep("29372")
+            .expect("pgrep succeeds")
             .into_iter()
             .filter(|p| pgid_of(*p).is_some_and(|g| g != child_pgid))
             .collect();
@@ -66,9 +75,9 @@ fn guardian_escape_boundary_setsid_outlives() {
         .finish(deadline(10))
         .expect("finish succeeds");
     // Same-group child contained...
-    assert!(pgrep("29373").is_empty());
+    assert!(pgrep("29373").expect("pgrep succeeds").is_empty());
     // ...but the new-group grandchild outlives: the documented boundary.
-    let still = pgrep("29372");
+    let still = pgrep("29372").expect("pgrep succeeds");
     assert_eq!(still, escaped);
     assert!(!GuardianReport::escape_boundary_note().is_empty());
     // Prove the mechanism: the escapee is in a different process group.
@@ -76,7 +85,7 @@ fn guardian_escape_boundary_setsid_outlives() {
     assert_ne!(Some(escapee_pgid), report.pgid);
     // Bounded cleanup of the deliberate escapee.
     pkill("29372");
-    wait_gone("29372", 5);
+    wait_gone("29372", 5).expect("wait_gone succeeds");
 }
 
 #[test]
@@ -87,10 +96,14 @@ fn guardian_drop_contains() {
             .size(40, 10)
             .spawn()
             .expect("spawn succeeds");
-        assert!(!wait_found("29374", 5).is_empty());
+        assert!(
+            !wait_found("29374", 5)
+                .expect("wait_found succeeds")
+                .is_empty()
+        );
         let _guardian = Guardian::wrap(session);
     }
-    wait_gone("29374", 5);
+    wait_gone("29374", 5).expect("wait_gone succeeds");
 }
 
 #[test]

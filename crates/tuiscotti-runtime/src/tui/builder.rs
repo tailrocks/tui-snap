@@ -11,74 +11,10 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use super::capture::run_reader;
 use super::error::TuiError;
 use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, PTY_LIFECYCLE};
+use super::profile::TerminalProfile;
 use super::session::Session;
 use super::shared::Shared;
-use super::worker::{Op, run_worker};
-
-/// Advertised terminal/protocol behavior for a session.
-///
-/// `spawn()` rejects any profile claiming a capability the backend cannot
-/// implement — capabilities are never silently normalized away.
-#[derive(Debug, Clone)]
-pub struct TerminalProfile {
-    /// `TERM` value exported to the child (child-only).
-    pub term: String,
-    /// Application may use SGR mouse (1006). Backend tracks it.
-    pub mouse_sgr: bool,
-    /// Application may use UTF-8 mouse (1005). Backend tracks it.
-    pub mouse_utf8: bool,
-    /// Application may use legacy X10 mouse (1000/1002/1003). Tracked.
-    pub mouse_legacy: bool,
-    /// Parse kitty progressive-enhancement flags (enables them in the
-    /// emulator config so applications can negotiate them).
-    pub kitty_keyboard: bool,
-    /// Application may use bracketed paste (2004). Tracked.
-    pub bracketed_paste: bool,
-    /// Application may use focus tracking (1004). Tracked.
-    pub focus_tracking: bool,
-    /// Application may use the alternate screen (1049). Tracked.
-    pub alt_screen: bool,
-    /// Synchronized output (DEC 2026). **Backend lacks it**: `spawn()`
-    /// fails when this is true, and `wait_frame` is unsupported.
-    pub synchronized_output: bool,
-    /// Per-cell blink (SGR 5/6). **Backend drops it**: `spawn()` fails
-    /// when this is true rather than passing on a lossy grid.
-    pub cell_blink: bool,
-}
-
-impl Default for TerminalProfile {
-    fn default() -> Self {
-        Self {
-            term: "xterm-256color".to_string(),
-            mouse_sgr: true,
-            mouse_utf8: true,
-            mouse_legacy: true,
-            kitty_keyboard: true,
-            bracketed_paste: true,
-            focus_tracking: true,
-            alt_screen: true,
-            synchronized_output: false,
-            cell_blink: false,
-        }
-    }
-}
-
-impl TerminalProfile {
-    /// Reject profiles advertising what the backend lacks.
-    fn check(&self) -> Result<(), TuiError> {
-        if self.synchronized_output {
-            return Err(TuiError::Unsupported(
-                "profile advertises synchronized-output (DEC 2026): backend cannot track it",
-            ));
-        }
-        if self.cell_blink {
-            return Err(TuiError::Unsupported(
-                "profile advertises per-cell blink: backend drops SGR 5/6",
-            ));
-        }
-        Ok(())
-    }
-}
+use super::worker::{Op, WorkerParams, run_worker};
 
 #[derive(Debug, Clone)]
 enum Program {
@@ -144,6 +80,10 @@ impl Tui {
     /// through the canonical [`crate::command::cargo_bin_path`] lookup.
     /// Resolution failure is an error here (not deferred to [`Tui::spawn`]),
     /// listing every location tried.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError::Spawn` if the binary cannot be resolved.
     pub fn cargo_bin(name: impl AsRef<OsStr>) -> Result<Self, TuiError> {
         let name = name.as_ref().to_os_string();
         resolve_cargo_bin(&name)?;
@@ -157,12 +97,14 @@ impl Tui {
         })
     }
 
+    /// Append one child argument.
     #[must_use]
     pub fn arg(mut self, arg: impl AsRef<OsStr>) -> Self {
         self.extra_args.push(arg.as_ref().to_os_string());
         self
     }
 
+    /// Append child arguments.
     #[must_use]
     pub fn args<I, S>(mut self, args: I) -> Self
     where
@@ -207,6 +149,10 @@ impl Tui {
     }
 
     /// Spawn the child in a new PTY and start the session threads.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` for bad sizes, rejected profiles, or spawn failures.
     pub fn spawn(self) -> Result<Session, TuiError> {
         self.profile.check()?;
         let (cols, rows) = self.size;
@@ -226,12 +172,13 @@ impl Tui {
         }
 
         let cmd = self.prepare_command(&argv);
-        let spawned = spawn_pty_child(cmd, cols, rows)?;
-        let reader = spawned.reader;
-        let writer = spawned.writer;
-        let child = spawned.child;
-        let pid = spawned.pid;
-        let master = spawned.master;
+        let SpawnedPty {
+            master,
+            child,
+            reader,
+            writer,
+            pid,
+        } = spawn_pty_child(cmd, cols, rows)?;
 
         let (op_tx, op_rx) = mpsc::channel::<Op>();
         let shared = Arc::new(Shared::new());
@@ -240,28 +187,26 @@ impl Tui {
             ..TermConfig::default()
         };
 
-        let worker_shared = Arc::clone(&shared);
+        let params = WorkerParams {
+            master,
+            child,
+            writer,
+            term_config,
+            cols,
+            rows,
+            pid,
+            op_rx,
+            shared: Arc::clone(&shared),
+        };
         let worker = std::thread::Builder::new()
             .name("tuisnap-tui-worker".to_string())
-            .spawn(move || {
-                run_worker(
-                    master,
-                    child,
-                    writer,
-                    term_config,
-                    cols,
-                    rows,
-                    pid,
-                    op_rx,
-                    worker_shared,
-                );
-            })
+            .spawn(move || run_worker(params))
             .map_err(|e| TuiError::Spawn(format!("worker spawn failed: {e}")))?;
 
         let feed_tx = op_tx.clone();
         let reader_thread = std::thread::Builder::new()
             .name("tuisnap-tui-reader".to_string())
-            .spawn(move || run_reader(reader, feed_tx))
+            .spawn(move || run_reader(reader, &feed_tx))
             .map_err(|e| TuiError::Spawn(format!("reader spawn failed: {e}")))?;
 
         let session = Session {
@@ -316,7 +261,9 @@ struct SpawnedPty {
 /// Open the PTY, spawn the child, and take I/O handles — all under the
 /// process-global lifecycle guard, released before the threads start.
 fn spawn_pty_child(cmd: CommandBuilder, cols: u16, rows: u16) -> Result<SpawnedPty, TuiError> {
-    let _guard = PTY_LIFECYCLE.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = PTY_LIFECYCLE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -343,7 +290,7 @@ fn spawn_pty_child(cmd: CommandBuilder, cols: u16, rows: u16) -> Result<SpawnedP
         .try_wait()
         .map_err(|e| TuiError::Spawn(format!("child poll failed: {e:#}")))?;
     let pid = child.process_id();
-    drop(_guard);
+    drop(guard);
     Ok(SpawnedPty {
         master: pair.master,
         child,
@@ -360,7 +307,7 @@ fn spawn_pty_child(cmd: CommandBuilder, cols: u16, rows: u16) -> Result<SpawnedP
 /// on lookup order.
 fn resolve_cargo_bin(name: &OsStr) -> Result<OsString, TuiError> {
     crate::command::cargo_bin_path(name)
-        .map(|p| p.into_os_string())
+        .map(PathBuf::into_os_string)
         .map_err(|e| TuiError::Spawn(e.to_string()))
 }
 
@@ -371,6 +318,6 @@ pub(crate) fn resolve_cargo_bin_with_map(
     env: &std::collections::HashMap<String, String>,
 ) -> Result<OsString, TuiError> {
     crate::command::cargo_bin_path_with_map(name, env)
-        .map(|p| p.into_os_string())
+        .map(PathBuf::into_os_string)
         .map_err(|e| TuiError::Spawn(e.to_string()))
 }

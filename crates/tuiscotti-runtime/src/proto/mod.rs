@@ -20,7 +20,8 @@ mod types_b;
 
 pub use execute::*;
 pub use journal::*;
-pub use registry::*;
+#[cfg(feature = "pty")]
+pub(crate) use registry::*;
 pub use session_ops::*;
 pub use sessions::*;
 pub use types_a::*;

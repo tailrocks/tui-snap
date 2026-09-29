@@ -1,9 +1,6 @@
-use super::*;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,12 +19,14 @@ pub const LOCAL_PROFILE: &str = "local";
 /// True when the current process runs under cargo-nextest.
 ///
 /// Detection key is `NEXTEST_RUN_ID` (set for every test process since 0.9.138).
+#[must_use]
 pub fn is_nextest() -> bool {
     std::env::var_os("NEXTEST_RUN_ID").is_some()
 }
 
 /// [`is_nextest`] over an injected environment (tests avoid global env mutation).
-pub fn is_nextest_map(env: &HashMap<String, String>) -> bool {
+#[must_use]
+pub fn is_nextest_map<S: std::hash::BuildHasher>(env: &HashMap<String, String, S>) -> bool {
     env.contains_key("NEXTEST_RUN_ID")
 }
 
@@ -60,12 +59,12 @@ pub struct BaselineId {
 
 impl BaselineId {
     /// Read identity from the process environment.
+    #[must_use]
     pub fn from_env(scenario: &str) -> Self {
         let env: HashMap<String, String> =
             std::env::vars().filter(|(k, _)| is_relevant(k)).collect();
         let cwd = std::env::current_dir()
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| ".".to_string());
+            .map_or_else(|_| ".".to_string(), |p| p.to_string_lossy().into_owned());
         Self::from_map(scenario, &env, &cwd)
     }
 
@@ -86,6 +85,7 @@ impl BaselineId {
     /// assert_eq!(id.profile, "ci");
     /// assert_eq!(id.workspace, "/repo");
     /// ```
+    #[must_use]
     pub fn from_map(
         scenario: &str,
         env: &HashMap<String, String>,
@@ -117,6 +117,7 @@ impl BaselineId {
     }
 
     /// Attach a caller-supplied variant (theme, viewport class, …).
+    #[must_use]
     pub fn with_variant(mut self, variant: &str) -> Self {
         self.variant = Some(variant.to_string());
         self
@@ -124,6 +125,7 @@ impl BaselineId {
 
     /// Key stable across retries/stress/shards of this scenario. Excludes every
     /// [`AttemptId`] field by construction.
+    #[must_use]
     pub fn stable_key(&self) -> String {
         format!(
             "{}|{}|{}|{}|{}|{}|{}",
@@ -144,15 +146,14 @@ pub(crate) fn parse_binary_id(
     binary_id: Option<&str>,
     cargo_pkg: Option<&str>,
 ) -> (String, String) {
-    match binary_id {
-        Some(id) => match id.split_once("::") {
+    if let Some(id) = binary_id {
+        match id.split_once("::") {
             Some((pkg, rest)) => (pkg.to_string(), rest.to_string()),
             None => (id.to_string(), id.to_string()),
-        },
-        None => {
-            let pkg = cargo_pkg.unwrap_or(UNKNOWN_PACKAGE).to_string();
-            (pkg.clone(), pkg)
         }
+    } else {
+        let pkg = cargo_pkg.unwrap_or(UNKNOWN_PACKAGE).to_string();
+        (pkg.clone(), pkg)
     }
 }
 
@@ -164,13 +165,12 @@ pub(crate) fn parse_binary_id(
 fn workspace_root_of(start: &Path) -> PathBuf {
     let mut cur = Some(start);
     while let Some(dir) = cur {
-        if let Ok(text) = fs::read_to_string(dir.join("Cargo.toml")) {
-            if text
+        if let Ok(text) = fs::read_to_string(dir.join("Cargo.toml"))
+            && text
                 .lines()
                 .any(|l| l.trim_start().starts_with("[workspace"))
-            {
-                return dir.to_path_buf();
-            }
+        {
+            return dir.to_path_buf();
         }
         cur = dir.parent();
     }
@@ -198,6 +198,7 @@ pub struct AttemptId {
 
 impl AttemptId {
     /// Read attempt identity from the process environment.
+    #[must_use]
     pub fn from_env() -> Self {
         let env: HashMap<String, String> =
             std::env::vars().filter(|(k, _)| is_relevant(k)).collect();
@@ -242,6 +243,7 @@ impl AttemptId {
     }
 
     /// Attach a shard/partition label known to the caller.
+    #[must_use]
     pub fn with_shard(mut self, shard: &str) -> Self {
         self.shard = Some(shard.to_string());
         self
@@ -249,14 +251,17 @@ impl AttemptId {
 
     /// Filesystem-safe leaf qualifying one attempt's artifacts. Distinct runs,
     /// attempts, stress iterations, and shards map to distinct leaves.
+    #[must_use]
     pub fn dir_suffix(&self) -> String {
         let run8: String = sanitize(&self.run).chars().take(8).collect();
         let mut s = format!("run-{run8}-attempt-{}", self.attempt);
         if let Some(i) = self.stress_iter {
-            s.push_str(&format!("-stress-{i}"));
+            s.push_str("-stress-");
+            s.push_str(&i.to_string());
         }
         if let Some(sh) = &self.shard {
-            s.push_str(&format!("-shard-{}", sanitize(sh)));
+            s.push_str("-shard-");
+            s.push_str(&sanitize(sh));
         }
         s
     }
@@ -268,8 +273,7 @@ pub(crate) fn generate_local_run_id() -> String {
     let pid = std::process::id();
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_nanos());
     let ctr = LOCAL_RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("local-{pid}-{nanos:x}-{ctr:x}")
 }

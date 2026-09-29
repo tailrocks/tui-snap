@@ -15,7 +15,9 @@
 //! `Observation`s, never on attach output.
 
 mod pty;
+mod replay;
 mod text;
 
 pub use pty::*;
+pub use replay::*;
 pub use text::*;

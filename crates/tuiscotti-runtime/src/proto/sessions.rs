@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::*;
+use super::OpError;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -19,6 +18,7 @@ pub enum SessionBackend {
     /// Plain piped child (this version). PTY-backed named sessions arrive
     /// with the daemon transport; the enum reserves the shape.
     Process,
+    /// PTY-backed session (reserved shape; not constructed here).
     Pty,
 }
 
@@ -26,18 +26,26 @@ pub enum SessionBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum SessionStatus {
+    /// The recorded pid is alive.
     Running,
+    /// The recorded pid is dead.
     Exited,
 }
 
 /// What `session list` reports per session.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionInfo {
+    /// Session name.
     pub name: String,
+    /// Recorded child pid.
     pub pid: u32,
+    /// Spawn argv (lossy UTF-8 projection).
     pub argv: Vec<String>,
+    /// Backend that owns the child.
     pub backend: SessionBackend,
+    /// Current liveness.
     pub status: SessionStatus,
+    /// Start time as unix seconds.
     pub started_unix: u64,
 }
 
@@ -66,13 +74,18 @@ static RUNTIME_DIR_OVERRIDE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mute
 pub fn set_runtime_dir_override(dir: Option<PathBuf>) {
     *RUNTIME_DIR_OVERRIDE
         .lock()
-        .unwrap_or_else(|e| e.into_inner()) = dir;
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = dir;
 }
 
+/// Resolve the runtime dir, creating it owner-only (0o700) on Unix.
+///
+/// # Errors
+///
+/// Returns [`OpError`] when the dir cannot be created or secured.
 pub fn runtime_dir() -> Result<PathBuf, OpError> {
     if let Some(d) = RUNTIME_DIR_OVERRIDE
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone()
     {
         return ensure_runtime_dir(&d);
@@ -93,7 +106,7 @@ fn ensure_runtime_dir(dir: &Path) -> Result<PathBuf, OpError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(&dir)
+        let mode = std::fs::metadata(dir)
             .map_err(|e| OpError::new("io", format!("stat {}: {e}", dir.display())))?
             .permissions()
             .mode()
@@ -211,8 +224,7 @@ pub(crate) fn pid_alive(pid: u32) -> bool {
             .arg("-0")
             .arg(pid.to_string())
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+            .is_ok_and(|o| o.status.success())
     }
     #[cfg(not(unix))]
     {
@@ -230,8 +242,7 @@ pub(crate) fn kill_pid(pid: u32) -> Result<(), OpError> {
             .arg("-TERM")
             .arg(pid.to_string())
             .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .is_ok_and(|s| s.success());
         if !delivered && pid_alive(pid) {
             return Err(OpError::new("io", format!("SIGTERM {pid} failed")));
         }
@@ -263,6 +274,5 @@ pub(crate) fn kill_pid(pid: u32) -> Result<(), OpError> {
 pub(crate) fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }

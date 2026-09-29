@@ -41,7 +41,7 @@ fn replay_chunk_invariance_all_split_points() {
 }
 
 /// Capture real PTY output bytes (own minimal reader, bounded).
-fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
+fn capture_raw(argv0: &str, args: &[&str]) -> Result<Vec<u8>, String> {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::Read;
     let pty_system = native_pty_system();
@@ -52,7 +52,7 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
             pixel_width: 0,
             pixel_height: 0,
         })
-        .expect("openpty succeeds");
+        .map_err(|e| format!("openpty failed: {e}"))?;
     let mut cmd = CommandBuilder::new(argv0);
     for a in args {
         cmd.arg(a);
@@ -61,7 +61,7 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
     let mut child = pair
         .slave
         .spawn_command(cmd)
-        .expect("spawn_command succeeds");
+        .map_err(|e| format!("spawn_command failed: {e}"))?;
     // Drop our slave handle before reading: a parent-held slave fd
     // suppresses master EOF/EIO on Linux, blocking the reader forever
     // after child exit (macOS returns regardless; Linux hung CI here).
@@ -69,7 +69,7 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
     let mut reader = pair
         .master
         .try_clone_reader()
-        .expect("try_clone_reader succeeds");
+        .map_err(|e| format!("try_clone_reader failed: {e}"))?;
     // Drain on a thread: a blocking PTY read cannot be preempted, so the
     // deadline lives on this thread, never behind a read that may not return.
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
@@ -78,38 +78,38 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
         let mut buf = [0u8; 4096];
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break,
+                Ok(0) | Err(_) => break,
                 Ok(n) => out.extend_from_slice(&buf[..n]),
-                Err(_) => break,
             }
         }
-        let _ = tx.send(out);
+        tx.send(out).ok();
     });
     let dl = deadline(10);
     loop {
-        if child.try_wait().expect("try_wait succeeds").is_some() {
+        if child
+            .try_wait()
+            .map_err(|e| format!("try_wait failed: {e}"))?
+            .is_some()
+        {
             break;
         }
         // Kill before failing: a timed-out capture must not leak the child.
         if Instant::now() >= dl {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("raw capture timed out waiting for child exit");
+            child.kill().ok();
+            child.wait().ok();
+            return Err("raw capture timed out waiting for child exit".to_string());
         }
         std::thread::sleep(Duration::from_millis(10));
     }
     // Trailing bytes after exit, still bounded; kill on overrun so a
     // daemonized grandchild holding the slave cannot hang the suite.
-    match rx.recv_timeout(dl.saturating_duration_since(Instant::now())) {
-        Ok(out) => {
-            let _ = child.wait();
-            out
-        }
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("raw capture timed out draining PTY output");
-        }
+    if let Ok(out) = rx.recv_timeout(dl.saturating_duration_since(Instant::now())) {
+        child.wait().ok();
+        Ok(out)
+    } else {
+        child.kill().ok();
+        child.wait().ok();
+        Err("raw capture timed out draining PTY output".to_string())
     }
 }
 
@@ -119,7 +119,8 @@ fn replay_recorded_pty_bytes_chunk_invariant() {
         "/bin/sh",
         // POSIX octal: dash (Linux /bin/sh) does not interpret \xNN.
         &["-c", "printf 'X\\033[1mB\\033[0m\\n\\342\\202\\254\\n'"],
-    );
+    )
+    .expect("capture_raw succeeds");
     assert!(!bytes.is_empty());
     assert!(bytes.windows(3).any(|w| w == b"\xe2\x82\xac"));
     let whole = replay_bytes(&bytes, 80, 24).expect("replay_bytes succeeds");
@@ -146,11 +147,12 @@ fn capture_raw_bounded_when_child_exits_silently() {
     // fails fast instead of hanging the suite.
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(capture_raw("/bin/sh", &["-c", "exit 0"]));
+        tx.send(capture_raw("/bin/sh", &["-c", "exit 0"])).ok();
     });
     let bytes = rx
         .recv_timeout(Duration::from_secs(20))
-        .expect("capture_raw hung on silent immediate child exit");
+        .expect("capture_raw hung on silent immediate child exit")
+        .expect("capture_raw succeeds");
     assert!(bytes.is_empty(), "unexpected bytes: {bytes:?}");
 }
 
@@ -166,7 +168,7 @@ fn replay_input_never_fed_as_output() {
     let direct = replay_bytes(b"KEEPVISIBLE", 40, 10).expect("replay_bytes succeeds");
     assert_eq!(via_rec.screen, direct.screen);
     assert_eq!(via_rec.bytes_fed, b"KEEPVISIBLE".len());
-    assert!(contains(&via_rec.screen, "KEEPVISIBLE"));
+    assert!(contains(&via_rec.screen, "KEEPVISIBLE").expect("screen rows readable"));
     // Re-chunked replay agrees too.
     assert_eq!(
         replay_recording(&rec, Some(2))

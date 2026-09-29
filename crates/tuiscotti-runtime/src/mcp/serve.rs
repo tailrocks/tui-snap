@@ -2,7 +2,7 @@ use std::io::{BufRead, Write};
 
 use serde_json::{Value, json};
 
-use super::*;
+use super::{MCP_PROTOCOL_VERSION, tools, tools_list_json};
 use crate::proto::{self, OpError};
 
 /// Serve JSON-RPC 2.0 over `reader`/`writer`, one message per line, until EOF.
@@ -12,9 +12,8 @@ pub fn serve<R: BufRead, W: Write>(mut reader: R, mut writer: W) {
     loop {
         line.clear();
         match reader.read_line(&mut line) {
-            Ok(0) => break,
+            Ok(0) | Err(_) => break,
             Ok(_) => {}
-            Err(_) => break,
         }
         if line.trim().is_empty() {
             continue;
@@ -45,7 +44,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
         Ok(v) => v,
         Err(e) => {
             return Some(error_response(
-                Value::Null,
+                &Value::Null,
                 -32700,
                 "Parse error",
                 Some(json!(e.to_string())),
@@ -54,7 +53,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
     };
     if msg.is_array() {
         return Some(error_response(
-            Value::Null,
+            &Value::Null,
             -32600,
             "Invalid Request: batches unsupported",
             None,
@@ -63,7 +62,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
     if msg.get("jsonrpc") != Some(&Value::String("2.0".to_string())) {
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
         return Some(error_response(
-            id,
+            &id,
             -32600,
             "Invalid Request: want {\"jsonrpc\":\"2.0\",...}",
             None,
@@ -76,7 +75,7 @@ pub fn handle_request(raw: &str) -> Option<String> {
         // No method and no id: pure noise, stay silent.
         let id = id?;
         return Some(error_response(
-            id,
+            &id,
             -32600,
             "Invalid Request: missing method",
             None,
@@ -85,18 +84,18 @@ pub fn handle_request(raw: &str) -> Option<String> {
     // Notification (no id): only `notifications/*` is meaningful; never reply.
     let id = id?;
     match method {
-        "initialize" => Some(success_response(id, initialize_result(&params))),
-        "tools/list" => Some(success_response(id, tools_list_json())),
-        "tools/call" => Some(call_tool(id, &params)),
-        "ping" => Some(success_response(id, json!({}))),
+        "initialize" => Some(success_response(&id, &initialize_result(&params))),
+        "tools/list" => Some(success_response(&id, &tools_list_json())),
+        "tools/call" => Some(call_tool(&id, &params)),
+        "ping" => Some(success_response(&id, &json!({}))),
         m if m.starts_with("notifications/") => Some(error_response(
-            id,
+            &id,
             -32601,
             "Method not found: notifications take no id",
             None,
         )),
         other => Some(error_response(
-            id,
+            &id,
             -32601,
             "Method not found",
             Some(json!(other)),
@@ -121,7 +120,7 @@ fn initialize_result(params: &Value) -> Value {
     })
 }
 
-fn call_tool(id: Value, params: &Value) -> String {
+fn call_tool(id: &Value, params: &Value) -> String {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let tool = tools().into_iter().find(|t| t.name == name);
     if name.is_empty() || tool.is_none() {
@@ -174,14 +173,14 @@ fn call_tool(id: Value, params: &Value) -> String {
     });
     success_response(
         id,
-        json!({
+        &json!({
             "content": [{"type": "text", "text": text}],
             "isError": is_error,
         }),
     )
 }
 
-fn success_response(id: Value, result: Value) -> String {
+fn success_response(id: &Value, result: &Value) -> String {
     serde_json::to_string(&json!({"jsonrpc": "2.0", "id": id, "result": result})).unwrap_or_else(
         |_| {
             r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"Internal error"}}"#
@@ -190,7 +189,7 @@ fn success_response(id: Value, result: Value) -> String {
     )
 }
 
-fn error_response(id: Value, code: i32, message: &str, data: Option<Value>) -> String {
+fn error_response(id: &Value, code: i32, message: &str, data: Option<Value>) -> String {
     let mut fields = serde_json::Map::with_capacity(3);
     fields.insert("code".to_string(), json!(code));
     fields.insert("message".to_string(), Value::String(message.to_string()));

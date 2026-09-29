@@ -1,7 +1,8 @@
-use super::*;
-use std::path::{Path, PathBuf};
-use tuiscotti_core::frame::{Frame, FrameError};
-use tuiscotti_render::diff;
+use super::{
+    CompareOutcome, ReportEntry, SnapshotError, Status, Store, StoreReport, report_entry,
+    sha256_hex, write_atomic, write_report,
+};
+use tuiscotti_core::frame::Frame;
 use tuiscotti_render::profile::Profile;
 use tuiscotti_render::render;
 
@@ -52,14 +53,11 @@ impl Store {
                 ));
             }
         };
-        let manifest_text = match std::fs::read_to_string(&manifest_path) {
-            Ok(t) => t,
-            Err(_) => {
-                return Some(format!(
-                    "candidate `{name}` incomplete: {} missing (interrupted write?)",
-                    manifest_path.display()
-                ));
-            }
+        let Ok(manifest_text) = std::fs::read_to_string(&manifest_path) else {
+            return Some(format!(
+                "candidate `{name}` incomplete: {} missing (interrupted write?)",
+                manifest_path.display()
+            ));
         };
         let manifest: serde_json::Value = match serde_json::from_str(&manifest_text) {
             Ok(v) => v,
@@ -70,7 +68,11 @@ impl Store {
                 ));
             }
         };
-        if manifest.get("complete").and_then(|v| v.as_bool()) != Some(true) {
+        if manifest
+            .get("complete")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        {
             return Some(format!(
                 "candidate `{name}` incomplete: {} not sealed (complete != true)",
                 manifest_path.display()
@@ -99,6 +101,10 @@ impl Store {
 
     /// Explicitly approve one snapshot: actual → approved (atomic).
     /// There is deliberately no environment-variable auto-accept.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when actual artifacts are missing or writes fail.
     pub fn accept(&self, name: &str) -> Result<(), SnapshotError> {
         // F1: every path below joins `name` — reject escapes before any copy.
         crate::grouped::validate_name(name)?;
@@ -138,6 +144,10 @@ impl Store {
     /// Assemble one report row from a check outcome. The HTML report links
     /// PNGs on disk (no base64). Expected bytes with no disk path are
     /// written next to the report under `report-media/`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when the report row cannot be assembled.
     pub fn report_entry(
         &self,
         outcome: &CompareOutcome,
@@ -152,6 +162,10 @@ impl Store {
     ///
     /// This constructs a fresh [`render::Renderer`] per call; bulk callers
     /// should build one and use [`Self::report_with`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when re-verifying or writing the report fails.
     pub fn report(
         &self,
         profile: &Profile,
@@ -164,6 +178,10 @@ impl Store {
     }
 
     /// [`Self::report`] through a caller-owned [`render::Renderer`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `SnapshotError` when re-verifying or writing the report fails.
     pub fn report_with(
         &self,
         renderer: &mut render::Renderer,

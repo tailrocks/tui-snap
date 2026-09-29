@@ -1,10 +1,7 @@
-use super::*;
-use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Append-only JSONL event journal (N07).
@@ -26,13 +23,14 @@ pub const COMPLETE_MARKER: &str = "COMPLETE";
 impl Journal {
     /// Open (or resume) the journal at `path`, creating parent directories.
     /// The sequence counter resumes after the existing line count.
+    /// # Errors
+    ///
+    /// Returns an I/O error when directories or the journal cannot be opened.
     pub fn open(path: &Path) -> std::io::Result<Self> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let seq = fs::File::open(path)
-            .map(|f| BufReader::new(f).lines().count() as u64)
-            .unwrap_or(0);
+        let seq = fs::File::open(path).map_or(0, |f| BufReader::new(f).lines().count() as u64);
         let file = OpenOptions::new().create(true).append(true).open(path)?;
         Ok(Self {
             path: path.to_path_buf(),
@@ -42,16 +40,19 @@ impl Journal {
     }
 
     /// Journal path.
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Append one event and flush. Minimal std-only JSON escaping applies.
+    /// # Errors
+    ///
+    /// Returns an I/O error when the event cannot be written or flushed.
     pub fn append(&mut self, event: &str, detail: &str) -> std::io::Result<()> {
         let ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_millis());
         writeln!(
             self.file,
             "{{\"seq\":{},\"unix_ms\":{ms},\"event\":\"{}\",\"detail\":\"{}\"}}",
@@ -66,6 +67,9 @@ impl Journal {
 
     /// Mark the attempt complete with a terminal `status`, then write the
     /// `COMPLETE` marker. Fail-closed: anything killed before this stays incomplete.
+    /// # Errors
+    ///
+    /// Returns an I/O error when the event or marker cannot be written.
     pub fn complete(&mut self, status: &str) -> std::io::Result<()> {
         self.append("complete", status)?;
         if let Some(parent) = self.path.parent() {
@@ -77,6 +81,7 @@ impl Journal {
     /// Read the completion status of a journal directory: complete only when the
     /// `COMPLETE` marker exists **and** the journal's last event is `complete`.
     /// Missing journal, missing marker, or any other tail → incomplete.
+    #[must_use]
     pub fn status(dir: &Path) -> JournalStatus {
         let marker = dir.join(COMPLETE_MARKER);
         if !marker.is_file() {
@@ -107,13 +112,20 @@ impl Journal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JournalStatus {
     /// Explicitly completed with this terminal status string.
-    Complete { status: String },
+    Complete {
+        /// Terminal status string.
+        status: String,
+    },
     /// Killed, timed out, or never finished: not a pass.
-    Incomplete { reason: String },
+    Incomplete {
+        /// Why the journal counts as incomplete.
+        reason: String,
+    },
 }
 
 impl JournalStatus {
     /// True only for [`JournalStatus::Complete`].
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         matches!(self, JournalStatus::Complete { .. })
     }
@@ -128,7 +140,9 @@ pub(crate) fn json_escape(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                write!(out, "\\u{:04x}", c as u32).ok();
+            }
             c => out.push(c),
         }
     }

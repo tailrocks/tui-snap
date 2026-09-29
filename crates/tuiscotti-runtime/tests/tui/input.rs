@@ -30,12 +30,12 @@ fn cancel_mid_wait() {
     s.send_text("after-cancel\n").expect("send_text succeeds");
     let obs = s
         .wait_predicate(
-            |o| contains(&o.screen, "after-cancel"),
+            |o| contains(&o.screen, "after-cancel").expect("screen rows readable"),
             deadline(5),
             &cancel(),
         )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "after-cancel"));
+    assert!(contains(&obs.screen, "after-cancel").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -47,7 +47,7 @@ fn wait_stable_settles() {
     let obs = s
         .wait_stable(deadline(10), &cancel())
         .expect("wait_stable succeeds");
-    assert!(contains(&obs.screen, "steady"));
+    assert!(contains(&obs.screen, "steady").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -103,9 +103,13 @@ fn mouse_click_sgr_roundtrip() {
         .expect("click succeeds");
     // SGR press `<0;6;4M` echoed back by cat.
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "<0;6;4M"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "<0;6;4M").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "<0;6;4M"));
+    assert!(contains(&obs.screen, "<0;6;4M").expect("screen rows readable"));
     // Hover needs 1003, which this app did not enable.
     let err = s
         .mouse_move(1, 1, MouseMods::NONE)
@@ -139,9 +143,13 @@ fn mouse_wheel_and_drag_roundtrip() {
     s.mouse_wheel(Wheel::Up, 2, 2, MouseMods::NONE)
         .expect("mouse_wheel succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "<64;3;3M"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "<64;3;3M").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "<64;3;3M"));
+    assert!(contains(&obs.screen, "<64;3;3M").expect("screen rows readable"));
     s.mouse_down(MouseButton::Left, 1, 1, MouseMods::NONE)
         .expect("mouse_down succeeds");
     s.mouse_drag(MouseButton::Left, 4, 1, MouseMods::NONE)
@@ -150,9 +158,13 @@ fn mouse_wheel_and_drag_roundtrip() {
         .expect("mouse_up succeeds");
     // Drag motion `32;5;2M` echoed back.
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "<32;5;2M"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "<32;5;2M").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "<32;5;2M"));
+    assert!(contains(&obs.screen, "<32;5;2M").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -170,14 +182,22 @@ fn focus_roundtrip() {
     .expect("contains succeeds");
     s.focus_in().expect("focus_in succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "[I"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "[I").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "[I"));
+    assert!(contains(&obs.screen, "[I").expect("screen rows readable"));
     s.focus_out().expect("focus_out succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "[O"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "[O").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "[O"));
+    assert!(contains(&obs.screen, "[O").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -191,12 +211,12 @@ fn paste_negotiated_and_delimiter_rejected() {
     s.paste("plain-paste").expect("paste succeeds");
     let obs = s
         .wait_predicate(
-            |o| contains(&o.screen, "plain-paste"),
+            |o| contains(&o.screen, "plain-paste").expect("screen rows readable"),
             deadline(5),
             &cancel(),
         )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "plain-paste"));
+    assert!(contains(&obs.screen, "plain-paste").expect("screen rows readable"));
     // Delimiter injection is rejected, never delivered.
     let err = s.paste("a\x1b[201~b").expect_err("paste must fail");
     assert!(matches!(err, TuiError::PasteRejected(_)), "got {err}");
@@ -216,12 +236,12 @@ fn paste_negotiated_and_delimiter_rejected() {
     s.paste("wrapped").expect("paste succeeds");
     let obs = s
         .wait_predicate(
-            |o| contains(&o.screen, "[200~wrapped"),
+            |o| contains(&o.screen, "[200~wrapped").expect("screen rows readable"),
             deadline(5),
             &cancel(),
         )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "[200~wrapped"));
+    assert!(contains(&obs.screen, "[200~wrapped").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -237,10 +257,14 @@ fn key_release_without_kitty_is_noop() {
     s.key_down(Key::Char('y'), KeyMods::NONE)
         .expect("Char succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "y"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "y").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "y"));
-    assert!(!contains(&obs.screen, "x"));
+    assert!(contains(&obs.screen, "y").expect("screen rows readable"));
+    assert!(!contains(&obs.screen, "x").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -293,11 +317,16 @@ fn child_env_and_cwd_are_child_only() {
     .spawn()
     .expect("spawn succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "v=probe-7"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "v=probe-7").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "v=probe-7"));
+    assert!(contains(&obs.screen, "v=probe-7").expect("screen rows readable"));
     // macOS resolves /tmp to /private/tmp; both contain "tmp".
     let row = rows(&obs.screen)
+        .expect("screen rows readable")
         .into_iter()
         .find(|r| r.contains("v=probe-7"))
         .expect("contains succeeds");
@@ -316,8 +345,12 @@ fn raw_bytes_and_enter_key() {
     s.press_key(Key::Enter, KeyMods::NONE)
         .expect("press_key succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "raw-9"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "raw-9").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "raw-9"));
+    assert!(contains(&obs.screen, "raw-9").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }

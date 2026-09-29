@@ -99,6 +99,6 @@ fn shell_final_state_preserved_after_exit() {
         .expect("wait_shell_exit succeeds");
     assert!(waited.status.success());
     // Final grid + state survive the child.
-    assert!(contains(&waited.observation.screen, "__TUISNAP_C__"));
+    assert!(contains(&waited.observation.screen, "__TUISNAP_C__").expect("screen rows readable"));
     shell.into_session().close().expect("close succeeds");
 }

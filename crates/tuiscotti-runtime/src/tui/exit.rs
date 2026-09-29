@@ -12,16 +12,19 @@ pub struct ExitStatus {
 }
 
 impl ExitStatus {
+    /// True for a clean code-0 exit with no signal.
     #[must_use]
     pub fn success(&self) -> bool {
         self.signal.is_none() && self.code == 0
     }
 
+    /// Raw exit code.
     #[must_use]
     pub fn code(&self) -> u32 {
         self.code
     }
 
+    /// Killing signal name, if signalled.
     #[must_use]
     pub fn signal(&self) -> Option<&str> {
         self.signal.as_deref()
@@ -49,12 +52,18 @@ impl From<portable_pty::ExitStatus> for ExitStatus {
 /// A reaped exit plus the final evidence observation.
 #[derive(Debug, Clone)]
 pub struct ExitWait {
+    /// Reaped child status.
     pub status: ExitStatus,
+    /// Final evidence observation.
     pub observation: Observation,
 }
 
 impl ExitWait {
     /// Assert successful termination, yielding the final observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError::Assertion` unless the child exited cleanly.
     pub fn success(self) -> Result<Observation, TuiError> {
         if self.status.success() {
             Ok(self.observation)
@@ -67,6 +76,10 @@ impl ExitWait {
     }
 
     /// Assert an exact exit code, yielding the final observation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError::Assertion` unless the code matches exactly.
     pub fn code(self, expected: u32) -> Result<Observation, TuiError> {
         if self.status.signal().is_none() && self.status.code() == expected {
             Ok(self.observation)
@@ -94,8 +107,7 @@ pub fn process_exists(pid: u32) -> bool {
         .arg("-0")
         .arg(pid.to_string())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 /// Non-Unix stub.

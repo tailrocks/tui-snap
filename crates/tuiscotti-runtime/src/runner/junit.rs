@@ -1,16 +1,11 @@
-use super::*;
-use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use super::{TestContext, get};
+use std::collections::HashMap;
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Read-only correlation key joining attempt artifacts to nextest results (N05, N10).
 ///
-/// `testsuite` is the nextest binary id (`name` on each JUnit `testsuite`),
-/// `testcase` is the test name, and `run_uuid` is the `uuid` on the JUnit
+/// `testsuite` is the nextest binary id (`name` on each `JUnit` `testsuite`),
+/// `testcase` is the test name, and `run_uuid` is the `uuid` on the `JUnit`
 /// `testsuites` root. This helper only *reads* identity for correlation; it
 /// never rewrites pass/fail status and never invents test entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +21,7 @@ pub struct JunitKey {
 impl JunitKey {
     /// Correlation key for this process, or `None` outside nextest (or when any
     /// of the three identity vars is missing — partial keys are refused).
+    #[must_use]
     pub fn current() -> Option<Self> {
         let env: HashMap<String, String> = std::env::vars().collect();
         Self::from_map(&env)
@@ -46,6 +42,7 @@ impl JunitKey {
     /// assert!(!key.matches("my-crate::integration", "other"));
     /// assert!(key.run_matches("run-1"));
     /// ```
+    #[must_use]
     pub fn from_map(env: &HashMap<String, String>) -> Option<Self> {
         Some(Self {
             run_uuid: get(env, "NEXTEST_RUN_ID")?,
@@ -54,12 +51,14 @@ impl JunitKey {
         })
     }
 
-    /// Do JUnit `testsuite`/`testcase` names identify this attempt's test?
+    /// Do `JUnit` `testsuite`/`testcase` names identify this attempt's test?
+    #[must_use]
     pub fn matches(&self, testsuite: &str, testcase: &str) -> bool {
         self.testsuite == testsuite && self.testcase == testcase
     }
 
-    /// Does a JUnit root `uuid` identify this attempt's run?
+    /// Does a `JUnit` root `uuid` identify this attempt's run?
+    #[must_use]
     pub fn run_matches(&self, run_uuid: &str) -> bool {
         self.run_uuid == run_uuid
     }

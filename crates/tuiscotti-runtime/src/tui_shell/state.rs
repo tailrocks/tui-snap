@@ -1,21 +1,5 @@
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
-
-use super::*;
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
-use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use tuiscotti_core::frame::Rgb;
+use tuiscotti_core::screen::{Maybe, Observation};
 
 // ---------------------------------------------------------------------------
 // R13: terminal-state snapshot + explicit assertions
@@ -24,14 +8,18 @@ use tuiscotti_core::screen::{Maybe, Observation, Screen};
 /// Which clipboard an OSC 52 store targeted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClipboardTarget {
+    /// Explicit clipboard buffer (`CLIPBOARD`).
     Clipboard,
+    /// Primary selection buffer (`PRIMARY`).
     Selection,
 }
 
 /// One captured OSC 52 store: decoded text plus its target.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ClipboardItem {
+    /// Which buffer the store targeted.
     pub target: ClipboardTarget,
+    /// Decoded clipboard text.
     pub text: String,
 }
 
@@ -46,6 +34,7 @@ pub struct SandboxClipboard {
 }
 
 impl SandboxClipboard {
+    /// Empty in-memory clipboard capture.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -55,21 +44,25 @@ impl SandboxClipboard {
         self.items.push(item);
     }
 
+    /// True when no stores were captured.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
+    /// Number of captured stores.
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    /// Most recent captured store, if any.
     #[must_use]
     pub fn latest(&self) -> Option<&ClipboardItem> {
         self.items.last()
     }
 
+    /// All captured stores, oldest first.
     #[must_use]
     pub fn items(&self) -> &[ClipboardItem] {
         &self.items
@@ -80,13 +73,16 @@ impl SandboxClipboard {
 /// default, i.e. no OSC 10/11 override observed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DefaultColors {
+    /// OSC 10 foreground override, if observed.
     pub fg: Option<Rgb>,
+    /// OSC 11 background override, if observed.
     pub bg: Option<Rgb>,
 }
 
 /// One OSC 8 hyperlink URI observed on the grid (order of first appearance).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Hyperlink {
+    /// Link target URI.
     pub uri: String,
 }
 
@@ -98,12 +94,19 @@ pub struct Hyperlink {
 /// ([`Replayed::state`]) fills everything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TermSnapshot {
+    /// Window/icon title.
     pub title: Maybe<String>,
+    /// Bell count since session start.
     pub bells: Maybe<u64>,
+    /// Set DEC/private mode numbers.
     pub modes: Maybe<Vec<u16>>,
+    /// Palette overrides as (index, color) pairs.
     pub palette: Maybe<Vec<(u8, Rgb)>>,
+    /// Default fg/bg overrides.
     pub defaults: Maybe<DefaultColors>,
+    /// Sandboxed clipboard capture.
     pub clipboard: Maybe<SandboxClipboard>,
+    /// Observed hyperlink URIs.
     pub hyperlinks: Maybe<Vec<Hyperlink>>,
     /// Scrollback lines, oldest first, viewport excluded.
     pub scrollback: Maybe<Vec<String>>,
@@ -140,6 +143,10 @@ impl std::fmt::Display for StateError {
 impl std::error::Error for StateError {}
 
 /// Assert the window/icon title equals `expected`.
+///
+/// # Errors
+///
+/// Returns [`StateError`] on mismatch, unknown, or unsupported title.
 pub fn assert_title_eq(state: &TermSnapshot, expected: &str) -> Result<(), StateError> {
     match &state.title {
         Maybe::Known(t) if t == expected => Ok(()),
@@ -154,6 +161,10 @@ pub fn assert_title_eq(state: &TermSnapshot, expected: &str) -> Result<(), State
 }
 
 /// Assert the bell count since session start equals `expected`.
+///
+/// # Errors
+///
+/// Returns [`StateError`] on mismatch, unknown, or unsupported bells.
 pub fn assert_bells_eq(state: &TermSnapshot, expected: u64) -> Result<(), StateError> {
     match &state.bells {
         Maybe::Known(n) if *n == expected => Ok(()),
@@ -168,6 +179,10 @@ pub fn assert_bells_eq(state: &TermSnapshot, expected: u64) -> Result<(), StateE
 }
 
 /// Assert DEC/private mode `mode` is currently set.
+///
+/// # Errors
+///
+/// Returns [`StateError`] when unset, unknown, or unsupported.
 pub fn assert_mode_set(state: &TermSnapshot, mode: u16) -> Result<(), StateError> {
     match &state.modes {
         Maybe::Known(m) if m.contains(&mode) => Ok(()),
@@ -182,6 +197,10 @@ pub fn assert_mode_set(state: &TermSnapshot, mode: u16) -> Result<(), StateError
 }
 
 /// Assert DEC/private mode `mode` is currently unset.
+///
+/// # Errors
+///
+/// Returns [`StateError`] when set, unknown, or unsupported.
 pub fn assert_mode_unset(state: &TermSnapshot, mode: u16) -> Result<(), StateError> {
     match &state.modes {
         Maybe::Known(m) if !m.contains(&mode) => Ok(()),
@@ -195,6 +214,10 @@ pub fn assert_mode_unset(state: &TermSnapshot, mode: u16) -> Result<(), StateErr
 
 /// Assert palette entry `index` resolves to `expected`: a live OSC 4
 /// override when present, else the documented nominal xterm default.
+///
+/// # Errors
+///
+/// Returns [`StateError`] on mismatch, unknown, or unsupported palette.
 pub fn assert_palette_entry(
     state: &TermSnapshot,
     index: u8,
@@ -205,8 +228,7 @@ pub fn assert_palette_entry(
             let observed = list
                 .iter()
                 .find(|(i, _)| *i == index)
-                .map(|(_, c)| *c)
-                .unwrap_or_else(|| Rgb::from_indexed(index));
+                .map_or_else(|| Rgb::from_indexed(index), |(_, c)| *c);
             if observed == expected {
                 Ok(())
             } else {
@@ -223,6 +245,10 @@ pub fn assert_palette_entry(
 }
 
 /// Assert the default fg/bg (OSC 10/11 overrides; `None` = terminal default).
+///
+/// # Errors
+///
+/// Returns [`StateError`] on mismatch, unknown, or unsupported defaults.
 pub fn assert_default_colors(
     state: &TermSnapshot,
     fg: Option<Rgb>,
@@ -243,6 +269,10 @@ pub fn assert_default_colors(
 }
 
 /// Assert the latest sandboxed clipboard store equals `expected`.
+///
+/// # Errors
+///
+/// Returns [`StateError`] on mismatch, empty, unknown, or unsupported.
 pub fn assert_clipboard_latest_eq(state: &TermSnapshot, expected: &str) -> Result<(), StateError> {
     match &state.clipboard {
         Maybe::Known(sb) => match sb.latest() {
@@ -261,6 +291,10 @@ pub fn assert_clipboard_latest_eq(state: &TermSnapshot, expected: &str) -> Resul
 }
 
 /// Assert no clipboard stores were captured.
+///
+/// # Errors
+///
+/// Returns [`StateError`] when stores exist, unknown, or unsupported.
 pub fn assert_clipboard_empty(state: &TermSnapshot) -> Result<(), StateError> {
     match &state.clipboard {
         Maybe::Known(sb) if sb.is_empty() => Ok(()),
@@ -276,6 +310,10 @@ pub fn assert_clipboard_empty(state: &TermSnapshot) -> Result<(), StateError> {
 }
 
 /// Assert a hyperlink with exactly `uri` is present on the grid.
+///
+/// # Errors
+///
+/// Returns [`StateError`] when absent, unknown, or unsupported.
 pub fn assert_hyperlink_present(state: &TermSnapshot, uri: &str) -> Result<(), StateError> {
     match &state.hyperlinks {
         Maybe::Known(links) if links.iter().any(|l| l.uri == uri) => Ok(()),
@@ -291,6 +329,10 @@ pub fn assert_hyperlink_present(state: &TermSnapshot, uri: &str) -> Result<(), S
 }
 
 /// Assert scrollback (oldest-first, viewport excluded) contains `needle`.
+///
+/// # Errors
+///
+/// Returns [`StateError`] when absent, unknown, or unsupported.
 pub fn assert_scrollback_contains(state: &TermSnapshot, needle: &str) -> Result<(), StateError> {
     match &state.scrollback {
         Maybe::Known(lines) if lines.iter().any(|l| l.contains(needle)) => Ok(()),

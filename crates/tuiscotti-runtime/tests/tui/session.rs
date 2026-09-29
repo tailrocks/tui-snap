@@ -28,9 +28,13 @@ fn typed_input_echoes() {
         .expect("spawn succeeds");
     s.send_text("hello-tui\n").expect("send_text succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "hello-tui"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "hello-tui").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "hello-tui"));
+    assert!(contains(&obs.screen, "hello-tui").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -43,9 +47,13 @@ fn chord_press_sends_key() {
     s.send_text("hi").expect("send_text succeeds");
     s.press("Enter").expect("press succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "hi"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "hi").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "hi"));
+    assert!(contains(&obs.screen, "hi").expect("screen rows readable"));
     s.close().expect("close succeeds");
 }
 
@@ -126,9 +134,13 @@ fn printf_app_output_and_success() {
         .spawn()
         .expect("spawn succeeds");
     let obs = s
-        .wait_predicate(|o| contains(&o.screen, "out-42"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "out-42").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&obs.screen, "out-42"));
+    assert!(contains(&obs.screen, "out-42").expect("screen rows readable"));
     let w = s
         .expect_exit(deadline(5), &cancel())
         .expect("expect_exit succeeds");
@@ -164,7 +176,12 @@ fn finish_eofs_cat_to_success() {
         .spawn()
         .expect("spawn succeeds");
     s.send_text("bye\n").expect("send_text succeeds");
-    let _ = s.wait_predicate(|o| contains(&o.screen, "bye"), deadline(5), &cancel());
+    s.wait_predicate(
+        |o| contains(&o.screen, "bye").expect("screen rows readable"),
+        deadline(5),
+        &cancel(),
+    )
+    .ok();
     let status = s.finish(deadline(5)).expect("finish succeeds");
     assert!(status.success());
 }
@@ -182,15 +199,23 @@ fn two_sessions_independent() {
     a.send_text("alpha-1\n").expect("send_text succeeds");
     b.send_text("beta-2\n").expect("send_text succeeds");
     let oa = a
-        .wait_predicate(|o| contains(&o.screen, "alpha-1"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "alpha-1").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
     let ob = b
-        .wait_predicate(|o| contains(&o.screen, "beta-2"), deadline(5), &cancel())
+        .wait_predicate(
+            |o| contains(&o.screen, "beta-2").expect("screen rows readable"),
+            deadline(5),
+            &cancel(),
+        )
         .expect("wait_predicate succeeds");
-    assert!(contains(&oa.screen, "alpha-1"));
-    assert!(!contains(&oa.screen, "beta-2"));
-    assert!(contains(&ob.screen, "beta-2"));
-    assert!(!contains(&ob.screen, "alpha-1"));
+    assert!(contains(&oa.screen, "alpha-1").expect("screen rows readable"));
+    assert!(!contains(&oa.screen, "beta-2").expect("screen rows readable"));
+    assert!(contains(&ob.screen, "beta-2").expect("screen rows readable"));
+    assert!(!contains(&ob.screen, "alpha-1").expect("screen rows readable"));
     a.close().expect("close succeeds");
     b.close().expect("close succeeds");
 }

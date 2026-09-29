@@ -1,21 +1,14 @@
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Config as TermConfig, Term, TermMode};
-use alacritty_terminal::vte::ansi::{
-    Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
-};
+use alacritty_terminal::term::{ClipboardType, Term, TermMode};
+use alacritty_terminal::vte::ansi::{Color as VteColor, CursorShape, NamedColor};
 
-use super::*;
-use crate::tui::{CancelToken, ExitWait, Session, Tui, TuiError, WaitError};
+use super::{ClipboardItem, ClipboardTarget, ReplayError, ReplayEvents};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{Maybe, Observation, Screen};
+use tuiscotti_core::screen::Screen;
 
 pub(crate) fn drain_replay_events<T: EventListener>(
     term: &mut Term<T>,
@@ -52,7 +45,7 @@ pub(crate) fn build_replay_screen<T: EventListener>(
     let grid = term.grid();
     let mut cells = Vec::with_capacity(cols as usize * rows as usize);
     for y in 0..rows {
-        let line = Line(y as i32);
+        let line = Line(i32::from(y));
         let mut x: u16 = 0;
         while x < cols {
             let cell = &grid[line][Column(x as usize)];
@@ -125,10 +118,7 @@ fn replay_cell(
             strikethrough: flags.contains(CellFlags::STRIKEOUT),
             reverse: flags.contains(CellFlags::INVERSE),
         },
-        underline_color: cell
-            .underline_color()
-            .map(replay_color)
-            .unwrap_or(Color::Default),
+        underline_color: cell.underline_color().map_or(Color::Default, replay_color),
     }
 }
 
@@ -154,14 +144,14 @@ fn replay_underline_style(flags: CellFlags) -> UnderlineStyle {
 fn replay_color(c: VteColor) -> Color {
     match c {
         VteColor::Named(n) => match n {
-            NamedColor::Black => Color::Indexed(0),
-            NamedColor::Red => Color::Indexed(1),
-            NamedColor::Green => Color::Indexed(2),
-            NamedColor::Yellow => Color::Indexed(3),
-            NamedColor::Blue => Color::Indexed(4),
-            NamedColor::Magenta => Color::Indexed(5),
-            NamedColor::Cyan => Color::Indexed(6),
-            NamedColor::White => Color::Indexed(7),
+            NamedColor::Black | NamedColor::DimBlack => Color::Indexed(0),
+            NamedColor::Red | NamedColor::DimRed => Color::Indexed(1),
+            NamedColor::Green | NamedColor::DimGreen => Color::Indexed(2),
+            NamedColor::Yellow | NamedColor::DimYellow => Color::Indexed(3),
+            NamedColor::Blue | NamedColor::DimBlue => Color::Indexed(4),
+            NamedColor::Magenta | NamedColor::DimMagenta => Color::Indexed(5),
+            NamedColor::Cyan | NamedColor::DimCyan => Color::Indexed(6),
+            NamedColor::White | NamedColor::DimWhite => Color::Indexed(7),
             NamedColor::BrightBlack => Color::Indexed(8),
             NamedColor::BrightRed => Color::Indexed(9),
             NamedColor::BrightGreen => Color::Indexed(10),
@@ -170,14 +160,6 @@ fn replay_color(c: VteColor) -> Color {
             NamedColor::BrightMagenta => Color::Indexed(13),
             NamedColor::BrightCyan => Color::Indexed(14),
             NamedColor::BrightWhite => Color::Indexed(15),
-            NamedColor::DimBlack => Color::Indexed(0),
-            NamedColor::DimRed => Color::Indexed(1),
-            NamedColor::DimGreen => Color::Indexed(2),
-            NamedColor::DimYellow => Color::Indexed(3),
-            NamedColor::DimBlue => Color::Indexed(4),
-            NamedColor::DimMagenta => Color::Indexed(5),
-            NamedColor::DimCyan => Color::Indexed(6),
-            NamedColor::DimWhite => Color::Indexed(7),
             NamedColor::Foreground
             | NamedColor::Background
             | NamedColor::Cursor
@@ -209,8 +191,8 @@ fn replay_cursor<T: EventListener>(
     let visible = term.mode().contains(TermMode::SHOW_CURSOR)
         && !matches!(style.shape, CursorShape::Hidden)
         && line >= 0
-        && (line as u32) < rows as u32
-        && column < cols as usize;
+        && line.cast_unsigned() < u32::from(rows)
+        && column < usize::from(cols);
     if !visible {
         return Cursor {
             x: 0,
@@ -221,8 +203,8 @@ fn replay_cursor<T: EventListener>(
         };
     }
     Cursor {
-        x: column as u16,
-        y: line as u16,
+        x: u16::try_from(column).unwrap_or(u16::MAX),
+        y: u16::try_from(line).unwrap_or(u16::MAX),
         visible: true,
         style: shape,
         blinking: style.blinking,

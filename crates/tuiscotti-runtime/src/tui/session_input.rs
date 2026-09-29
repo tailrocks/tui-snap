@@ -15,11 +15,19 @@ use super::worker::{Input, MouseAction, Op};
 
 impl Session {
     /// Send literal text (UTF-8 bytes, no chord interpretation).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn send_text(&self, text: &str) -> Result<(), TuiError> {
         self.send_input(Input::Bytes(text.as_bytes().to_vec()))
     }
 
     /// Send raw bytes verbatim.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn send_bytes(&self, bytes: &[u8]) -> Result<(), TuiError> {
         self.send_input(Input::Bytes(bytes.to_vec()))
     }
@@ -27,38 +35,66 @@ impl Session {
     /// Negotiated paste: wrapped in `ESC[200~...ESC[201~` when the
     /// application enabled bracketed paste (2004), sent plain otherwise.
     /// Content containing either delimiter is rejected outright.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the content holds delimiters or input is refused.
     pub fn paste(&self, text: &str) -> Result<(), TuiError> {
         self.send_input(Input::Paste(text.to_string()))
     }
 
     /// Parse `chord` ([`parse_chord`]) and send it as a complete press.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` for a bad chord or refused input.
     pub fn press(&self, chord: &str) -> Result<(), TuiError> {
         let (key, mods) = parse_chord(chord)?;
         self.press_key(key, mods)
     }
 
     /// Send a complete key press.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn press_key(&self, key: Key, mods: KeyMods) -> Result<(), TuiError> {
         self.key_event(key, mods, KeyEventKind::Press)
     }
 
     /// Send a key-down event (no automatic release).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn key_down(&self, key: Key, mods: KeyMods) -> Result<(), TuiError> {
         self.key_event(key, mods, KeyEventKind::Down)
     }
 
     /// Send a key-repeat tick.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn key_repeat(&self, key: Key, mods: KeyMods) -> Result<(), TuiError> {
         self.key_event(key, mods, KeyEventKind::Repeat)
     }
 
     /// Send a key-release event. Releases emit bytes only with the kitty
     /// keyboard protocol active; otherwise this is a successful no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if input is refused or the session is closed.
     pub fn key_up(&self, key: Key, mods: KeyMods) -> Result<(), TuiError> {
         self.key_event(key, mods, KeyEventKind::Up)
     }
 
     /// Send a key event of any kind.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` for a bad key or refused input.
     pub fn key_event(&self, key: Key, mods: KeyMods, kind: KeyEventKind) -> Result<(), TuiError> {
         if matches!(key, Key::F(n) if !(1..=12).contains(&n)) {
             return Err(TuiError::InvalidInput(format!(
@@ -69,6 +105,10 @@ impl Session {
     }
 
     /// Click: button down immediately followed by button up at `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if mouse reporting is off or input is refused.
     pub fn click(
         &self,
         button: MouseButton,
@@ -81,6 +121,10 @@ impl Session {
     }
 
     /// Button press at `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if mouse reporting is off or input is refused.
     pub fn mouse_down(
         &self,
         button: MouseButton,
@@ -97,6 +141,10 @@ impl Session {
     }
 
     /// Button release at `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if mouse reporting is off or input is refused.
     pub fn mouse_up(
         &self,
         button: MouseButton,
@@ -114,6 +162,10 @@ impl Session {
     }
 
     /// Hover (motion with no button held) to `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if motion reporting is off or input is refused.
     pub fn mouse_move(&self, x: u16, y: u16, mods: MouseMods) -> Result<(), TuiError> {
         self.send_input(Input::Mouse {
             action: MouseAction::Move { held: None },
@@ -124,6 +176,10 @@ impl Session {
     }
 
     /// Drag step: motion with `button` held, to `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if drag reporting is off or input is refused.
     pub fn mouse_drag(
         &self,
         button: MouseButton,
@@ -140,6 +196,10 @@ impl Session {
     }
 
     /// Wheel event at `(x, y)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if mouse reporting is off or input is refused.
     pub fn mouse_wheel(
         &self,
         wheel: Wheel,
@@ -156,17 +216,29 @@ impl Session {
     }
 
     /// Focus-in (`CSI I`). Refused unless the application enabled 1004.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` unless the application enabled focus tracking.
     pub fn focus_in(&self) -> Result<(), TuiError> {
         self.send_input(Input::Focus(true))
     }
 
     /// Focus-out (`CSI O`). Refused unless the application enabled 1004.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` unless the application enabled focus tracking.
     pub fn focus_out(&self) -> Result<(), TuiError> {
         self.send_input(Input::Focus(false))
     }
 
     /// Resize the PTY and the emulator together (atomic from the test's
     /// view: one revision, reason `Resize`).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` for out-of-range sizes or refused input.
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), TuiError> {
         if !(MIN_COLS..=MAX_COLS).contains(&cols) {
             return Err(TuiError::InvalidInput(format!(
@@ -184,10 +256,14 @@ impl Session {
             rows,
             reply: tx,
         })?;
-        recv_reply(rx, "resize")
+        recv_reply(&rx, "resize")
     }
 
     /// Deliver a signal to the direct child (Unix only).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the child exited or the signal failed.
     #[cfg(unix)]
     pub fn signal(&self, signal: Signal) -> Result<(), TuiError> {
         let pid = self
@@ -203,8 +279,7 @@ impl Session {
             .arg(format!("-{}", signal.number()))
             .arg(pid.to_string())
             .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .is_ok_and(|s| s.success());
         if delivered {
             return Ok(());
         }

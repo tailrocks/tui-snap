@@ -13,7 +13,7 @@ use alacritty_terminal::vte::ansi::Processor;
 use portable_pty::{Child as PtyChild, MasterPty};
 use tuiscotti_core::screen::{CaptureReason, Observation};
 
-use super::capture::{drain_term_events, publish_current, publish_exit};
+use super::capture::{drain_term_events, publish_exit};
 use super::encode::{apply_input, apply_resize};
 use super::error::TuiError;
 use super::exit::ExitStatus;
@@ -73,23 +73,36 @@ impl WorkerCtx {
 
     /// Revision 0: the Initial observation `spawn()` blocks on.
     pub(crate) fn publish_initial(&mut self, cols: u16, rows: u16) {
-        publish_current(
+        self.publish_current(CaptureReason::Initial, cols, rows);
+    }
+
+    /// Drain terminal events, then publish the current state at `revision`.
+    fn publish_current(&mut self, reason: CaptureReason, cols: u16, rows: u16) {
+        drain_term_events(
             &mut self.term,
-            &mut self.events,
             &self.event_rx,
+            &mut self.events,
             self.writer.as_deref_mut(),
-            &self.shared,
+        );
+        match build_observation(
+            &self.term,
+            &self.events,
             self.revision,
-            CaptureReason::Initial,
+            reason,
             self.pid,
             cols,
             rows,
-        );
+        ) {
+            Ok(obs) => self.shared.publish(obs, None),
+            Err(e) => self
+                .shared
+                .record_teardown(&format!("observation build failed: {e}")),
+        }
     }
 
     /// Feed one reader batch through the emulator and publish.
-    pub(crate) fn handle_feed(&mut self, bytes: Vec<u8>) {
-        self.processor.advance(&mut self.term, &bytes);
+    pub(crate) fn handle_feed(&mut self, bytes: &[u8]) {
+        self.processor.advance(&mut self.term, bytes);
         drain_term_events(
             &mut self.term,
             &self.event_rx,
@@ -98,22 +111,11 @@ impl WorkerCtx {
         );
         self.revision += 1;
         let (c, r) = (cols_of(&self.term), rows_of(&self.term));
-        publish_current(
-            &mut self.term,
-            &mut self.events,
-            &self.event_rx,
-            self.writer.as_deref_mut(),
-            &self.shared,
-            self.revision,
-            CaptureReason::Poll,
-            self.pid,
-            c,
-            r,
-        );
+        self.publish_current(CaptureReason::Poll, c, r);
     }
 
     /// Record reader EOF; a read error here is informational only.
-    pub(crate) fn handle_eof(&mut self, read_err: Option<String>) {
+    pub(crate) fn handle_eof(&mut self, read_err: Option<&str>) {
         self.eof = true;
         if read_err.is_some() {
             // A read error at EOF (e.g. Linux EIO after child death) is
@@ -122,7 +124,7 @@ impl WorkerCtx {
     }
 
     /// Answer one observe request with a fresh manual observation.
-    pub(crate) fn handle_observe(&mut self, reply: mpsc::Sender<Result<Observation, TuiError>>) {
+    pub(crate) fn handle_observe(&mut self, reply: &mpsc::Sender<Result<Observation, TuiError>>) {
         drain_term_events(
             &mut self.term,
             &self.event_rx,
@@ -158,10 +160,14 @@ impl WorkerCtx {
     }
 
     /// Apply one input through the emulator; focus also publishes.
-    pub(crate) fn handle_input(&mut self, input: Input, reply: mpsc::Sender<Result<(), TuiError>>) {
+    pub(crate) fn handle_input(
+        &mut self,
+        input: &Input,
+        reply: &mpsc::Sender<Result<(), TuiError>>,
+    ) {
         let r = apply_input(
             &mut self.term,
-            &input,
+            input,
             self.writer.as_deref_mut(),
             self.exited.is_some(),
         );
@@ -174,21 +180,10 @@ impl WorkerCtx {
         if let Input::Focus(focused) = input {
             // Focus is emulator state too: record it and publish so
             // waits can observe the round-trip.
-            self.term.is_focused = focused;
+            self.term.is_focused = *focused;
             self.revision += 1;
             let (c, r) = (cols_of(&self.term), rows_of(&self.term));
-            publish_current(
-                &mut self.term,
-                &mut self.events,
-                &self.event_rx,
-                self.writer.as_deref_mut(),
-                &self.shared,
-                self.revision,
-                CaptureReason::Input,
-                self.pid,
-                c,
-                r,
-            );
+            self.publish_current(CaptureReason::Input, c, r);
         }
         // The requester may have timed out; input was still applied.
         if reply.send(r).is_err() {
@@ -201,23 +196,12 @@ impl WorkerCtx {
         &mut self,
         cols: u16,
         rows: u16,
-        reply: mpsc::Sender<Result<(), TuiError>>,
+        reply: &mpsc::Sender<Result<(), TuiError>>,
     ) {
         let r = apply_resize(self.master.as_ref(), &mut self.term, cols, rows);
         if r.is_ok() {
             self.revision += 1;
-            publish_current(
-                &mut self.term,
-                &mut self.events,
-                &self.event_rx,
-                self.writer.as_deref_mut(),
-                &self.shared,
-                self.revision,
-                CaptureReason::Resize,
-                self.pid,
-                cols,
-                rows,
-            );
+            self.publish_current(CaptureReason::Resize, cols, rows);
         }
         // The requester may have timed out; the resize (if applied) stands.
         if reply.send(r).is_err() {
@@ -226,7 +210,7 @@ impl WorkerCtx {
     }
 
     /// Drop the PTY writer (stdin EOF) unless already gone.
-    pub(crate) fn handle_close_input(&mut self, reply: mpsc::Sender<Result<(), TuiError>>) {
+    pub(crate) fn handle_close_input(&mut self, reply: &mpsc::Sender<Result<(), TuiError>>) {
         let outcome = if self.exited.is_some() {
             Err(TuiError::ChildExited("child already exited".to_string()))
         } else if self.writer.take().is_some() {
@@ -278,11 +262,11 @@ impl WorkerCtx {
         if self.finalized {
             return;
         }
-        if self.exited.is_none() {
-            if let Some(status) = poll_child(&mut self.child) {
-                self.exited = Some(ExitStatus::from(status));
-                self.exit_seen_at = Some(Instant::now());
-            }
+        if self.exited.is_none()
+            && let Some(status) = poll_child(&mut self.child)
+        {
+            self.exited = Some(ExitStatus::from(status));
+            self.exit_seen_at = Some(Instant::now());
         }
         let drained = self.eof
             || self

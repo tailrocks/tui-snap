@@ -1,9 +1,4 @@
-use std::io::{BufRead, Write};
-
 use serde_json::{Value, json};
-
-use super::*;
-use crate::proto::{self, OpError};
 
 /// MCP protocol version this server speaks.
 pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
@@ -11,12 +6,16 @@ pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 /// One MCP tool: a [`crate::proto::Op`] variant plus its hand-written schema.
 #[derive(Debug, Clone)]
 pub struct Tool {
+    /// Tool name, matching the `Op` variant tag.
     pub name: &'static str,
+    /// One-line tool description.
     pub description: &'static str,
+    /// JSON Schema for the tool arguments.
     pub input_schema: Value,
 }
 
-pub(crate) fn schema(required: &[&str], properties: Value) -> Value {
+/// Build an object schema from required names and a properties value.
+pub(crate) fn schema(required: &[&str], properties: &Value) -> Value {
     json!({
         "type": "object",
         "required": required,
@@ -44,7 +43,7 @@ fn pty_tools() -> Vec<Tool> {
             description: "Spawn a child in a PTY session (needs `pty` feature).",
             input_schema: schema(
                 &["argv"],
-                json!({
+                &json!({
                     "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                     "id": {"type": "string"},
                     "cols": {"type": "integer"}, "rows": {"type": "integer"},
@@ -58,7 +57,7 @@ fn pty_tools() -> Vec<Tool> {
             description: "Send exactly one of text|chord|bytes_b64 to a PTY session.",
             input_schema: schema(
                 &["session"],
-                json!({
+                &json!({
                     "session": {"type": "string"},
                     "text": {"type": "string"},
                     "chord": {"type": "string"},
@@ -69,24 +68,24 @@ fn pty_tools() -> Vec<Tool> {
         Tool {
             name: "observe",
             description: "Current observation (revision + screen) of a PTY session.",
-            input_schema: schema(&["session"], json!({"session": {"type": "string"}})),
+            input_schema: schema(&["session"], &json!({"session": {"type": "string"}})),
         },
         Tool {
             name: "snapshot",
             description: "Current screen text projection of a PTY session.",
-            input_schema: schema(&["session"], json!({"session": {"type": "string"}})),
+            input_schema: schema(&["session"], &json!({"session": {"type": "string"}})),
         },
         Tool {
             name: "screenshot",
             description: "Screen + canonical string + PNG of a PTY session.",
-            input_schema: schema(&["session"], json!({"session": {"type": "string"}})),
+            input_schema: schema(&["session"], &json!({"session": {"type": "string"}})),
         },
         Tool {
             name: "wait",
             description: "Wait for text|stable|exit on a PTY session (fails on timeout).",
             input_schema: schema(
                 &["session", "kind"],
-                json!({
+                &json!({
                     "session": {"type": "string"},
                     "kind": {"type": "string", "enum": ["text", "stable", "exit"]},
                     "needle": {"type": "string"},
@@ -100,7 +99,7 @@ fn pty_tools() -> Vec<Tool> {
             description: "Wait for natural exit, reap, drop the PTY session.",
             input_schema: schema(
                 &["session"],
-                json!({
+                &json!({
                     "session": {"type": "string"},
                     "timeout_ms": {"type": "integer"},
                 }),
@@ -117,7 +116,7 @@ fn utility_tools() -> Vec<Tool> {
             description: "Run a shared-engine check (text-contains|text-equals).",
             input_schema: schema(
                 &["check"],
-                json!({
+                &json!({
                     "check": {"type": "string", "enum": ["text-contains", "text-equals"]},
                     "text": {"type": "string"}, "needle": {"type": "string"},
                     "actual": {"type": "string"}, "expected": {"type": "string"},
@@ -129,7 +128,7 @@ fn utility_tools() -> Vec<Tool> {
             description: "Render a frame JSON to png|ansi|txt|svg|html.",
             input_schema: schema(
                 &["frame_json", "format"],
-                json!({
+                &json!({
                     "frame_json": {"type": "string"},
                     "format": {"type": "string", "enum": ["png", "ansi", "txt", "svg", "html"]},
                 }),
@@ -140,7 +139,7 @@ fn utility_tools() -> Vec<Tool> {
             description: "Compare two base64 PNGs; report equality + score.",
             input_schema: schema(
                 &["expected_png_b64", "actual_png_b64"],
-                json!({
+                &json!({
                     "expected_png_b64": {"type": "string"},
                     "actual_png_b64": {"type": "string"},
                 }),
@@ -157,7 +156,7 @@ fn session_tools() -> Vec<Tool> {
             description: "Start a named (piped, detached) session; force replaces a live one.",
             input_schema: schema(
                 &["name", "argv"],
-                json!({
+                &json!({
                     "name": {"type": "string"},
                     "argv": {"type": "array", "items": {"type": "string"}},
                     "force": {"type": "boolean"},
@@ -167,22 +166,22 @@ fn session_tools() -> Vec<Tool> {
         Tool {
             name: "session-stop",
             description: "Stop a named session; returns last-known info.",
-            input_schema: schema(&["name"], json!({"name": {"type": "string"}})),
+            input_schema: schema(&["name"], &json!({"name": {"type": "string"}})),
         },
         Tool {
             name: "session-list",
             description: "List named sessions with liveness.",
-            input_schema: schema(&[], json!({})),
+            input_schema: schema(&[], &json!({})),
         },
         Tool {
             name: "version",
             description: "Protocol + tuisnap versions.",
-            input_schema: schema(&[], json!({})),
+            input_schema: schema(&[], &json!({})),
         },
         Tool {
             name: "capabilities",
             description: "What this build can do (pty/render/record/platform).",
-            input_schema: schema(&[], json!({})),
+            input_schema: schema(&[], &json!({})),
         },
     ]
 }

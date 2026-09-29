@@ -1,9 +1,3 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-use super::*;
-use serde::{Deserialize, Serialize};
-
 // ---------------------------------------------------------------------------
 // PTY session registry (feature `pty`)
 // ---------------------------------------------------------------------------
@@ -13,7 +7,10 @@ pub(crate) mod pty_registry {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    use crate::proto::*;
+    use crate::proto::{
+        OpError, OpResult, base64_decode, base64_encode, observation_view, screen_text,
+        screen_view, wait_kind,
+    };
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
@@ -22,7 +19,9 @@ pub(crate) mod pty_registry {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
     fn with_registry<T>(f: impl FnOnce(&mut HashMap<String, crate::tui::Session>) -> T) -> T {
-        let mut guard = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = REGISTRY
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let map = guard.get_or_insert_with(HashMap::new);
         f(map)
     }
@@ -35,8 +34,8 @@ pub(crate) mod pty_registry {
         )
     }
 
-    fn tui_err(e: crate::tui::TuiError) -> OpError {
-        let code = match &e {
+    fn tui_err(e: &crate::tui::TuiError) -> OpError {
+        let code = match e {
             crate::tui::TuiError::Spawn(_) => "spawn-failed",
             crate::tui::TuiError::InvalidInput(_) | crate::tui::TuiError::Chord(_) => {
                 "invalid-input"
@@ -54,8 +53,8 @@ pub(crate) mod pty_registry {
         OpError::new(code, e.to_string())
     }
 
-    fn wait_err(e: crate::tui::WaitError) -> OpError {
-        match &e {
+    fn wait_err(e: &crate::tui::WaitError) -> OpError {
+        match e {
             crate::tui::WaitError::Timeout { .. } => OpError::new("timeout", e.to_string()),
             crate::tui::WaitError::Cancelled { .. } => OpError::new("cancelled", e.to_string()),
             crate::tui::WaitError::Unsupported { .. } => OpError::new("unsupported", e.to_string()),
@@ -63,7 +62,7 @@ pub(crate) mod pty_registry {
         }
     }
 
-    pub fn spawn(
+    pub(crate) fn spawn(
         argv: &[String],
         id: Option<String>,
         cols: Option<u16>,
@@ -94,7 +93,7 @@ pub(crate) mod pty_registry {
         if let Some(cwd) = cwd {
             builder = builder.cwd(cwd);
         }
-        let session = builder.spawn().map_err(tui_err)?;
+        let session = builder.spawn().map_err(|e| tui_err(&e))?;
         let pid = session.pid();
         with_registry(|map| {
             if map.contains_key(&id) {
@@ -108,7 +107,7 @@ pub(crate) mod pty_registry {
         })
     }
 
-    pub fn stdin(
+    pub(crate) fn stdin(
         session: &str,
         text: Option<String>,
         chord: Option<String>,
@@ -150,47 +149,49 @@ pub(crate) mod pty_registry {
             } else {
                 unreachable!("counted above");
             };
-            r.map_err(|e| tui_err(e).with_session(session))?;
+            r.map_err(|e| tui_err(&e).with_session(session))?;
             Ok(OpResult::InputAccepted {
                 session: session.to_string(),
             })
         })
     }
 
-    pub fn observe(session: &str) -> Result<OpResult, OpError> {
+    pub(crate) fn observe(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
             let s = map.get(session).ok_or_else(|| {
                 OpError::new("not-found", "unknown session").with_session(session)
             })?;
             let obs = s
                 .observe_now()
-                .map_err(|e| tui_err(e).with_session(session))?;
+                .map_err(|e| tui_err(&e).with_session(session))?;
             Ok(OpResult::Observation {
                 observation: observation_view(&obs),
             })
         })
     }
 
-    pub fn snapshot(session: &str) -> Result<OpResult, OpError> {
+    pub(crate) fn snapshot(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
             let s = map.get(session).ok_or_else(|| {
                 OpError::new("not-found", "unknown session").with_session(session)
             })?;
-            let screen = s.snapshot().map_err(|e| tui_err(e).with_session(session))?;
+            let screen = s
+                .snapshot()
+                .map_err(|e| tui_err(&e).with_session(session))?;
             Ok(OpResult::Snapshot {
                 screen: screen_view(&screen),
             })
         })
     }
 
-    pub fn screenshot(session: &str) -> Result<OpResult, OpError> {
+    pub(crate) fn screenshot(session: &str) -> Result<OpResult, OpError> {
         with_registry(|map| {
             let s = map.get(session).ok_or_else(|| {
                 OpError::new("not-found", "unknown session").with_session(session)
             })?;
             let obs = s
                 .observe_now()
-                .map_err(|e| tui_err(e).with_session(session))?;
+                .map_err(|e| tui_err(&e).with_session(session))?;
             let canonical = tuiscotti_insta::insta_proto::insta_string(&obs.screen);
             let profile = tuiscotti_render::profile::Profile::default_profile();
             let mut renderer = tuiscotti_render::render::Renderer::new(
@@ -198,21 +199,21 @@ pub(crate) mod pty_registry {
                 &tuiscotti_render::profile::VENDORED_FACES,
             )
             .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
-            let rendered = renderer
+            let image = renderer
                 .render_screen(&obs.screen)
                 .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
             Ok(OpResult::Screenshot {
                 screen: screen_view(&obs.screen),
                 canonical,
-                png_b64: base64_encode(&rendered.png),
+                png_b64: base64_encode(&image.png),
             })
         })
     }
 
-    pub fn wait(
+    pub(crate) fn wait(
         session: &str,
         kind: &str,
-        needle: Option<String>,
+        needle: Option<&str>,
         quiet_ms: Option<u64>,
         timeout_ms: u64,
     ) -> Result<OpResult, OpError> {
@@ -224,7 +225,7 @@ pub(crate) mod pty_registry {
             let cancel = crate::tui::CancelToken::new();
             match kind {
                 wait_kind::TEXT => {
-                    let needle = needle.as_ref().ok_or_else(|| {
+                    let needle = needle.ok_or_else(|| {
                         OpError::new("invalid-input", "text wait needs `needle`")
                             .with_session(session)
                     })?;
@@ -238,7 +239,7 @@ pub(crate) mod pty_registry {
                             deadline,
                             &cancel,
                         )
-                        .map_err(|e| wait_err(e).with_session(session))?;
+                        .map_err(|e| wait_err(&e).with_session(session))?;
                     Ok(OpResult::Waited {
                         session: session.to_string(),
                         observation: observation_view(&obs),
@@ -248,7 +249,7 @@ pub(crate) mod pty_registry {
                     let quiet = Duration::from_millis(quiet_ms.unwrap_or(200));
                     let obs = s
                         .wait_stable_quiet(deadline, quiet, &cancel)
-                        .map_err(|e| wait_err(e).with_session(session))?;
+                        .map_err(|e| wait_err(&e).with_session(session))?;
                     Ok(OpResult::Waited {
                         session: session.to_string(),
                         observation: observation_view(&obs),
@@ -257,7 +258,7 @@ pub(crate) mod pty_registry {
                 wait_kind::EXIT => {
                     let ew = s
                         .wait_exit(deadline, &cancel)
-                        .map_err(|e| wait_err(e).with_session(session))?;
+                        .map_err(|e| wait_err(&e).with_session(session))?;
                     Ok(OpResult::Exited {
                         session: session.to_string(),
                         code: ew.status.code(),
@@ -274,7 +275,7 @@ pub(crate) mod pty_registry {
         })
     }
 
-    pub fn exit(session: &str, timeout_ms: u64) -> Result<OpResult, OpError> {
+    pub(crate) fn exit(session: &str, timeout_ms: u64) -> Result<OpResult, OpError> {
         let mut s = with_registry(|map| {
             map.remove(session)
                 .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))
@@ -317,7 +318,7 @@ pub(crate) mod pty_registry {
                 if s.close().is_err() {
                     // Close failed during error teardown; wait error stands.
                 }
-                Err(wait_err(e).with_session(session))
+                Err(wait_err(&e).with_session(session))
             }
         }
     }
