@@ -2,15 +2,15 @@
 schema = 2
 [inputs]
 config	285b1871d8bfd677
-scan	293cc8860062c06e
+scan	fac9a8bc230a6eb3
 generator	69
 [outputs]
 .github/AGENTS.md	02ebb7198c435e9b
 .github/actionlint.yaml	c642e98fce5b1906
-.github/ci/project.toml	fd7d62a69ce7ffbf
-.github/workflows/ci-main.yml	dc5b5ea4f96b30c0
+.github/ci/project.toml	fe02f83382de8f5c
+.github/workflows/ci-main.yml	28ef70a29673a603
 .github/workflows/ci-policy.yml	f58d3e5e1827497e
-.github/workflows/ci-pr.yml	e50607571c2c214d
+.github/workflows/ci-pr.yml	291f6ff231dba8b4
 .github/workflows/ci-unit-rust.yml	7e2d6ced480ac06d
 .github/workflows/maintenance.yml	ff88945f34f71efd
 .github/workflows/nightly.yml	0659fbb3d6af2359

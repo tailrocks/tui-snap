@@ -5,8 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-use tuiscotti::screen::Screen;
-use tuiscotti::tui::{
+use tuiscotti_core::screen::Screen;
+use tuiscotti_runtime::tui::{
     parse_chord, process_exists, CancelToken, Key, KeyMods, MouseButton, MouseMods, Signal,
     TerminalProfile, Tui, TuiError, WaitError, Wheel,
 };

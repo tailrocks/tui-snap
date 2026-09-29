@@ -23,8 +23,5 @@ portable-pty = { workspace = true, optional = true }
 alacritty_terminal = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 
-[dev-dependencies]
-tuiscotti = { path = "../tuiscotti" }
-
 [lints]
 workspace = true

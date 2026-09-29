@@ -202,7 +202,7 @@ pr_commands = ["cd -- 'crates/tuiscotti-runtime' && mbx fmt --manifest-path 'Car
 full_commands = ["cd -- 'crates/tuiscotti-runtime' && mbx fmt --manifest-path 'Cargo.toml' -- --check", "cd -- 'crates/tuiscotti-runtime' && mbx clippy --locked --profile test --all-targets --all-features --package 'tuiscotti-runtime' -- -D warnings", "cd -- 'crates/tuiscotti-runtime' && mbx nextest run --locked --all-features --package 'tuiscotti-runtime' --no-tests pass", "cd -- 'crates/tuiscotti-runtime' && mbx test --locked --doc --all-features --package 'tuiscotti-runtime'"]
 phases = ["fmt", "clippy", "test", "doctest"]
 check_commands = ["cd -- 'crates/tuiscotti-runtime' && mbx check --locked --profile test --all-targets --all-features --package 'tuiscotti-runtime'"]
-depends_on = ["rust-tuiscotti", "rust-tuiscotti-core", "rust-tuiscotti-insta", "rust-tuiscotti-render"]
+depends_on = ["rust-tuiscotti-core", "rust-tuiscotti-insta", "rust-tuiscotti-render"]
 platform = "linux-x64"
 trust = "untrusted-ok"
 [unit.capabilities]

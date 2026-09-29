@@ -5,10 +5,10 @@
 
 use std::time::{Duration, Instant};
 
-use tuiscotti::frame::Rgb;
-use tuiscotti::screen::{Maybe, Screen};
-use tuiscotti::tui::{process_exists, CancelToken, Tui};
-use tuiscotti::tui_shell::{
+use tuiscotti_core::frame::Rgb;
+use tuiscotti_core::screen::{Maybe, Screen};
+use tuiscotti_runtime::tui::{process_exists, CancelToken, Tui};
+use tuiscotti_runtime::tui_shell::{
     assert_bells_eq, assert_clipboard_empty, assert_clipboard_latest_eq, assert_default_colors,
     assert_hyperlink_present, assert_mode_set, assert_mode_unset, assert_palette_entry,
     assert_scrollback_contains, assert_title_eq, replay_bytes, replay_chunks, replay_recording,

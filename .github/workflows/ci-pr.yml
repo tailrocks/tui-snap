@@ -592,11 +592,6 @@ jobs:
         crates/tuiscotti-runtime/examples/**
         crates/tuiscotti-runtime/src/**
         crates/tuiscotti-runtime/tests/**
-        crates/tuiscotti/**/*.rs
-        crates/tuiscotti/benches/**
-        crates/tuiscotti/examples/**
-        crates/tuiscotti/src/**
-        crates/tuiscotti/tests/**
         mise.lock
       cache_paths: |
         ~/.cargo/registry
@@ -610,7 +605,7 @@ jobs:
       cargo_net_offline: true
       unit_platform: linux-x64
       unit_trust: untrusted-ok
-      unit_dependencies: "rust-tuiscotti,rust-tuiscotti-core,rust-tuiscotti-insta,rust-tuiscotti-render"
+      unit_dependencies: "rust-tuiscotti-core,rust-tuiscotti-insta,rust-tuiscotti-render"
       unit_admission: github-hosted
       validation_phases: "fmt,clippy,test,doctest"
   github-hosted-rust-xtask:
