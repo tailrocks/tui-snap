@@ -92,7 +92,7 @@ pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
         }
         SessionCmd::Stop { name } => match proto::session_stop(&name) {
             Ok(info) => {
-                let buf = format!("stopped: {} (was {:?})\n", info.name, info.status);
+                let buf = format!("stopped: {} (pid {})\n", info.name, info.pid);
                 crate::write_stdout(&buf)
             }
             Err(e) => op_error(&e),
@@ -139,6 +139,12 @@ fn cmd_session_attach(name: &str) -> i32 {
     use std::io::Read;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    // Validated + containment-checked first: a hostile `--name` must not
+    // steer the log path outside the runtime dir.
+    let log_path = match proto::session_log_path(name) {
+        Ok(p) => p,
+        Err(e) => return op_error(&e),
+    };
     let info = match proto::session_list() {
         Ok(list) => list.into_iter().find(|s| s.name == *name),
         Err(e) => return op_error(&e),
@@ -147,14 +153,16 @@ fn cmd_session_attach(name: &str) -> i32 {
         eprintln!("error: [not-found] no session {name:?}");
         return EXIT_OP_ERROR;
     };
-    let dir = match proto::runtime_dir() {
-        Ok(d) => d,
-        Err(e) => return op_error(&e),
-    };
-    let log_path = dir.join(format!("{name}.log"));
-    if !log_path.is_file() {
-        eprintln!("error: [not-found] no log for session {name:?}");
-        return EXIT_OP_ERROR;
+    match std::fs::symlink_metadata(&log_path) {
+        Ok(m) if m.file_type().is_file() => {}
+        Ok(_) => {
+            eprintln!("error: [invalid-input] log for session {name:?} is not a regular file");
+            return EXIT_OP_ERROR;
+        }
+        Err(_) => {
+            eprintln!("error: [not-found] no log for session {name:?}");
+            return EXIT_OP_ERROR;
+        }
     }
     if let Some(code) = crate::write_line(&format!(
         "attached: {} (pid {} {:?}) — best-effort human view; assertions stay on Observations",

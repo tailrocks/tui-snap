@@ -15,6 +15,12 @@ pub(crate) mod pty_registry {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
 
+    // Process-local only: `crate::tui::Session` has no cross-process reattach,
+    // and termpane (unreleased) offers no retained-session API either — its
+    // `PtySession` is spawn/write/snapshot/signal/close within one process.
+    // Named PTY sessions surviving across CLI invocations (F08-F2) wait for a
+    // released termpane plus a retained-session/owner API that does not exist
+    // yet; no path/git override stands in for it here.
     static REGISTRY: Mutex<Option<HashMap<String, crate::tui::Session>>> = Mutex::new(None);
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -93,8 +99,10 @@ pub(crate) mod pty_registry {
         if let Some(cwd) = cwd {
             builder = builder.cwd(cwd);
         }
-        let session = builder.spawn().map_err(|e| tui_err(&e))?;
-        let pid = session.pid();
+        // Reserve-then-spawn under one lock: a duplicate id fails before any
+        // child exists, so a failed registration never leaves a spawned
+        // session to clean up. (The lock is already held across blocking
+        // waits elsewhere in this registry.)
         with_registry(|map| {
             if map.contains_key(&id) {
                 return Err(
@@ -102,6 +110,8 @@ pub(crate) mod pty_registry {
                         .with_session(&id),
                 );
             }
+            let session = builder.spawn().map_err(|e| tui_err(&e).with_session(&id))?;
+            let pid = session.pid();
             map.insert(id.clone(), session);
             Ok(OpResult::Spawned { session: id, pid })
         })
