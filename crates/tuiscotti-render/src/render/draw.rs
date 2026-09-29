@@ -18,6 +18,10 @@ use tuiscotti_core::frame::Rgb;
 /// cell rect (fallback faces have their own metrics; the primary cell grid
 /// never moves). Rasters come from `cache` (per `(char, face)`, negatives
 /// included) instead of re-rasterizing per cell.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "cell blitter shares one call shape; grouping would obscure the draw contract"
+)]
 pub(crate) fn draw_symbol(
     dst: &mut image::RgbImage,
     set: &FontSet,
@@ -70,7 +74,8 @@ pub(crate) fn draw_symbol(
                 if draw_fallback_glyph(
                     cache, dst, set, c, fi, pen_x, baseline, span_px, cell_top, cell_h, fg,
                 ) {
-                    served.push((c, fi as u8));
+                    // Chain length is capped at 255 at load; always succeeds.
+                    served.push((c, u8::try_from(fi).unwrap_or(u8::MAX)));
                 } else {
                     uncovered.push(c);
                 }
@@ -89,7 +94,7 @@ pub(crate) fn draw_symbol(
 }
 
 /// Face-chain pick for one scalar: styled → regular → fallbacks in order →
-/// missing. Coverage = non-empty raster, not lookup_glyph_index != 0.
+/// missing. Coverage = non-empty raster, not `lookup_glyph_index` != 0.
 enum Pick {
     Styled,
     Regular,
@@ -109,7 +114,9 @@ fn pick_face(
     } else if cached_raster(cache, &set.regular, FaceIdx::Regular, c).is_some() {
         Pick::Regular
     } else if let Some(fi) = (0..set.fallbacks.len()).find(|&fi| {
-        cached_raster(cache, &set.fallbacks[fi], FaceIdx::Fallback(fi as u8), c).is_some()
+        // Chain length is capped at 255 at load; always succeeds.
+        let idx = FaceIdx::Fallback(u8::try_from(fi).unwrap_or(u8::MAX));
+        cached_raster(cache, &set.fallbacks[fi], idx, c).is_some()
     }) {
         Pick::Fallback(fi)
     } else {
@@ -120,6 +127,14 @@ fn pick_face(
 /// Blit one fallback-face glyph centered in the cell span, clipped to the
 /// cell rect. Returns whether any ink landed (`false` reads as uncovered,
 /// never as a silent blank).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "cell blitter shares one call shape; grouping would obscure the draw contract"
+)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "centered origin is small pixel geometry; float saturation is intended"
+)]
 fn draw_fallback_glyph(
     cache: &mut GlyphCache,
     dst: &mut image::RgbImage,
@@ -133,33 +148,36 @@ fn draw_fallback_glyph(
     cell_h: u32,
     fg: Rgb,
 ) -> bool {
-    let idx = FaceIdx::Fallback(fi as u8);
+    // Chain length is capped at 255 at load; always succeeds.
+    let idx = FaceIdx::Fallback(u8::try_from(fi).unwrap_or(u8::MAX));
     let Some((m, bmp)) = cached_raster(cache, &set.fallbacks[fi], idx, c).cloned() else {
         return false;
     };
     // Center the glyph's advance box in the cell span; clip ink
     // to the cell rect so fallback metrics never bleed into
-    // neighboring cells.
-    let origin_x = pen_x + ((span_px as f32 - m.advance_width) / 2.0).round() as i32;
-    let top = baseline - (m.ymin + m.height as i32);
+    // neighboring cells. Geometry values are small pixels; the saturating
+    // fallbacks below never fire for real fonts.
+    let span_f = f32::from(u16::try_from(span_px).unwrap_or(u16::MAX));
+    let origin_x = pen_x + ((span_f - m.advance_width) / 2.0).round() as i32;
+    let top = baseline - (m.ymin + i32::try_from(m.height).unwrap_or(i32::MAX));
     let mut inked = false;
     for (i, &cov) in bmp.iter().enumerate() {
         if cov == 0 {
             continue;
         }
-        let bx = (i % m.width) as i32;
-        let by = (i / m.width) as i32;
+        let bx = i32::try_from(i % m.width).unwrap_or(i32::MAX);
+        let by = i32::try_from(i / m.width).unwrap_or(i32::MAX);
         let dx = origin_x + m.xmin + bx;
         let dy = top + by;
         if dx < pen_x
-            || dx >= pen_x + span_px as i32
+            || dx >= pen_x + span_px.cast_signed()
             || dy < cell_top
-            || dy >= cell_top + cell_h as i32
+            || dy >= cell_top + cell_h.cast_signed()
         {
             continue;
         }
         inked = true;
-        blend(dst, dx as u32, dy as u32, fg, cov);
+        blend(dst, dx.cast_unsigned(), dy.cast_unsigned(), fg, cov);
     }
     inked
 }
@@ -192,6 +210,10 @@ fn record_fallback_served(
 }
 
 /// Tofu placeholder for uncovered scalars plus the missing-glyph record.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "cell blitter shares one call shape; grouping would obscure the draw contract"
+)]
 fn draw_uncovered_tofu(
     dst: &mut image::RgbImage,
     sinks: Option<CellSinks<'_>>,
@@ -209,7 +231,7 @@ fn draw_uncovered_tofu(
         pen_x,
         cell_top + 2 * u,
         span_px,
-        cell_h.saturating_sub(4 * u as u32),
+        cell_h.saturating_sub(4 * u.cast_unsigned()),
         fg,
         u,
     );
@@ -229,6 +251,14 @@ fn draw_uncovered_tofu(
 /// Draw one glyph from the primary family (styled or regular face, with the
 /// faux double-strike / shear when the regular face serves a styled cell).
 /// This path is byte-stable: fallback-chain changes never touch it.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "cell blitter shares one call shape; grouping would obscure the draw contract"
+)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "faux-italic slant is a few pixels; float saturation is intended"
+)]
 pub(crate) fn draw_primary(
     cache: &mut GlyphCache,
     dst: &mut image::RgbImage,
@@ -247,26 +277,28 @@ pub(crate) fn draw_primary(
     };
     // ymin = offset of the bitmap's BOTTOM edge from the baseline, so the
     // top edge sits at baseline - (ymin + height).
-    let top = baseline - (m.ymin + m.height as i32);
+    // Bitmap dims are small pixels; the saturating fallbacks never fire.
+    let top = baseline - (m.ymin + i32::try_from(m.height).unwrap_or(i32::MAX));
     for (i, &cov) in bmp.iter().enumerate() {
         if cov == 0 {
             continue;
         }
-        let bx = (i % m.width) as i32;
-        let by = (i / m.width) as i32;
+        let bx = i32::try_from(i % m.width).unwrap_or(i32::MAX);
+        let by = i32::try_from(i / m.width).unwrap_or(i32::MAX);
         // Faux italic: shear top rows right (fallback only).
         let shear = if faux_italic {
-            ((m.height as i32 - 1 - by) as f32 * 0.15) as i32
+            let rows_above = i32::try_from(m.height).unwrap_or(i32::MAX) - 1 - by;
+            (f32::from(i16::try_from(rows_above).unwrap_or(i16::MAX)) * 0.15) as i32
         } else {
             0
         };
         let dx = pen_x + m.xmin + bx + shear;
         let dy = top + by;
         if dx >= 0 && dy >= 0 {
-            blend(dst, dx as u32, dy as u32, fg, cov);
+            blend(dst, dx.cast_unsigned(), dy.cast_unsigned(), fg, cov);
             // Faux bold: double-strike one unscaled pixel right.
             if faux_bold {
-                blend(dst, (dx + u) as u32, dy as u32, fg, cov);
+                blend(dst, (dx + u).cast_unsigned(), dy.cast_unsigned(), fg, cov);
             }
         }
     }

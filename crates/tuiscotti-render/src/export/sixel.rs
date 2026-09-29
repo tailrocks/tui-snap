@@ -144,7 +144,7 @@ impl SixelPlotter<'_> {
     fn on_define(&mut self, data: &[u8], i: usize) -> Result<usize, GraphicsDecodeError> {
         let bad = |m: String| GraphicsDecodeError::InvalidData(m);
         let (reg, mut next) =
-            sixel_uint(data, i + 1).map_err(|_| bad(format!("bad color register at byte {i}")))?;
+            sixel_uint(data, i + 1).map_err(|()| bad(format!("bad color register at byte {i}")))?;
         let reg16 =
             u16::try_from(reg).map_err(|_| bad(format!("color register {reg} out of range")))?;
         if next < data.len() && data[next] == b';' {
@@ -180,7 +180,7 @@ impl SixelPlotter<'_> {
     fn on_repeat(&mut self, data: &[u8], i: usize) -> Result<usize, GraphicsDecodeError> {
         let bad = |m: String| GraphicsDecodeError::InvalidData(m);
         let (n, next) =
-            sixel_uint(data, i + 1).map_err(|_| bad(format!("bad repeat count at byte {i}")))?;
+            sixel_uint(data, i + 1).map_err(|()| bad(format!("bad repeat count at byte {i}")))?;
         if n == 0 || n > self.policy.max_dim {
             return Err(bad(format!("repeat count {n} out of range")));
         }
@@ -290,40 +290,52 @@ fn sixel_pct(v: u32, which: &str) -> Result<u8, GraphicsDecodeError> {
             "sixel RGB {which}={v} out of 0-100 range"
         )));
     }
-    Ok(((v * 255 + 50) / 100) as u8)
+    // Bound: v <= 100, so (v*255+50)/100 <= 255 — always succeeds.
+    Ok(u8::try_from((v * 255 + 50) / 100).unwrap_or(u8::MAX))
 }
 
-/// HLS (h 0-360, l/s 0-100%) → RGB. Standard single-hexcone conversion.
-fn hls_to_rgb(h: u32, l: u32, s: u32) -> Result<[u8; 3], GraphicsDecodeError> {
+/// HLS (`hue_deg` 0-360, `light`/`sat` 0-100%) → RGB. Standard single-hexcone
+/// conversion.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "channels are clamped to 0..=255 before rounding, so the casts are in range"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "channels are clamped to 0..=255 before rounding, so the casts are in range"
+)]
+fn hls_to_rgb(hue_deg: u32, light: u32, sat: u32) -> Result<[u8; 3], GraphicsDecodeError> {
     let bad = |m: String| GraphicsDecodeError::InvalidData(m);
-    if h > 360 {
-        return Err(bad(format!("sixel HLS h={h} out of 0-360 range")));
+    if hue_deg > 360 {
+        return Err(bad(format!("sixel HLS h={hue_deg} out of 0-360 range")));
     }
-    if l > 100 || s > 100 {
-        return Err(bad(format!("sixel HLS l={l} s={s} out of 0-100 range")));
+    if light > 100 || sat > 100 {
+        return Err(bad(format!(
+            "sixel HLS l={light} s={sat} out of 0-100 range"
+        )));
     }
-    let h = h as f64 / 360.0;
-    let l = l as f64 / 100.0;
-    let s = s as f64 / 100.0;
-    let (r, g, b) = if s == 0.0 {
-        (l, l, l)
+    let hue_n = f64::from(hue_deg) / 360.0;
+    let light_n = f64::from(light) / 100.0;
+    let sat_n = f64::from(sat) / 100.0;
+    let (red, green, blue) = if sat_n == 0.0 {
+        (light_n, light_n, light_n)
     } else {
-        let q = if l < 0.5 {
-            l * (1.0 + s)
+        let temp_q = if light_n < 0.5 {
+            light_n * (1.0 + sat_n)
         } else {
-            l + s - l * s
+            light_n + sat_n - light_n * sat_n
         };
-        let p = 2.0 * l - q;
+        let temp_p = 2.0 * light_n - temp_q;
         (
-            hue(p, q, h + 1.0 / 3.0),
-            hue(p, q, h),
-            hue(p, q, h - 1.0 / 3.0),
+            hue(temp_p, temp_q, hue_n + 1.0 / 3.0),
+            hue(temp_p, temp_q, hue_n),
+            hue(temp_p, temp_q, hue_n - 1.0 / 3.0),
         )
     };
     Ok([
-        (r.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (g.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (b.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (red.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (green.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (blue.clamp(0.0, 1.0) * 255.0).round() as u8,
     ])
 }
 

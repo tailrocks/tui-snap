@@ -33,6 +33,7 @@ pub struct GlyphMetrics {
 }
 
 /// A loaded raster font with line metrics.
+#[derive(Debug)]
 pub struct LoadedFont {
     /// Owned font bytes (`swash::FontRef` borrows; validated at load).
     data: Vec<u8>,
@@ -40,6 +41,7 @@ pub struct LoadedFont {
     pub ascent: f32,
     /// Pixels below baseline (nonnegative).
     pub descent: f32,
+    /// Rasterization size in pixels.
     pub px: f32,
     /// Human-readable face identity (fallback faces: the pinned description).
     pub desc: String,
@@ -98,7 +100,7 @@ impl LoadedFont {
                 width: w,
                 height: h,
                 xmin: p.left,
-                ymin: p.top - p.height as i32,
+                ymin: p.top - p.height.cast_signed(),
                 advance_width: gm.advance_width(id) * scale,
                 advance_height: gm.advance_height(id) * scale,
             },
@@ -108,6 +110,10 @@ impl LoadedFont {
 }
 
 /// Load + measure a font.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the bytes do not parse as a font.
 pub fn load_font(bytes: &[u8], px: f32) -> Result<LoadedFont, RenderError> {
     let font = swash::FontRef::from_index(bytes, 0)
         .ok_or_else(|| RenderError("cannot parse font: swash rejected the bytes".to_string()))?;
@@ -126,12 +132,25 @@ pub fn load_font(bytes: &[u8], px: f32) -> Result<LoadedFont, RenderError> {
 }
 
 /// Measured advance of `M` and line height at profile size.
+#[must_use]
 pub fn measure(loaded: &LoadedFont) -> (f32, f32) {
     (loaded.advance_width('M'), loaded.ascent + loaded.descent)
 }
 
 /// Fail unless the font measures exactly like the profile pins.
 /// Call before every gate render.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the measured advance/line-height differs from the pins.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "measured pixels are small positives; out-of-range reads as a pin break"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "measured pixels are small positives; out-of-range reads as a pin break"
+)]
 pub fn verify_geometry(loaded: &LoadedFont, profile: &Profile) -> Result<(), RenderError> {
     let (adv, line_h) = measure(loaded);
     if adv.round() as u32 != profile.cell_w || line_h.round() as u32 != profile.cell_h {
@@ -150,10 +169,15 @@ pub fn verify_geometry(loaded: &LoadedFont, profile: &Profile) -> Result<(), Ren
 /// it). Fallback faces are coverage-only: they serve single glyphs the
 /// primary family lacks, centered and clipped inside the primary cell box;
 /// they never move the cell grid.
+#[derive(Debug)]
 pub struct FontSet {
+    /// Regular face (cell grid authority).
     pub regular: LoadedFont,
+    /// Bold face (falls back to regular when unparsable).
     pub bold: LoadedFont,
+    /// Italic face (falls back to regular when unparsable).
     pub italic: LoadedFont,
+    /// Bold-italic face (falls back to regular when unparsable).
     pub bold_italic: LoadedFont,
     /// Non-regular faces that failed to parse and fell back to regular.
     pub fell_back: Vec<&'static str>,
@@ -162,6 +186,11 @@ pub struct FontSet {
 }
 
 impl FontSet {
+    /// Load the styled family with no per-glyph fallback chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` when the regular face fails to parse.
     pub fn load(faces: &FontFaces<'_>, px: f32) -> Result<Self, RenderError> {
         Self::load_with_fallbacks(faces, px, &[])
     }
@@ -170,6 +199,10 @@ impl FontSet {
     /// face's bytes are verified against its pinned SHA-256 before parsing;
     /// a hash mismatch or an unparsable face fails the load (explicit, never
     /// silent — a swapped/corrupt font must read as a renderer change).
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` on a face hash mismatch or an unparsable face.
     pub fn load_with_fallbacks(
         faces: &FontFaces<'_>,
         px: f32,
@@ -178,12 +211,11 @@ impl FontSet {
         let regular = load_font(faces.regular, px)?;
         let mut fell_back = Vec::new();
         let mut face = |bytes: &[u8], name: &'static str| -> Result<LoadedFont, RenderError> {
-            match load_font(bytes, px) {
-                Ok(f) => Ok(f),
-                Err(_) => {
-                    fell_back.push(name);
-                    load_font(faces.regular, px)
-                }
+            if let Ok(f) = load_font(bytes, px) {
+                Ok(f)
+            } else {
+                fell_back.push(name);
+                load_font(faces.regular, px)
             }
         };
         let mut loaded_fallbacks = Vec::with_capacity(fallbacks.len());

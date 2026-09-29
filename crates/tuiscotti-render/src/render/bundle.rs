@@ -15,8 +15,11 @@ use std::path::{Path, PathBuf};
 /// [`check_contract_bytes`]. No gate calls it by default.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContractBytes {
+    /// Normalized ANSI dump bytes.
     pub ansi: String,
+    /// Plain-text projection bytes.
     pub txt: String,
+    /// Standalone HTML document bytes.
     pub html: String,
 }
 
@@ -35,6 +38,10 @@ impl Artifacts {
 /// Opt-in byte-identity check over [`ContractBytes`]: every field must match
 /// byte-for-byte. The error names the first differing field with lengths and
 /// the first differing byte offset. Never part of the default gate.
+///
+/// # Errors
+///
+/// Returns `RenderError` naming the first differing field.
 pub fn check_contract_bytes(
     actual: &ContractBytes,
     expected: &ContractBytes,
@@ -71,16 +78,24 @@ pub fn check_contract_bytes(
 /// embeds the PNG as a data URI).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BundleManifest {
+    /// Renderer version that produced the bundle.
     pub renderer_version: u32,
+    /// Strict profile name.
     pub profile: String,
+    /// Strict profile content hash.
     pub profile_hash: String,
+    /// Pinned styled-face hashes (regular, bold, italic, bold-italic).
     pub face_hashes: [String; 4],
+    /// Fallback faces as `desc:sha256`, in chain order.
     pub fallback_faces: Vec<String>,
+    /// Integer rasterization scale of the render.
     pub scale: u32,
+    /// Fidelity verdict of the render.
     pub approximate: bool,
 }
 
 impl BundleManifest {
+    /// Manifest for one strict-profile render plus its fidelity record.
     #[must_use]
     pub fn for_render(rp: &RenderProfile<'_>, fidelity: &Fidelity) -> Self {
         Self {
@@ -98,6 +113,7 @@ impl BundleManifest {
         }
     }
 
+    /// Pretty JSON manifest content (`manifest.json`).
     #[must_use]
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self)
@@ -110,6 +126,10 @@ impl Artifacts {
     /// `screen.png`, `screen.html`, `fidelity.json`, `manifest.json`.
     /// Returns the written paths. The HTML is self-contained (PNG embedded,
     /// no external references); the manifest pins the renderer and fonts.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` when the directory or any file cannot be written.
     pub fn write_bundle(
         &self,
         dir: &Path,

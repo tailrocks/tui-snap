@@ -57,11 +57,19 @@ pub fn frame_from_screen_with_source(screen: &Screen, profile_name: &str, source
 ///
 /// One-shot convenience: constructs a fresh [`Renderer`] per call. Bulk
 /// gates should keep a [`Renderer::for_render_profile`] instance instead.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the profile or screen is invalid.
 pub fn render_screen(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
     Renderer::for_render_profile(rp)?.render_screen(screen)
 }
 
 /// [`render_screen`] returning PNG bytes only.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the profile or screen is invalid.
 pub fn render_screen_png(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Vec<u8>, RenderError> {
     Ok(render_screen(screen, rp)?.png)
 }
@@ -69,6 +77,10 @@ pub fn render_screen_png(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Vec<
 /// Render a validated [`Frame`] under a strict [`RenderProfile`]: the same
 /// engine as [`render_png_report`](super::render_png_report), plus the profile's missing-glyph policy
 /// and blink sample phase.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the profile or frame is invalid.
 pub fn render_frame_strict(frame: &Frame, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
     Renderer::for_render_profile(rp)?.render(frame)
 }
@@ -114,6 +126,10 @@ pub fn redact_frame(frame: &Frame) -> Frame {
 /// [`redact_frame`] for [`Screen`]s: same destruction, origin preserved.
 /// Fails only if the redacted grid would not validate (unreachable for
 /// validated inputs — widths and continuations are untouched).
+///
+/// # Errors
+///
+/// Returns `ScreenError` when the redacted grid does not validate.
 pub fn redact_screen(screen: &Screen) -> Result<Screen, tuiscotti_core::screen::ScreenError> {
     let frame = frame_from_screen(screen, "redacted");
     let redacted = redact_frame(&frame);

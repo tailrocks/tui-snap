@@ -16,10 +16,13 @@ pub const RENDERER_VERSION: u32 = 1;
 /// every style/fallback face hashed, no system scan in deterministic mode).
 pub const VENDORED_FONT_SHA256: &str =
     "f2a5ea6cfab397445ffab00c0370927b66d61e560a05db5db271b42006381c1a";
+/// SHA-256 pin of the vendored bold face.
 pub const VENDORED_FONT_BOLD_SHA256: &str =
     "bfcf9a917276ffc058867d87cbc8a5b2f1ab0f4b710e9170dc02763ccb80bd4b";
+/// SHA-256 pin of the vendored italic face.
 pub const VENDORED_FONT_ITALIC_SHA256: &str =
     "31efd6ead98746f5b0afa1ee6dba60267ad48db36428360bee327bec10621f97";
+/// SHA-256 pin of the vendored bold-italic face.
 pub const VENDORED_FONT_BOLD_ITALIC_SHA256: &str =
     "9dba502e00e35209f6ed2a151c7376c051657b067cdebbc6e52d06cb9002cf31";
 
@@ -51,14 +54,18 @@ pub enum CursorPolicy {
 /// resolver — rejected by construction (unknown strings fail strict build).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum IndexedPalette {
+    /// The xterm 256-color table (the only table that ships).
     Xterm,
 }
 
 /// Palette policy: terminal defaults plus the indexed table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PalettePolicy {
+    /// Default foreground for `Color::Default` cells.
     pub default_fg: tuiscotti_core::frame::Rgb,
+    /// Default background for `Color::Default` cells.
     pub default_bg: tuiscotti_core::frame::Rgb,
+    /// Indexed-color table.
     pub indexed: IndexedPalette,
 }
 

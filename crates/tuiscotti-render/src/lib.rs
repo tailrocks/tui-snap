@@ -21,3 +21,15 @@ pub use profile::{
     VENDORED_SYMBOLS2_FONT, VENDORED_SYMBOLS2_FONT_SHA256,
 };
 pub use render::Renderer;
+
+/// Lowercase hex rendering of bytes (digest/key display shared by the cache,
+/// format, and profile modules).
+pub(crate) fn hex_bytes(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(char::from(HEX[usize::from(b >> 4)]));
+        out.push(char::from(HEX[usize::from(b & 15)]));
+    }
+    out
+}

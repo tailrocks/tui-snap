@@ -2,7 +2,7 @@
 //!
 //! The PNG path rasterizes **real glyphs** with `swash` from pinned font
 //! bytes — never placeholder blocks. Glyphs are rasterized at the FINAL scale
-//! (`font_px * scale`) straight onto the output image, so HiDPI output keeps
+//! (`font_px * scale`) straight onto the output image, so `HiDPI` output keeps
 //! real coverage gradations instead of nearest-neighbor 2×2
 //! blocks. [`verify_geometry`] fails loudly if the regular face's measured
 //! advance/line-height drifts from the profile constants, so a font change
@@ -43,7 +43,7 @@ pub mod text;
 
 pub use bundle::{BundleManifest, ContractBytes, check_contract_bytes};
 pub use cache::{RenderCache, render_cache_disabled, screen_content_hash, set_no_cache_override};
-pub(crate) use draw::{draw_primary, draw_symbol};
+pub(crate) use draw::draw_symbol;
 pub use fidelity::{Artifacts, FallbackGlyph, Fidelity, MissingGlyph, Rendered};
 pub use fonts::{FontSet, GlyphMetrics, LoadedFont, load_font, measure, verify_geometry};
 pub use frame::{
@@ -51,7 +51,7 @@ pub use frame::{
     render_screen_png,
 };
 pub(crate) use glyph::{
-    CellSinks, FaceIdx, GlyphCache, GlyphKey, blend, cached_raster, draw_tofu, face_idx, fill_rect,
+    CellSinks, FaceIdx, GlyphCache, blend, cached_raster, draw_tofu, face_idx, fill_rect,
     is_default_ignorable,
 };
 pub use renderer::Renderer;

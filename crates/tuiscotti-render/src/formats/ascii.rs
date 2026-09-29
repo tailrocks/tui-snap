@@ -86,24 +86,19 @@ fn map_scalar(c: char) -> Option<char> {
     let out = match c {
         '─' => '-',
         '│' => '|',
-        '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' | '╭' | '╮' | '╯' | '╰' => {
+        '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' | '╭' | '╮' | '╯' | '╰' | '±' => {
             '+'
         }
-        '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' => {
-            '#'
-        }
-        '█' | '▓' | '▒' | '░' | '▀' | '▄' | '■' | '□' | '▪' | '▫' => '#',
+        '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' | '█' | '▓' | '▒' | '░'
+        | '▀' | '▄' | '■' | '□' | '▪' | '▫' => '#',
         '→' => '>',
         '←' | '↔' => '<',
         '↑' => '^',
-        '↓' => 'v',
-        '✓' => 'v',
-        '✗' => 'x',
+        '↓' | '✓' => 'v',
+        '✗' | '×' => 'x',
         '★' => '*',
         '…' | '·' => '.',
-        '×' => 'x',
         '÷' => '/',
-        '±' => '+',
         '\u{2800}'..='\u{28ff}' => ':',
         '\u{0300}'..='\u{036f}' | '\u{fe00}'..='\u{fe0f}' | '\u{200d}' | '\u{feff}' => return None,
         _ => '?',
@@ -170,6 +165,10 @@ pub fn ascii_projection(frame: &Frame) -> AsciiArtifact {
 }
 
 /// Fail unless every byte of `text` is 7-bit ASCII.
+///
+/// # Errors
+///
+/// Returns `FormatError` naming the offset of the first non-ASCII byte.
 pub fn assert_seven_bit(text: &str) -> Result<(), crate::formats::FormatError> {
     match text.bytes().position(|b| b >= 0x80) {
         Some(i) => Err(crate::formats::FormatError(format!(

@@ -34,28 +34,40 @@ pub(crate) fn face_idx(bold: bool, italic: bool) -> FaceIdx {
     }
 }
 
-pub(crate) fn blend(dst: &mut image::RgbImage, x: u32, y: u32, fg: Rgb, cov: u8) {
+pub(crate) fn blend(dst: &mut image::RgbImage, px: u32, py: u32, fg: Rgb, cov: u8) {
     if cov == 0 {
         return;
     }
-    let (w, h) = (dst.width(), dst.height());
-    if x >= w || y >= h {
+    let (dst_w, dst_h) = (dst.width(), dst.height());
+    if px >= dst_w || py >= dst_h {
         return;
     }
-    let p = dst.get_pixel_mut(x, y);
-    let a = u32::from(cov);
-    p[0] = ((u32::from(fg.r) * a + u32::from(p[0]) * (255 - a)) / 255) as u8;
-    p[1] = ((u32::from(fg.g) * a + u32::from(p[1]) * (255 - a)) / 255) as u8;
-    p[2] = ((u32::from(fg.b) * a + u32::from(p[2]) * (255 - a)) / 255) as u8;
+    let pix = dst.get_pixel_mut(px, py);
+    let alpha = u32::from(cov);
+    // Bound: fg*alpha + bg*(255-alpha) <= 255*255, so /255 <= 255 — the
+    // conversion always succeeds and the saturating fallback never fires.
+    let mix = |f: u8, b: u8| {
+        u8::try_from((u32::from(f) * alpha + u32::from(b) * (255 - alpha)) / 255).unwrap_or(u8::MAX)
+    };
+    pix[0] = mix(fg.r, pix[0]);
+    pix[1] = mix(fg.g, pix[1]);
+    pix[2] = mix(fg.b, pix[2]);
 }
 
-pub(crate) fn fill_rect(dst: &mut image::RgbImage, x: u32, y: u32, w: u32, h: u32, c: Rgb) {
-    let (dw, dh) = (dst.width(), dst.height());
-    for dy in 0..h {
-        for dx in 0..w {
-            let (px, py) = (x + dx, y + dy);
-            if px < dw && py < dh {
-                dst.put_pixel(px, py, image::Rgb([c.r, c.g, c.b]));
+pub(crate) fn fill_rect(
+    dst: &mut image::RgbImage,
+    left: u32,
+    top: u32,
+    width: u32,
+    height: u32,
+    color: Rgb,
+) {
+    let (dst_w, dst_h) = (dst.width(), dst.height());
+    for off_y in 0..height {
+        for off_x in 0..width {
+            let (px, py) = (left + off_x, top + off_y);
+            if px < dst_w && py < dst_h {
+                dst.put_pixel(px, py, image::Rgb([color.r, color.g, color.b]));
             }
         }
     }
@@ -72,29 +84,35 @@ pub(crate) fn draw_tofu(
     fg: Rgb,
     u: i32,
 ) {
-    let w = (span_px as i32 - 2 * u).max(3 * u);
+    let w = (span_px.cast_signed() - 2 * u).max(3 * u);
     for dx in 0..w {
-        blend(dst, (x0 + u + dx).max(0) as u32, top.max(0) as u32, fg, 255);
         blend(
             dst,
-            (x0 + u + dx).max(0) as u32,
-            (top + h as i32 - u).max(0) as u32,
+            (x0 + u + dx).max(0).cast_unsigned(),
+            top.max(0).cast_unsigned(),
+            fg,
+            255,
+        );
+        blend(
+            dst,
+            (x0 + u + dx).max(0).cast_unsigned(),
+            (top + h.cast_signed() - u).max(0).cast_unsigned(),
             fg,
             255,
         );
     }
-    for dy in 0..h as i32 {
+    for dy in 0..h.cast_signed() {
         blend(
             dst,
-            (x0 + u).max(0) as u32,
-            (top + dy).max(0) as u32,
+            (x0 + u).max(0).cast_unsigned(),
+            (top + dy).max(0).cast_unsigned(),
             fg,
             255,
         );
         blend(
             dst,
-            (x0 + u + w - u).max(0) as u32,
-            (top + dy).max(0) as u32,
+            (x0 + u + w - u).max(0).cast_unsigned(),
+            (top + dy).max(0).cast_unsigned(),
             fg,
             255,
         );
@@ -110,7 +128,7 @@ pub(crate) struct CellSinks<'a> {
     pub(crate) fallback: &'a mut Vec<FallbackGlyph>,
 }
 
-/// Default_Ignorable codepoints (variation selectors, ZWJ, …) carry no ink
+/// `Default_Ignorable` codepoints (variation selectors, ZWJ, …) carry no ink
 /// of their own. They must not count as uncovered: a cell like `☕`+U+FE0F
 /// would otherwise draw tofu on top of a real glyph (cmap-only coverage
 /// treated the selector as a miss). Combining marks are NOT ignorable and

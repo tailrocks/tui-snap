@@ -9,6 +9,10 @@ use tuiscotti_core::frame::Frame;
 ///
 /// One-shot convenience: constructs a fresh [`Renderer`] per call (8 font
 /// parses, cold glyph cache). Bulk gates should keep a `Renderer` instead.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the frame is invalid or PNG encoding fails.
 pub fn render_png(
     frame: &Frame,
     profile: &Profile,
@@ -21,6 +25,10 @@ pub fn render_png(
 ///
 /// One-shot convenience: constructs a fresh [`Renderer`] per call (8 font
 /// parses, cold glyph cache). Bulk gates should keep a `Renderer` instead.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the frame is invalid or PNG encoding fails.
 pub fn render_png_report(
     frame: &Frame,
     profile: &Profile,
@@ -31,6 +39,7 @@ pub fn render_png_report(
 
 /// Normalized ANSI dump (SGR runs from canonical state — for debugging, not
 /// for replay; replay raw streams with `crate::ansi::replay_raw`).
+#[must_use]
 pub fn ansi_dump(frame: &Frame) -> String {
     let mut out = String::new();
     for y in 0..frame.rows {
@@ -44,7 +53,9 @@ pub fn ansi_dump(frame: &Frame) -> String {
             if sgr != cur {
                 out.push_str("\x1b[0m");
                 if !sgr.is_empty() {
-                    out.push_str(&format!("\x1b[{sgr}m"));
+                    out.push_str("\x1b[");
+                    out.push_str(&sgr);
+                    out.push('m');
                 }
                 cur = sgr;
             }

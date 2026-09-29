@@ -22,6 +22,27 @@ use crate::profile::Profile;
 use crate::render::{escape_html, escape_html_attr, render_svg};
 use tuiscotti_core::frame::Frame;
 
+/// Injected elements rejected anywhere in the document.
+const FORBIDDEN_ELEMENTS: &[&str] = &["<script", "<link", "<iframe", "<object", "<embed", "<form"];
+
+/// Handler attributes, `javascript:` URLs, and external references rejected
+/// inside tag spans only (as escaped text they are inert content).
+const FORBIDDEN_IN_TAGS: &[&str] = &[
+    "javascript:",
+    "onload=",
+    "onerror=",
+    "onclick=",
+    "onmouseover=",
+    "onfocus=",
+    "src=\"http",
+    "src='http",
+    "href=\"http",
+    "href='http",
+    "url(http",
+    "src=\"//",
+    "href=\"//",
+];
+
 /// Render `frame` as static offline HTML. `png` (when given) is embedded as
 /// a `data:` URI image; `generation` labels the capture in an inert HTML
 /// comment so every capture stays identifiable in every format.
@@ -44,10 +65,7 @@ pub fn html_static(
     });
     // The generation label sits in an HTML comment: admit hex only so the
     // label can never break out of the comment, whatever the caller passes.
-    let gen_label: String = generation
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .collect();
+    let gen_label: String = generation.chars().filter(char::is_ascii_hexdigit).collect();
     let gen_label = if gen_label.is_empty() {
         "none".to_string()
     } else {
@@ -69,10 +87,12 @@ pub fn html_static(
 /// attributes, `javascript:` URLs, and external references are rejected
 /// inside tag spans only: as escaped text (a `<pre>` showing a payload)
 /// they are inert content, not markup.
+///
+/// # Errors
+///
+/// Returns `FormatError` naming the first forbidden token found.
 pub fn assert_static_offline(html: &str) -> Result<(), FormatError> {
     let lower = html.to_lowercase();
-    const FORBIDDEN_ELEMENTS: &[&str] =
-        &["<script", "<link", "<iframe", "<object", "<embed", "<form"];
     for token in FORBIDDEN_ELEMENTS {
         if lower.contains(token) {
             return Err(FormatError(format!(
@@ -80,21 +100,6 @@ pub fn assert_static_offline(html: &str) -> Result<(), FormatError> {
             )));
         }
     }
-    const FORBIDDEN_IN_TAGS: &[&str] = &[
-        "javascript:",
-        "onload=",
-        "onerror=",
-        "onclick=",
-        "onmouseover=",
-        "onfocus=",
-        "src=\"http",
-        "src='http",
-        "href=\"http",
-        "href='http",
-        "url(http",
-        "src=\"//",
-        "href=\"//",
-    ];
     for span in tag_spans(&lower) {
         for token in FORBIDDEN_IN_TAGS {
             if span.contains(token) {
@@ -117,7 +122,7 @@ fn tag_spans(lower: &str) -> Vec<&str> {
     while i < bytes.len() {
         if bytes[i] == b'<' && i + 1 < bytes.len() && tag_start(bytes[i + 1]) {
             if let Some(end) = lower[i..].find('>') {
-                spans.push(&lower[i..i + end + 1]);
+                spans.push(&lower[i..=(i + end)]);
                 i += end + 1;
                 continue;
             }

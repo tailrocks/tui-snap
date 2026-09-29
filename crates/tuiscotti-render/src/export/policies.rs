@@ -121,9 +121,14 @@ impl Default for GraphicsPolicy {
 /// All export pins. `Default` is the qualified gate configuration.
 #[derive(Debug, Clone, Default)]
 pub struct ExportPolicies {
+    /// Asciinema header pins.
     pub cast: CastPolicy,
+    /// GIF encoder pins.
     pub gif: GifPolicy,
+    /// APNG assembly pins.
     pub apng: ApngPolicy,
+    /// External-`ffmpeg` invocation pins.
     pub mp4: Mp4Policy,
+    /// Graphics inspection/decode bounds.
     pub graphics: GraphicsPolicy,
 }

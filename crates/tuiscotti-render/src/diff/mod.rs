@@ -39,12 +39,12 @@ mod tests {
 
     fn gradient_rgba() -> RgbaImage {
         let mut img = RgbaImage::new(16, 16);
-        for y in 0..16 {
-            for x in 0..16 {
+        for y in 0..16u8 {
+            for x in 0..16u8 {
                 img.put_pixel(
-                    x,
-                    y,
-                    image::Rgba([(x * 16) as u8, (y * 16) as u8, 128, 255]),
+                    u32::from(x),
+                    u32::from(y),
+                    image::Rgba([x * 16, y * 16, 128, 255]),
                 );
             }
         }
@@ -65,6 +65,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "score is exactly 1.0 for identical pixels by contract (literal return)"
+    )]
     fn strict_recompression_passes_single_channel_fails() -> Result<(), DiffError> {
         let img = gradient_rgba();
         let a = encode(&img, CompressionType::Default, FilterType::Adaptive)?;
@@ -149,6 +153,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "exact 1.0/0.0 scores are contractual (literal returns, pinned hybrid behavior)"
+    )]
     fn perceptual_score_never_proves_equality() -> Result<(), DiffError> {
         // RGB-identical but alpha-differing: perceptual diagnostic is blind
         // to the difference (RGB hybrid 1.0) while strict fails.

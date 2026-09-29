@@ -16,6 +16,14 @@ impl<'a> RenderProfile<'a> {
     /// against the corresponding bytes in `faces`. Each fallback face carries
     /// its own pin (checked too) and the chain order is preserved verbatim —
     /// reorderings change [`RenderProfile::hash`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `ProfileError` when any pin, range, or version check fails.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "strict constructor takes every pin explicitly; a builder would hide required pins"
+    )]
     pub fn strict(
         name: String,
         faces: FontFaces<'a>,
@@ -145,58 +153,72 @@ impl<'a> RenderProfile<'a> {
         c
     }
 
+    /// Profile name.
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// Pinned styled-face bytes.
     #[must_use]
     pub fn faces(&self) -> &FontFaces<'a> {
         &self.faces
     }
+    /// Pinned styled-face SHA-256 hashes, in `faces` order.
     #[must_use]
     pub fn face_hashes(&self) -> &[String; 4] {
         &self.face_hashes
     }
+    /// Ordered per-glyph fallback chain.
     #[must_use]
     pub fn fallback_order(&self) -> &[FallbackFace<'a>] {
         &self.fallback_order
     }
+    /// Pixels per Em for glyph rasterization (before `scale`).
     #[must_use]
     pub fn font_px(&self) -> f32 {
         self.font_px
     }
+    /// Cell width in output pixels (before `scale`).
     #[must_use]
     pub fn cell_w(&self) -> u32 {
         self.cell_w
     }
+    /// Cell height in output pixels (before `scale`).
     #[must_use]
     pub fn cell_h(&self) -> u32 {
         self.cell_h
     }
+    /// Image padding in output pixels (before `scale`).
     #[must_use]
     pub fn pad(&self) -> u32 {
         self.pad
     }
+    /// Integer rasterization scale.
     #[must_use]
     pub fn scale(&self) -> u32 {
         self.scale
     }
+    /// Palette policy.
     #[must_use]
     pub fn palette(&self) -> &PalettePolicy {
         &self.palette
     }
+    /// Cursor policy for still renders.
     #[must_use]
     pub fn cursor(&self) -> CursorPolicy {
         self.cursor
     }
+    /// Blink sample phase for still renders.
     #[must_use]
     pub fn blink_phase(&self) -> BlinkPhase {
         self.blink_phase
     }
+    /// Missing-glyph policy.
     #[must_use]
     pub fn missing(&self) -> MissingGlyphPolicy {
         self.missing
     }
+    /// Pinned renderer version.
     #[must_use]
     pub fn renderer_version(&self) -> u32 {
         self.renderer_version
@@ -235,11 +257,7 @@ impl<'a> RenderProfile<'a> {
         h.update(format!("{:?}", self.missing).as_bytes());
         h.update(self.renderer_version.to_le_bytes());
         let digest = h.finalize();
-        let mut s = String::with_capacity(digest.len() * 2);
-        for b in digest {
-            s.push_str(&format!("{b:02x}"));
-        }
-        s
+        crate::hex_bytes(&digest)
     }
 
     /// The legacy [`Profile`] this strict profile pins (same geometry, scale,
@@ -267,8 +285,8 @@ impl<'a> RenderProfile<'a> {
     #[must_use]
     pub fn image_size(&self, cols: u16, rows: u16) -> (u32, u32) {
         (
-            (cols as u32 * self.cell_w + self.pad * 2) * self.scale,
-            (rows as u32 * self.cell_h + self.pad * 2) * self.scale,
+            (u32::from(cols) * self.cell_w + self.pad * 2) * self.scale,
+            (u32::from(rows) * self.cell_h + self.pad * 2) * self.scale,
         )
     }
 }

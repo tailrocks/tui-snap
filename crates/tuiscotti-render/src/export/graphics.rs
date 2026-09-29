@@ -116,7 +116,9 @@ impl GraphicsPayload {
 /// Decoded image pixels: always RGBA8, row-major.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedImage {
+    /// Decoded width in pixels.
     pub width: u32,
+    /// Decoded height in pixels.
     pub height: u32,
     /// `width * height * 4` bytes.
     pub rgba: Vec<u8>,
@@ -155,7 +157,14 @@ pub enum GraphicsDecodeError {
     MissingDims,
     /// Decoded dims exceed the policy (`TooLarge { w, h, max }` carries the
     /// claimed dims and `max_dim`; pixel-count overflow names `max_pixels`).
-    TooLarge { w: u32, h: u32, max: u32 },
+    TooLarge {
+        /// Claimed width in pixels.
+        w: u32,
+        /// Claimed height in pixels.
+        h: u32,
+        /// Policy `max_dim` the claim exceeded.
+        max: u32,
+    },
     /// Bytes do not parse (bad PNG, short raw buffer, bad sixel operator...).
     InvalidData(String),
     /// Sixel plotted with a color register that was never defined (strict:
@@ -218,8 +227,11 @@ pub enum GraphicsDiagKind {
 /// One inspection diagnostic: byte offset + kind + human message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphicsDiagnostic {
+    /// Byte offset of the finding in the stream.
     pub offset: usize,
+    /// Finding class.
     pub kind: GraphicsDiagKind,
+    /// Human-readable detail.
     pub message: String,
 }
 
@@ -228,7 +240,9 @@ pub struct GraphicsDiagnostic {
 /// intentionally produce neither.
 #[derive(Debug, Clone, Default)]
 pub struct GraphicsScan {
+    /// Inspected images/commands in stream order.
     pub payloads: Vec<GraphicsPayload>,
+    /// Every anomaly found (unsupported, truncated, malformed, unknown refs).
     pub diagnostics: Vec<GraphicsDiagnostic>,
 }
 
@@ -256,6 +270,7 @@ pub fn scan_graphics_default(stream: &[u8]) -> GraphicsScan {
 /// `OSC 1337`, unterminated introducers, broken chains, bad base64.
 /// Parsing is lenient (a payload is still produced when salvageable) but
 /// loud (every anomaly is a diagnostic).
+#[must_use]
 pub fn scan_graphics(stream: &[u8], policy: &GraphicsPolicy) -> GraphicsScan {
     Scanner::new(stream, policy).run()
 }

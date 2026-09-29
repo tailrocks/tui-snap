@@ -73,11 +73,19 @@ pub(crate) fn decode_png_frames(
 /// quantization quality), infinite repeat, per-frame delays clamped to
 /// `[min_delay_ms, 655350]` ms and quantized by the format to 10 ms units.
 /// Same PNGs + delays → byte-identical file (qualified by test).
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input or encode/write failure.
 pub fn gif(frames_png: &[Vec<u8>], delays_ms: &[u32], path: &Path) -> Result<(), ExportError> {
     gif_with(frames_png, delays_ms, path, &GifPolicy::default())
 }
 
 /// [`gif`] with an explicit policy.
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input/policy or encode/write failure.
 pub fn gif_with(
     frames_png: &[Vec<u8>],
     delays_ms: &[u32],
@@ -101,7 +109,7 @@ pub fn gif_with(
             .map_err(|e| ExportError::Encode(format!("gif repeat extension failed: {e}")))?;
     }
     for (img, delay) in frames.into_iter().zip(delays_ms.iter()) {
-        let ms = (*delay).clamp(policy.min_delay_ms.max(1), 655350);
+        let ms = (*delay).clamp(policy.min_delay_ms.max(1), 655_350);
         let frame = image::Frame::from_parts(img, 0, 0, image::Delay::from_numer_denom_ms(ms, 1));
         enc.encode_frame(frame)
             .map_err(|e| ExportError::Encode(format!("gif frame encode failed: {e}")))?;
@@ -121,11 +129,19 @@ pub fn gif_with(
 /// `IHDR` + `acTL(plays)` + per-frame `fcTL` + `IEND`. Frames are full-canvas
 /// opaque renders, so `dispose_op` is NONE (0) and `blend_op` is SOURCE (1).
 /// Same PNGs + delays → byte-identical file (qualified by test).
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input or encode/write failure.
 pub fn apng(frames_png: &[Vec<u8>], delays_ms: &[u32], path: &Path) -> Result<(), ExportError> {
     apng_with(frames_png, delays_ms, path, &ApngPolicy::default())
 }
 
 /// [`apng`] with an explicit policy.
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input/policy or encode/write failure.
 pub fn apng_with(
     frames_png: &[Vec<u8>],
     delays_ms: &[u32],
@@ -162,14 +178,18 @@ pub fn apng_with(
             "apng: no frames after decode".to_string(),
         ));
     };
-    emit_chunk(b"IHDR", &ihdr, &mut out);
+    emit_chunk(*b"IHDR", &ihdr, &mut out);
     let mut actl = Vec::with_capacity(8);
-    actl.extend_from_slice(&(frames.len() as u32).to_be_bytes());
+    let frame_count = u32::try_from(frames.len()).map_err(|_| {
+        ExportError::InvalidInput(format!("apng: {} frames exceed u32 range", frames.len()))
+    })?;
+    actl.extend_from_slice(&frame_count.to_be_bytes());
     actl.extend_from_slice(&policy.plays.to_be_bytes());
-    emit_chunk(b"acTL", &actl, &mut out);
+    emit_chunk(*b"acTL", &actl, &mut out);
     let mut seq: u32 = 0;
     for (i, (idat, delay)) in idats.iter().zip(delays_ms.iter()).enumerate() {
-        let num = (*delay).max(1).min(u32::from(u16::MAX)) as u16;
+        // Capped at u16::MAX by the min above; always succeeds.
+        let num = u16::try_from((*delay).max(1).min(u32::from(u16::MAX))).unwrap_or(u16::MAX);
         let mut fctl = Vec::with_capacity(26);
         fctl.extend_from_slice(&seq.to_be_bytes());
         seq = seq.wrapping_add(1);
@@ -181,18 +201,18 @@ pub fn apng_with(
         fctl.extend_from_slice(&policy.delay_den.to_be_bytes());
         fctl.push(0); // dispose_op: APNG_DISPOSE_OP_NONE
         fctl.push(1); // blend_op: APNG_BLEND_OP_SOURCE
-        emit_chunk(b"fcTL", &fctl, &mut out);
+        emit_chunk(*b"fcTL", &fctl, &mut out);
         if i == 0 {
-            emit_chunk(b"IDAT", idat, &mut out);
+            emit_chunk(*b"IDAT", idat, &mut out);
         } else {
             let mut fdat = Vec::with_capacity(4 + idat.len());
             fdat.extend_from_slice(&seq.to_be_bytes());
             seq = seq.wrapping_add(1);
             fdat.extend_from_slice(idat);
-            emit_chunk(b"fdAT", &fdat, &mut out);
+            emit_chunk(*b"fdAT", &fdat, &mut out);
         }
     }
-    emit_chunk(b"IEND", &[], &mut out);
+    emit_chunk(*b"IEND", &[], &mut out);
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)?;
     }
@@ -272,12 +292,14 @@ fn split_png(png: &[u8], frame: usize) -> Result<SplitPng, ExportError> {
     }
 }
 
-fn emit_chunk(tag: &[u8; 4], data: &[u8], out: &mut Vec<u8>) {
-    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    out.extend_from_slice(tag);
+fn emit_chunk(tag: [u8; 4], data: &[u8], out: &mut Vec<u8>) {
+    // Payloads above 4 GiB are unreachable; saturation never fires.
+    let len = u32::try_from(data.len()).unwrap_or(u32::MAX);
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(&tag);
     out.extend_from_slice(data);
     let mut crc_input = Vec::with_capacity(4 + data.len());
-    crc_input.extend_from_slice(tag);
+    crc_input.extend_from_slice(&tag);
     crc_input.extend_from_slice(data);
     out.extend_from_slice(&crc32_ieee(&crc_input).to_be_bytes());
 }

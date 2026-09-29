@@ -1,6 +1,7 @@
 //! Asciinema v2 `.cast` export.
 
 use super::{CastPolicy, ExportError};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
@@ -18,7 +19,9 @@ fn json_escape(s: &str, out: &mut String) {
             '\t' => out.push_str("\\t"),
             '\u{08}' => out.push_str("\\b"),
             '\u{0C}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c if (c as u32) < 0x20 => {
+                write!(out, "\\u{:04x}", c as u32).unwrap_or_default();
+            }
             c => out.push(c),
         }
     }
@@ -45,6 +48,10 @@ pub const CAST_FILE_NAME: &str = "session.cast";
 /// Event times are cumulative (`dt` sums) printed with fixed `{:.6}`
 /// precision; the header timestamp is pinned 0 (see [`CastPolicy`]). Same
 /// input → byte-identical file. Creates `dir` when missing.
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input or directory/file write failure.
 pub fn cast_v2(
     frames: &[(String, f64)],
     cols: u16,
@@ -55,6 +62,10 @@ pub fn cast_v2(
 }
 
 /// [`cast_v2`] with an explicit header policy.
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid input or directory/file write failure.
 pub fn cast_v2_with(
     frames: &[(String, f64)],
     cols: u16,
@@ -75,16 +86,18 @@ pub fn cast_v2_with(
         }
     }
     let mut doc = String::new();
-    doc.push_str(&format!(
-        "{{\"version\":2,\"width\":{cols},\"height\":{rows},\"timestamp\":{},\"title\":{},\"env\":{{\"TERM\":{}}}}}\n",
+    writeln!(
+        doc,
+        "{{\"version\":2,\"width\":{cols},\"height\":{rows},\"timestamp\":{},\"title\":{},\"env\":{{\"TERM\":{}}}}}",
         policy.timestamp,
         json_string(&policy.title),
         json_string(&policy.term),
-    ));
+    )
+    .unwrap_or_default();
     let mut t = 0.0f64;
     for (text, dt) in frames {
         t += dt;
-        doc.push_str(&format!("[{t:.6},\"o\",{}]\n", json_string(text)));
+        writeln!(doc, "[{t:.6},\"o\",{}]", json_string(text)).unwrap_or_default();
     }
     std::fs::create_dir_all(dir)?;
     let path = dir.join(CAST_FILE_NAME);

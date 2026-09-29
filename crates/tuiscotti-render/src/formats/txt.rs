@@ -36,6 +36,10 @@ pub fn txt_lines(frame: &Frame) -> Vec<String> {
 
 /// Fail when `text` carries escape bytes or control characters (other than
 /// the `\n` row joins): TXT must stay plain.
+///
+/// # Errors
+///
+/// Returns `FormatError` naming the first control character found.
 pub fn assert_no_escapes(text: &str) -> Result<(), crate::formats::FormatError> {
     for (i, c) in text.char_indices() {
         if c == '\n' {

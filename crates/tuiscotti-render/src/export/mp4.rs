@@ -1,6 +1,7 @@
 //! MP4 export via an external `ffmpeg` binary (never vendored).
 
 use super::{ExportError, Mp4Policy, decode_png_frames, json_string};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,10 @@ pub struct Mp4Sidecar {
 
 /// Probe for an external `ffmpeg`: run `ffmpeg -version`, return its first
 /// output line. Missing binary → [`ExportError::EncoderMissing`].
+///
+/// # Errors
+///
+/// Returns `ExportError` when `ffmpeg` is missing or the probe fails.
 pub fn ffmpeg_version() -> Result<String, ExportError> {
     match std::process::Command::new("ffmpeg")
         .arg("-version")
@@ -54,13 +59,18 @@ pub fn ffmpeg_version() -> Result<String, ExportError> {
 ///
 /// Pipeline: PNGs are staged verbatim plus a concat-demuxer playlist into a
 /// sibling `<name>.mp4frames/` directory, then `ffmpeg` runs with pinned
-/// flags (`-c:v libx264 -pix_fmt <pix_fmt> -crf <crf> -preset <preset>
-/// `-movflags +faststart`). The staging directory is removed on success and
-/// KEPT on failure (named in the error) for diagnosis. A `<name>.ffmpeg.json`
-/// sidecar records the ffmpeg version line, argv, frames, and dims.
+/// flags (`-c:v libx264`, `-pix_fmt <pix_fmt>`, `-crf <crf>`,
+/// `-preset <preset>`, `-movflags +faststart`). The staging directory is
+/// removed on success and KEPT on failure (named in the error) for diagnosis.
+/// A `<name>.ffmpeg.json` sidecar records the ffmpeg version line, argv,
+/// frames, and dims.
 ///
 /// Output bytes are explicitly NOT deterministic: they depend on the ffmpeg
 /// build (encoder version, platform SIMD). Only the sidecar pins identity.
+///
+/// # Errors
+///
+/// Returns `ExportError` when `ffmpeg` is missing or the encode fails.
 pub fn mp4(
     frames_png: &[Vec<u8>],
     delays_ms: &[u32],
@@ -70,6 +80,10 @@ pub fn mp4(
 }
 
 /// [`mp4`] with an explicit policy.
+///
+/// # Errors
+///
+/// Returns `ExportError` on invalid policy/input or when the encode fails.
 pub fn mp4_with(
     frames_png: &[Vec<u8>],
     delays_ms: &[u32],
@@ -119,10 +133,12 @@ fn stage_mp4_frames(
     }
     let mut list = String::new();
     for (i, delay) in delays_ms.iter().enumerate() {
-        list.push_str(&format!("file 'f{i:06}.png'\n"));
-        list.push_str(&format!("duration {}\n", format_secs(*delay)));
+        writeln!(list, "file 'f{i:06}.png'").unwrap_or_default();
+        list.push_str("duration ");
+        list.push_str(&format_secs(*delay));
+        list.push('\n');
     }
-    list.push_str(&format!("file 'f{:06}.png'\n", frames_png.len() - 1));
+    writeln!(list, "file 'f{:06}.png'", frames_png.len() - 1).unwrap_or_default();
     std::fs::write(staging.join("list.txt"), &list)?;
     Ok(staging)
 }
@@ -138,9 +154,7 @@ fn run_ffmpeg_encode(
     let out_abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir()
-            .map(|c| c.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
+        std::env::current_dir().map_or_else(|_| path.to_path_buf(), |c| c.join(path))
     };
     let args = [
         "-y".to_string(),
@@ -193,7 +207,9 @@ fn write_mp4_sidecar(
     let sidecar_path = path.with_extension("ffmpeg.json");
     let mut sidecar = String::from("{\n");
     sidecar.push_str("  \"tool\": \"ffmpeg\",\n");
-    sidecar.push_str(&format!("  \"version\": {},\n", json_string(version)));
+    sidecar.push_str("  \"version\": ");
+    sidecar.push_str(&json_string(version));
+    sidecar.push_str(",\n");
     sidecar.push_str("  \"args\": [");
     for (i, a) in args.iter().enumerate() {
         if i > 0 {
@@ -201,9 +217,11 @@ fn write_mp4_sidecar(
         }
         sidecar.push_str(&json_string(a));
     }
-    sidecar.push_str(&format!(
+    write!(
+        sidecar,
         "],\n  \"frames\": {frames},\n  \"width\": {w},\n  \"height\": {h},\n  \"deterministic\": false\n}}\n"
-    ));
+    )
+    .unwrap_or_default();
     std::fs::write(&sidecar_path, &sidecar)?;
     Ok(sidecar_path)
 }

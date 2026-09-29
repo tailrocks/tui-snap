@@ -58,6 +58,10 @@ fn hybrid_diagnostic(
 /// Strict comparison over decoded pixels with the default
 /// [`AlphaPolicy::StraightRgba`]. Never compares compressed bytes:
 /// re-encoding identical pixels passes. Takes no threshold.
+///
+/// # Errors
+///
+/// Returns `DiffError` when either input does not decode as a PNG.
 pub fn compare_png(expected_png: &[u8], actual_png: &[u8]) -> Result<PixelVerdict, DiffError> {
     compare_png_with_alpha(expected_png, actual_png, AlphaPolicy::default())
 }
@@ -65,6 +69,10 @@ pub fn compare_png(expected_png: &[u8], actual_png: &[u8]) -> Result<PixelVerdic
 /// Strict comparison over decoded pixels with an explicit [`AlphaPolicy`].
 /// Equality is equal dimensions plus exact decoded-pixel identity — no
 /// threshold, no perceptual rounding.
+///
+/// # Errors
+///
+/// Returns `DiffError` when either input does not decode as a PNG.
 pub fn compare_png_with_alpha(
     expected_png: &[u8],
     actual_png: &[u8],
@@ -134,6 +142,10 @@ pub fn compare_png_with_alpha(
 /// can hide small changes. Only [`PixelVerdict::pixels_equal`] proves pixel
 /// identity. Returns 0.0 when dimensions differ (no pixel correspondence
 /// exists).
+///
+/// # Errors
+///
+/// Returns `DiffError` when either input does not decode as a PNG.
 pub fn perceptual_score(expected_png: &[u8], actual_png: &[u8]) -> Result<f64, DiffError> {
     let expected = decode_png(expected_png, "expected")?;
     let actual = decode_png(actual_png, "actual")?;

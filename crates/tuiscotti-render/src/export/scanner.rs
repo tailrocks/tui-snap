@@ -102,7 +102,7 @@ impl<'a> Scanner<'a> {
         self.scan
     }
 
-    /// Find `ESC \` or `0x9C` from `start`; returns (content, resume_at).
+    /// Find `ESC \` or `0x9C` from `start`; returns (content, `resume_at`).
     fn st_content(&self, start: usize) -> Option<(&'a [u8], usize)> {
         let s = self.stream;
         let mut j = start;
@@ -224,19 +224,18 @@ impl<'a> Scanner<'a> {
             if pair.is_empty() {
                 continue;
             }
-            match pair.iter().position(|&c| c == b'=') {
-                Some(eq) => params.push((
+            if let Some(eq) = pair.iter().position(|&c| c == b'=') {
+                params.push((
                     String::from_utf8_lossy(&pair[..eq]).into_owned(),
                     String::from_utf8_lossy(&pair[eq + 1..]).into_owned(),
-                )),
-                None => {
-                    self.diag(
-                        offset,
-                        GraphicsDiagKind::Malformed,
-                        format!("kitty key without '=': {:?}", String::from_utf8_lossy(pair)),
-                    );
-                    params.push((String::from_utf8_lossy(pair).into_owned(), String::new()));
-                }
+                ));
+            } else {
+                self.diag(
+                    offset,
+                    GraphicsDiagKind::Malformed,
+                    format!("kitty key without '=': {:?}", String::from_utf8_lossy(pair)),
+                );
+                params.push((String::from_utf8_lossy(pair).into_owned(), String::new()));
             }
         }
         let more = params.iter().any(|(k, v)| k == "m" && v == "1");

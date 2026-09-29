@@ -31,8 +31,11 @@ pub enum AlphaPolicy {
 /// Outcome of one PNG-vs-PNG comparison.
 #[derive(Debug)]
 pub struct PixelVerdict {
+    /// True when both inputs decoded to the same dimensions.
     pub dims_equal: bool,
+    /// Decoded `(width, height)` of the expected input.
     pub expected_dims: (u32, u32),
+    /// Decoded `(width, height)` of the actual input.
     pub actual_dims: (u32, u32),
     /// THE strict verdict: dimensions equal AND decoded pixels identical
     /// under [`Self::alpha_policy`]. This bit — never [`Self::score`] —
@@ -66,6 +69,10 @@ impl PerceptualPolicy {
     /// `[0.0, 1.0]`. An invalid tolerance is an error, never silently
     /// applied (a NaN threshold would make every `score < threshold`
     /// comparison false and fake a match).
+    ///
+    /// # Errors
+    ///
+    /// Returns `DiffError` when the threshold is non-finite or outside `[0.0, 1.0]`.
     pub fn new(threshold: f64) -> Result<Self, DiffError> {
         if !threshold.is_finite() {
             return Err(DiffError(format!(
@@ -80,6 +87,7 @@ impl PerceptualPolicy {
         Ok(Self { threshold })
     }
 
+    /// The validated review-bar threshold.
     #[must_use]
     pub fn threshold(self) -> f64 {
         self.threshold

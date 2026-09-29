@@ -23,6 +23,10 @@ pub fn ansi_normalized(frame: &Frame) -> String {
 /// row joins, `ESC[0m` resets, and `ESC[<params>m` SGR runs with canonical
 /// numeric/`;`/`:` parameters. Any other escape sequence (OSC, cursor moves,
 /// mode sets — raw-transcript residue) is rejected.
+///
+/// # Errors
+///
+/// Returns `FormatError` naming the first non-normalized sequence found.
 pub fn assert_normalized_sgr(text: &str) -> Result<(), crate::formats::FormatError> {
     let bytes = text.as_bytes();
     let mut i = 0;

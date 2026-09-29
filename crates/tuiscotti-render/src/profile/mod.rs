@@ -7,8 +7,8 @@
 //!
 //! ## Font licensing
 //!
-//! The default family is **JetBrainsMono Nerd Font Mono** (Regular / Bold /
-//! Italic / BoldItalic) under the **SIL Open Font License 1.1**:
+//! The default family is **`JetBrainsMono` Nerd Font Mono** (Regular / Bold /
+//! Italic / `BoldItalic`) under the **SIL Open Font License 1.1**:
 //! redistribution in this repository is allowed provided the license text
 //! ships alongside — see `assets/fonts/LICENSE-JetBrainsMono.txt` and
 //! `assets/fonts/FONTS.md`. Upstream: <https://www.jetbrains.com/lp/mono/>,

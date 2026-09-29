@@ -91,6 +91,10 @@ impl GraphicsPayload {
     ///
     /// Truncated payloads never decode; oversize claims fail before any
     /// allocation proportional to them.
+    ///
+    /// # Errors
+    ///
+    /// Returns `GraphicsDecodeError` on truncated/oversize/unparseable payloads.
     pub fn decode_bounded(
         &self,
         policy: &GraphicsPolicy,
@@ -111,10 +115,10 @@ impl GraphicsPayload {
                 "kitty t={medium}: only direct (t=d) data decodes; file/temp/shm media never touched"
             )));
         }
-        if let Some(id) = self.references {
-            if self.data.is_empty() {
-                return Err(GraphicsDecodeError::UnknownReference(id));
-            }
+        if let Some(id) = self.references
+            && self.data.is_empty()
+        {
+            return Err(GraphicsDecodeError::UnknownReference(id));
         }
         let format = self.param("f").unwrap_or("32");
         match format {
@@ -196,7 +200,7 @@ pub(crate) fn check_dims(
             max: policy.max_dim,
         });
     }
-    if w as u64 * h as u64 > policy.max_pixels {
+    if u64::from(w) * u64::from(h) > policy.max_pixels {
         return Err(GraphicsDecodeError::TooLarge {
             w,
             h,

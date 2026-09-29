@@ -36,6 +36,10 @@ pub struct PngInfo {
 }
 
 /// Parse the `IHDR` of `png` without decoding pixels.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the header is missing or truncated.
 pub fn png_info(png: &[u8]) -> Result<PngInfo, RenderError> {
     let bad = |m: &str| RenderError(format!("bad PNG header: {m}"));
     if png.len() < 8 || png[..8] != PNG_MAGIC {
@@ -60,6 +64,10 @@ pub fn png_info(png: &[u8]) -> Result<PngInfo, RenderError> {
 
 /// Fail unless `png` is opaque RGB evidence: color type 2, bit depth 8,
 /// nonzero dimensions.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the header or contract check fails.
 pub fn assert_opaque_rgb(png: &[u8]) -> Result<PngInfo, RenderError> {
     let info = png_info(png)?;
     if info.color_type != 2 {
@@ -83,6 +91,10 @@ pub fn assert_opaque_rgb(png: &[u8]) -> Result<PngInfo, RenderError> {
 /// Decode `png` to an RGB image (any input color type accepted for
 /// *comparison* inputs; evidence *outputs* still go through
 /// [`assert_opaque_rgb`]).
+///
+/// # Errors
+///
+/// Returns `RenderError` when the bytes do not decode as a PNG.
 pub fn decode_rgb(png: &[u8]) -> Result<image::RgbImage, RenderError> {
     image::load_from_memory(png)
         .map_err(|e| RenderError(format!("PNG decode failed: {e}")))
@@ -92,6 +104,10 @@ pub fn decode_rgb(png: &[u8]) -> Result<image::RgbImage, RenderError> {
 /// Decoded-pixel difference: positions where `a` and `b` differ after
 /// decoding. Dimensions must match; a dimension mismatch is an error, not
 /// a diff. Empty output means pixel-identical.
+///
+/// # Errors
+///
+/// Returns `RenderError` when decoding fails or dimensions mismatch.
 pub fn changed_pixels(a: &[u8], b: &[u8]) -> Result<Vec<(u32, u32)>, RenderError> {
     let ia = decode_rgb(a)?;
     let ib = decode_rgb(b)?;

@@ -66,6 +66,10 @@ impl PipeArtifact {
 
 /// Decode `input` lossily with exact accounting. `max_bytes` must be
 /// nonzero; over-long input is cut back to a character boundary.
+///
+/// # Errors
+///
+/// Returns `PipeError` when `max_bytes` is zero.
 pub fn pipe_projection(input: &[u8], max_bytes: usize) -> Result<PipeArtifact, PipeError> {
     if max_bytes == 0 {
         return Err(PipeError {
@@ -93,7 +97,7 @@ pub fn pipe_projection(input: &[u8], max_bytes: usize) -> Result<PipeArtifact, P
     let mut hasher = Sha256::new();
     hasher.update(input);
     Ok(PipeArtifact {
-        id: hex_bytes(&hasher.finalize()),
+        id: crate::hex_bytes(&hasher.finalize()),
         text,
         input_bytes: input.len(),
         kept_bytes: kept,
@@ -104,6 +108,10 @@ pub fn pipe_projection(input: &[u8], max_bytes: usize) -> Result<PipeArtifact, P
 
 /// Decode `input` strictly: any invalid UTF-8 is an error naming the byte
 /// offset of the first bad sequence.
+///
+/// # Errors
+///
+/// Returns `PipeError` with the offset of the first invalid sequence.
 pub fn pipe_strict(input: &[u8]) -> Result<String, PipeError> {
     match std::str::from_utf8(input) {
         Ok(s) => Ok(s.to_string()),
@@ -112,12 +120,4 @@ pub fn pipe_strict(input: &[u8]) -> Result<String, PipeError> {
             message: format!("invalid UTF-8 (error length {:?})", e.error_len()),
         }),
     }
-}
-
-fn hex_bytes(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        out.push_str(&format!("{b:02x}"));
-    }
-    out
 }

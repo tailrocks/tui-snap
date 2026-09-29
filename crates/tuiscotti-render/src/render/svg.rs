@@ -2,6 +2,7 @@
 
 use crate::profile::BlinkPhase;
 use crate::profile::Profile;
+use std::fmt::Write as _;
 use tuiscotti_core::frame::Frame;
 
 fn esc_xml(s: &str) -> String {
@@ -50,6 +51,7 @@ pub fn escape_json_for_script(json: &str) -> String {
 /// stays authoritative for pixel gates). Blinking cells sample
 /// [`BlinkPhase::On`] (frozen-visible); use [`render_svg_phased`] to sample
 /// the off phase.
+#[must_use]
 pub fn render_svg(frame: &Frame, profile: &Profile) -> String {
     render_svg_phased(frame, profile, BlinkPhase::On)
 }
@@ -57,12 +59,21 @@ pub fn render_svg(frame: &Frame, profile: &Profile) -> String {
 /// [`render_svg`] sampling a declared blink phase (V07): off-phase blinking
 /// cells contribute blank space, like concealed cells. Blink intent stays in
 /// canonical state; only the still is sampled.
+#[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "font size is a small positive; float saturation is intended"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "font size is a small positive; float saturation is intended"
+)]
 pub fn render_svg_phased(frame: &Frame, profile: &Profile, phase: BlinkPhase) -> String {
     let cw = profile.cell_w;
     let ch = profile.cell_h;
     let pad = profile.pad;
-    let w = frame.cols as u32 * cw + pad * 2;
-    let h = frame.rows as u32 * ch + pad * 2;
+    let w = u32::from(frame.cols) * cw + pad * 2;
+    let h = u32::from(frame.rows) * ch + pad * 2;
     let bg = profile.default_bg.to_hex();
     let mut s = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\" font-family=\"'JetBrainsMono Nerd Font Mono','JetBrains Mono',monospace\" font-size=\"{}\">\n<rect width=\"100%\" height=\"100%\" fill=\"{bg}\"/>\n",
@@ -152,13 +163,13 @@ fn coalesce_run(
     (run, nx)
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "span emission shares one call site; grouping would obscure the SVG contract"
 )]
 fn emit_span(
     s: &mut String,
-    frame: &Frame,
+    _frame: &Frame,
     profile: &Profile,
     cell: &tuiscotti_core::frame::Cell,
     run: &str,
@@ -173,14 +184,16 @@ fn emit_span(
     let pad = profile.pad;
     {
         let span_cols = nx - x;
-        let px = pad + x as u32 * cw;
-        let py = pad + y as u32 * ch;
+        let px = pad + u32::from(x) * cw;
+        let py = pad + u32::from(y) * ch;
         if bg0 != profile.default_bg {
-            s.push_str(&format!(
-                "<rect x=\"{px}\" y=\"{py}\" width=\"{}\" height=\"{ch}\" fill=\"{}\"/>\n",
-                span_cols as u32 * cw,
+            writeln!(
+                s,
+                "<rect x=\"{px}\" y=\"{py}\" width=\"{}\" height=\"{ch}\" fill=\"{}\"/>",
+                u32::from(span_cols) * cw,
                 bg0.to_hex()
-            ));
+            )
+            .unwrap_or_default();
         }
         let weight = if cell.mods.bold {
             " font-weight=\"bold\""
@@ -219,13 +232,15 @@ fn emit_span(
             | tuiscotti_core::frame::UnderlineStyle::Single => "",
         };
         let attrs = format!("{weight}{style}{decoration}{deco_style}");
-        s.push_str(&format!(
-            "<text xml:space=\"preserve\" x=\"{px}\" y=\"{}\" fill=\"{}\"{}>{}</text>\n",
+        writeln!(
+            s,
+            "<text xml:space=\"preserve\" x=\"{px}\" y=\"{}\" fill=\"{}\"{}>{}</text>",
             py + ch - 4,
             fg0.to_hex(),
             attrs,
             esc_xml(run)
-        ));
+        )
+        .unwrap_or_default();
     }
 }
 

@@ -22,6 +22,10 @@ pub const CANONICAL_JSON_VERSION: u8 = FRAME_VERSION;
 
 /// Serialize `frame` as compact canonical JSON. The frame is validated
 /// first; malformed frames are rejected, never serialized.
+///
+/// # Errors
+///
+/// Returns `FrameError` when the frame does not validate.
 pub fn canonical_json(frame: &Frame) -> Result<String, FrameError> {
     frame.validate()?;
     Ok(frame.to_json())
@@ -29,6 +33,10 @@ pub fn canonical_json(frame: &Frame) -> Result<String, FrameError> {
 
 /// Parse + validate canonical JSON (pretty or compact: whitespace is not
 /// significant). Legacy bool-only underlines normalize to `Single`.
+///
+/// # Errors
+///
+/// Returns `FrameError` when the text is not valid canonical JSON.
 pub fn parse_canonical(text: &str) -> Result<Frame, FrameError> {
     Frame::from_json(text)
 }
@@ -36,6 +44,10 @@ pub fn parse_canonical(text: &str) -> Result<Frame, FrameError> {
 /// Fail unless the provenance identity fields that make a capture auditable
 /// are all present. `created_unix` and `argv` may legitimately be
 /// zero/empty (deterministic renders, redacted evidence).
+///
+/// # Errors
+///
+/// Returns `FrameError` naming the first empty provenance field.
 pub fn assert_provenance_complete(frame: &Frame) -> Result<(), FrameError> {
     let p = &frame.provenance;
     for (field, value) in [

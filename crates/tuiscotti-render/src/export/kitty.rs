@@ -5,7 +5,7 @@ use super::{
     base64_decode, num_pair,
 };
 
-impl<'a> Scanner<'a> {
+impl Scanner<'_> {
     /// A non-final (`m=1`) Kitty chunk: accumulate, enforcing the spec rule
     /// that continuation chunks carry only `m` (+`q`, +`a=f` for animation).
     pub(crate) fn on_kitty_chunk(
@@ -143,21 +143,20 @@ impl<'a> Scanner<'a> {
             }
         };
         // `a=p` with no inline bytes displays a transmitted id.
-        if action == "p" && data.is_empty() {
-            if let Some(id) =
+        if action == "p"
+            && data.is_empty()
+            && let Some(id) =
                 Self::param_lookup(first_params, "i").and_then(|s| s.parse::<u32>().ok())
-            {
-                if id != 0 {
-                    references = Some(id);
-                    match self.images.get(&id) {
-                        Some(bytes) => data = bytes.clone(),
-                        None => self.diag(
-                            first_offset,
-                            GraphicsDiagKind::UnknownReference,
-                            format!("kitty a=p references untransmitted image id {id}"),
-                        ),
-                    }
-                }
+            && id != 0
+        {
+            references = Some(id);
+            match self.images.get(&id) {
+                Some(bytes) => data.clone_from(bytes),
+                None => self.diag(
+                    first_offset,
+                    GraphicsDiagKind::UnknownReference,
+                    format!("kitty a=p references untransmitted image id {id}"),
+                ),
             }
         }
         (data, references)
@@ -171,27 +170,27 @@ impl<'a> Scanner<'a> {
         first_params: &[(String, String)],
         data: &[u8],
     ) {
-        if (action == "t" || action == "T" || action == "f") && !data.is_empty() {
-            if let Some(id) =
+        if (action == "t" || action == "T" || action == "f")
+            && !data.is_empty()
+            && let Some(id) =
                 Self::param_lookup(first_params, "i").and_then(|s| s.parse::<u32>().ok())
-            {
-                if id != 0 && !self.images.contains_key(&id) {
-                    if self.images.len() >= self.policy.max_images {
-                        if !self.images_full {
-                            self.images_full = true;
-                            self.diag(
-                                first_offset,
-                                GraphicsDiagKind::Truncated,
-                                format!(
-                                    "transmitted-image table full ({}); id {id} inspected but not retained",
-                                    self.policy.max_images
-                                ),
-                            );
-                        }
-                    } else {
-                        self.images.insert(id, data.to_vec());
-                    }
+            && id != 0
+            && !self.images.contains_key(&id)
+        {
+            if self.images.len() >= self.policy.max_images {
+                if !self.images_full {
+                    self.images_full = true;
+                    self.diag(
+                        first_offset,
+                        GraphicsDiagKind::Truncated,
+                        format!(
+                            "transmitted-image table full ({}); id {id} inspected but not retained",
+                            self.policy.max_images
+                        ),
+                    );
                 }
+            } else {
+                self.images.insert(id, data.to_vec());
             }
         }
     }
@@ -253,9 +252,10 @@ impl<'a> Scanner<'a> {
         }
         match Self::param_lookup(params, "z") {
             None => p.z = Some(0),
-            Some(z) => match z.parse::<i32>() {
-                Ok(v) => p.z = Some(v),
-                Err(_) => {
+            Some(z) => {
+                if let Ok(v) = z.parse::<i32>() {
+                    p.z = Some(v);
+                } else {
                     self.diag(
                         offset,
                         GraphicsDiagKind::Malformed,
@@ -263,7 +263,7 @@ impl<'a> Scanner<'a> {
                     );
                     p.z = Some(0);
                 }
-            },
+            }
         }
         p.display_cells = num_pair(params, "c", "r");
         p.display_px = num_pair(params, "w", "h");

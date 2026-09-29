@@ -96,12 +96,8 @@ pub fn generation_for(frame: &Frame, profile_name: &str) -> Generation {
     hasher.update(profile_name.as_bytes());
     hasher.update(frame.to_json().as_bytes());
     let digest = hasher.finalize();
-    let mut id = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        id.push_str(&format!("{b:02x}"));
-    }
     Generation {
-        id,
+        id: crate::hex_bytes(&digest),
         frame_digest: frame.digest(),
         renderer_version: RENDERER_VERSION,
         profile: profile_name.to_string(),
@@ -116,6 +112,10 @@ pub fn generations_match(a: &Generation, b: &Generation) -> bool {
 
 /// Fail when `a` and `b` are not the same generation — the mixed-generation
 /// guard for downstream artifact assembly.
+///
+/// # Errors
+///
+/// Returns `FormatError` when the generations differ.
 pub fn require_same_generation(a: &Generation, b: &Generation) -> Result<(), FormatError> {
     if generations_match(a, b) {
         Ok(())
@@ -150,6 +150,10 @@ pub struct CaptureBundle {
 /// Export every format of `frame` in one render pass: the PNG rasterizes
 /// once, the HTML embeds those exact bytes, and all six artifacts share one
 /// [`Generation`]. The frame is validated before anything renders.
+///
+/// # Errors
+///
+/// Returns `RenderError` when the frame is invalid or the render fails.
 pub fn capture_all(
     renderer: &mut Renderer,
     frame: &Frame,
@@ -159,7 +163,7 @@ pub fn capture_all(
         .validate()
         .map_err(|e| RenderError(format!("refusing to capture: {e}")))?;
     let profile_name = renderer.profile().name.clone();
-    let rendered = renderer.render(frame)?;
+    let still = renderer.render(frame)?;
     let generation = generation_for(frame, &profile_name);
     let profile = renderer.profile().clone();
     Ok(CaptureBundle {
@@ -167,8 +171,8 @@ pub fn capture_all(
         ascii: ascii_projection(frame),
         txt: txt_projection(frame),
         ansi: ansi_normalized(frame),
-        png: rendered.png.clone(),
-        html: html_static(frame, &profile, title, Some(&rendered.png), &generation.id),
+        png: still.png.clone(),
+        html: html_static(frame, &profile, title, Some(&still.png), &generation.id),
         json: frame.to_json(),
     })
 }

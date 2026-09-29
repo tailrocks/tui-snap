@@ -55,11 +55,7 @@ pub fn screen_content_hash(screen: &Screen) -> String {
         .as_bytes(),
     );
     let digest = h.finalize();
-    let mut s = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        s.push_str(&format!("{b:02x}"));
-    }
-    s
+    crate::hex_bytes(&digest)
 }
 
 /// Content-addressed PNG cache. The key covers the screen hash, the profile
@@ -72,6 +68,7 @@ pub fn screen_content_hash(screen: &Screen) -> String {
 /// Approved artifacts are NEVER a render cache: [`RenderCache::open`]
 /// refuses a cache dir equal to any approved root, so review evidence can
 /// neither be read as cache hits nor overwritten by cache writes.
+#[derive(Debug)]
 pub struct RenderCache {
     dir: PathBuf,
     rejected: u64,
@@ -83,6 +80,10 @@ impl RenderCache {
     /// Open (creating) `dir` as a cache. Fails when `dir` equals any path in
     /// `approved_roots` — approved trees are review evidence, not cache
     /// storage, in either direction.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` when `dir` equals an approved root or cannot be created.
     pub fn open(dir: &Path, approved_roots: &[&Path]) -> Result<Self, RenderError> {
         for root in approved_roots {
             if dir == *root {
@@ -130,11 +131,7 @@ impl RenderCache {
         }
         h.update(RENDERER_VERSION.to_le_bytes());
         let digest = h.finalize();
-        let mut s = String::with_capacity(digest.len() * 2);
-        for b in digest {
-            s.push_str(&format!("{b:02x}"));
-        }
-        s
+        crate::hex_bytes(&digest)
     }
 
     fn path(&self, key: &str) -> PathBuf {
@@ -162,6 +159,10 @@ impl RenderCache {
 
     /// Store a PNG under `key`. Silently dropped when caching is disabled
     /// (qualification mode). Overwrites any previous entry for the key.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` when the entry cannot be written.
     pub fn put(&mut self, key: &str, png: &[u8]) -> Result<(), RenderError> {
         if render_cache_disabled() {
             return Ok(());
