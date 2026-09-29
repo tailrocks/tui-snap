@@ -99,7 +99,12 @@ and each fallback face's SHA-256 travels with its bytes in
 any mismatch). Any font change fails gates loudly instead of shifting
 pixels silently.
 
-## Cell metrics (measured with fontdue, pinned in `Profile`)
+## Cell metrics (pinned in `Profile`)
+
+Raster backend is `swash` (unhinted; the previous `fontdue` backend
+was removed with its unmaintained `ttf-parser`). Unhinted swash
+rasters match the old geometry exactly, so the pins below are
+unchanged.
 
 At `font_px = 16`: advance(`M`) = 9.60 px → `cell_w = 10`; line height
 (ascent 16.32 + descent 4.80) = 21.12 px → `cell_h = 21`. All four primary

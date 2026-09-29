@@ -12,11 +12,11 @@ facade paths. Status labels: **implemented** (shipped, tested),
 | `ratatui::{draw_frame, widget_frame, capture, render_screen, widget_screen, stateful_screen}` | implemented | Production draw closures → `Frame`/`Screen`. No PTY. |
 | `tui::{Tui, Session}` (`Tui::new/cargo_bin/size/env/cwd/profile/spawn`) | implemented | Owned PTY sessions, feature `pty`. |
 | `tui::Session::{snapshot, observe_now, wait_predicate, wait_stable, wait_stable_quiet, wait_frame, wait_exit, expect_exit, finish, close}` | implemented | Every wait fails with evidence on timeout; `close` reaps. |
-| `tui::Session::{press, press_key, key_down, key_repeat, key_up, key_event, parse_chord}` | implemented | `+`-joined chords (`ctrl+Up`); key down/repeat/up distinct. |
+| `tui::Session::{press, press_key, key_down, key_repeat, key_up, key_event}` + free fn `tui::parse_chord` | implemented | `+`-joined chords (`ctrl+Up`); key down/repeat/up distinct. |
 | `tui::Session::{send_text, send_bytes, paste}` | implemented | Literal input; `paste` is bracketed paste. |
 | `tui::Session::{click, mouse_down, mouse_up, mouse_move, mouse_drag, mouse_wheel, focus_in, focus_out}` | implemented | Fail with `ModeNotEnabled` unless the app enabled reporting. |
 | `tui::Session::{resize, signal, pid, revision, poll_exit}` | implemented | Resize reflows via the emulator; signals unix-only. |
-| `tui_shell::{Recording, Replay, TermSnapshot, assert_*}` | implemented | Recording/replay + terminal-state assertions (title, modes, palette, clipboard, links, scrollback). |
+| `tui_shell::{Recording, Replayed, replay_*, TermSnapshot, assert_*}` | implemented | Recording/replay (`replay_bytes`/`replay_chunks`/`replay_recording` → `Replayed`) + terminal-state assertions (title, modes, palette, clipboard, links, scrollback). |
 | `command::{Command, ProcessOutput, IsolatedEnv}` | implemented | Piped child runs: timeouts, output limits, split streams,exit/signal distinction (`Termination`). |
 
 ## Query
@@ -55,7 +55,7 @@ facade paths. Status labels: **implemented** (shipped, tested),
 
 | Item | Status | Notes |
 |---|---|---|
-| `proto::{Op, OpResult, OpError, execute, run_machine_line}` | implemented | 15 typed ops (spawn/stdin/observe/snapshot/screenshot/wait/exit/assert/render/diff/session-*/version/capabilities); JSON envelopes over stdio. |
+| `proto::{Op, OpResult, OpError, execute, run_machine_line}` | implemented | 15 typed ops (spawn/stdin/observe/snapshot/screenshot/wait/exit/assert/render/diff/session-start/session-stop/session-list/version/capabilities — no prune op); JSON envelopes over stdio. |
 | `proto::{session_start, session_stop, session_list, session_prune, runtime_dir}` | implemented | Named sessions, versioned endpoints, owner-only runtime dir. |
 | `proto::{Recorder, read_journal, Verdict}` | implemented | Bounded event journals + offline verdicts. |
 | `mcp::{tools, tools_list_json, serve, run_stdio, handle_request}` | implemented | MCP stdio bridge over the op protocol. |

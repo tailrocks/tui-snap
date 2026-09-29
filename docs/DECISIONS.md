@@ -63,7 +63,7 @@ scrollback reflow) are documented in LIMITATIONS.md, not hidden.
 
 ## 7. Typed op protocol over stdio, no daemon
 
-Agents drive `proto::{Op, execute}` / `tuiscotti machine`: 17 typed
+Agents drive `proto::{Op, execute}` / `tuiscotti machine`: 15 typed
 ops, JSON envelopes, versioned protocol (`2.0.0`) with a printed
 schema (`tuiscotti schema`). Named sessions use versioned endpoint
 files in an owner-only runtime dir — no daemon process, no sockets
@@ -103,13 +103,15 @@ retired with the crates/ restructure; full text survives in git history
 - SUPERSEDED — A09 (thin JS/TS + Python clients): foreign-language SDKs
   are out of scope. Clients, manifests, and client tests were removed;
   transport stays Rust-only (`tuiscotti` + `tuiscotti machine`).
-- SUPERSEDED — R04 (registry portable-pty + alacritty_terminal backend):
-  replaced by the termpane-only backend boundary (G1). No direct,
-  renamed, or target-specific dependency on portable-pty,
-  alacritty_terminal, or libc remains permitted in product code.
-- SUPERSEDED — R05 (Ghostty binding qualification): moot once the
-  backend decision became termpane-only; no alternative emulator is
-  evaluated.
+- TARGET (G1 in flight, sibling-owned) — R04 (registry portable-pty +
+  alacritty_terminal backend): the termpane-only backend boundary is
+  the declared target (`docs/TERMPANE-SWAP-PLAN.md`, sibling-owned),
+  but at head `75ff479` the tree still ships portable-pty 0.9 +
+  alacritty_terminal 0.26 per decision 6 above. Until G1 lands, no
+  doc may claim termpane-only as current.
+- TARGET (G1 in flight) — R05 (Ghostty binding qualification): moot
+  only once the backend decision becomes termpane-only; no
+  alternative emulator is evaluated in the meantime.
 - RETAINED (re-mechanized) — M09 (pure-view builds without PTY/native
   deps): still required as workspace policy (pure view/screenshot
   configuration must not compile the terminal runtime); enforced via
@@ -120,3 +122,8 @@ Every other still-relevant correctness, three-mode testing, fidelity,
 lifecycle, Insta, nextest, and Rust/CLI requirement from the old ledger
 is retained and covered by the current suite; nothing was deleted merely
 because the ledger file was removed.
+
+Historical studies (`docs/packets/IMPLEMENTATION-GOAL.md`,
+`docs/packets/REFERENCE-SPEC.md`, frozen 2026-09-29 at `7e8272b`)
+are context only: when they disagree with the tree, the tree wins.
+They are not updated; new decisions land here.

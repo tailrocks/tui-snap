@@ -1,8 +1,11 @@
 # Performance
 
 Local-only measurements. Not CI results, not a fast-lane proof.
-Prior stale suite totals are replaced by the evidence below; the
-old "82/82" claims are deleted (see git history if needed).
+Rows 1–10/M1–M4 were measured at head `0f14262`; row 11 re-measures
+the full nextest run at head `75ff479` on the same machine class.
+Unmeasured at the current head: cold/warm builds, serial `cargo
+test`, per-suite splits, artifact sizes, peak RSS — quoted below
+only as prior-head evidence, not current numbers.
 
 ## Method
 
@@ -36,6 +39,7 @@ old "82/82" claims are deleted (see git history if needed).
 | 8 | Single piped capture (`tuiscotti capture --out … -- echo hello`) | 10 ms | child `Exit(0)` + artifacts |
 | 9 | `cargo test --test render_qual` (render throughput) | 17 s | test-time 15.93 s → ~760 ms/test avg (font rasterization heavy) |
 | 10 | `cargo test --test render` | 13 s | test-time 11.09 s |
+| 11 | Full `cargo nextest run --locked --offline --all-features` at `75ff479` | 21 s | 519/519 pass, 0 skipped; warm build cache |
 
 ## Artifact sizes
 
@@ -62,8 +66,9 @@ not a release profile. Re-run before quoting.
 
 - Full `cargo test`: **129 s — misses** the 120 s CI fast-lane
   target on this machine by ~9 s (serial test binaries;
-  render/visual suites dominate).
-- Full `cargo nextest run`: **52 s — passes** with 68 s of headroom.
+  render/visual suites dominate); not re-run at `75ff479`.
+- Full `cargo nextest run`: **52 s at `0f14262`, 21 s at `75ff479`
+  — passes** with wide headroom (row 11, warm cache).
 - Verdict: the fast lane must run nextest, not `cargo test`. These
   are local Apple-silicon numbers; CI runs `linux-x64`
   GitHub-hosted runners, so the 120 s budget must be re-proven

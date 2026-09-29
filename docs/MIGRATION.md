@@ -14,7 +14,7 @@ became `tuiscotti-*`; machine-protocol brand fields
 likewise. The "Before" column and the history sections below keep
 the old names as history (marked; not current surfaces).
 
-## Current layout (head `0f14262`)
+## Current layout (head `75ff479`)
 
 The workspace moved from a single crate (`src/`, `tests/`,
 `examples/`) to `crates/`:

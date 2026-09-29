@@ -4,27 +4,36 @@
 
 | Location | Contents |
 |---|---|
-| `crates/tuiscotti/tests/` | 16 suites: `cells`, `examples_lane`, `export`, `facade`, `grouped`, `import_compat`, `insta_spike`, `locate`, `p0_mutations`, `ratatui_views`, `render_qual`, `runner`, `screen`, `semant`, `snapshot`, `tool_qualification` |
-| `crates/tuiscotti-cli/tests/` | `cli`, `agent_if`, `observe`, `piped`, `readme_lock` |
+| `crates/tuiscotti/tests/` | 20 suites: `cargo_bin_unified`, `cells`, `examples_lane`, `export`, `facade`, `g6_facade`, `grouped`, `import_compat`, `insta_spike`, `locate`, `p0_mutations`, `ratatui_views`, `render_qual`, `runner`, `screen`, `semant`, `snapshot`, `snapshot_lifecycle`, `snapshot_safety`, `tool_qualification` (269 tests) |
+| `crates/tuiscotti-cli/tests/` | `agent_if`, `cli`, `epipe`, `observe`, `piped`, `readme_lock`, `vertical_slice_cli_error` (85 tests) |
 | `crates/tuiscotti-runtime/tests/` | `tui`, `tui_shell` (PTY; need feature `pty`) |
-| `crates/tuiscotti-fixtures/` | `fixture_app` model/view + `tests/{journey, render, underline, vertical_slice, visual}` + committed approvals |
+| `crates/tuiscotti-render/`, `-insta/`, `xtask` | unit tests in `src/` (6 + 5 + 16 tests) |
+| `crates/tuiscotti-fixtures/` | `fixture_app` model/view + `tests/{format_contracts, interaction_contracts, journey, render, underline, vertical_slice, view_contracts, visual}` + committed approvals (86 tests) |
 | `crates/tuiscotti/examples/` | `01-pure-view` … `08-agent-workflow` (the learning lane) |
 
-413 `#[test]` attributes at head `0f14262` (count: `grep -rc
-"#\[test\]" crates/*/tests/*.rs crates/*/src/*.rs`). Doctest lane
-is separate (`cargo test --doc`).
+519 tests via `cargo nextest list --locked --offline
+--all-features` at head `75ff479`; full run green 519/519 in
+~21 s on 2026-09-29 (see [PERFORMANCE.md](PERFORMANCE.md)).
+Doctest lane is separate (`cargo test --doc`).
 
 ## The fixture app
 
 `tuiscotti-fixtures::fixture_app` is one model/view that doubles as
-the PTY target and the headless-test source. Committed approvals:
+the PTY target and the headless-test source. Three fixture binaries
+(`crates/tuiscotti-fixtures/Cargo.toml` `[[bin]]`):
+`menu_fixture`, `streams_fixture`, `protocol_fixture`
+(`tests/fixtures/apps/*.rs`). Committed approvals:
 
-- `crates/tuiscotti-fixtures/tests/visual/approved/` — 48
+- `crates/tuiscotti-fixtures/tests/visual/approved/` — 24
   `*.frame.json` + `*.png` pairs (classic store).
 - `crates/tuiscotti-fixtures/tests/snapshots/` — Insta snapshots
   (`.snap` + `.snap.png`) for journey/vertical-slice gates.
 - `crates/tuiscotti-fixtures/tests/fixtures/` — consumer, journey,
   render-baseline, and slice fixtures.
+- `crates/tuiscotti-fixtures/tests/SHA256SUMS` — pins every
+  approval byte; re-record with `cargo xtask fixtures
+  --bless-manifest` after a qualified change (a test fails
+  otherwise).
 
 ## Examples lane (learning path)
 
@@ -50,8 +59,8 @@ cargo test -p tuiscotti --test examples_lane    # runs all 8, asserts exit 0 + m
 ## Running the suite
 
 ```sh
-cargo nextest run --locked --offline --all-features   # preferred: parallel, ~52 s locally
-cargo test --locked --offline                         # serial fallback (~129 s locally)
+cargo nextest run --locked --offline --all-features   # preferred: parallel, ~21 s locally
+cargo test --locked --offline                         # serial fallback
 cargo test -p tuiscotti --no-default-features         # pure-view only, no PTY engine
 cargo test --locked --offline --doc                   # doctests
 ```

@@ -1,13 +1,14 @@
 # CLI reference (`tuiscotti`)
 
 Transcribed from the implemented Clap grammar (`tuiscotti --help`,
-per-command `--help`) at head `0f14262`, verified by running the
+per-command `--help`) at head `75ff479`, verified by running the
 binary. `crates/tuiscotti-cli/tests/readme_lock.rs` pins every
 subcommand and flag below against live `--help` output; removed
 commands (`check`, `run`) are pinned as exit-2 usage errors.
 
-Global shape: `tuiscotti <COMMAND>`. No global flags — `machine` is
-a regular subcommand, so usage text stays
+Global shape: `tuiscotti <COMMAND>`. No custom global flags (only
+clap's `-h/--help`, `-V/--version`) — `machine` is a regular
+subcommand, so usage text stays
 exactly `Usage: tuiscotti <COMMAND>`.
 
 Exit statuses: `0` ok; `2` CLI usage error; `3` op error
@@ -59,10 +60,13 @@ face count), `[profile]` (cell geometry, font px, scale, pad),
 
 ### `schema`
 
-Prints the JSON Schema for op-protocol v1 (`type`-tagged ops:
+Prints the JSON Schema for the op protocol (`type`-tagged ops:
 `spawn`, `stdin`, `observe`, `snapshot`, `screenshot`, `wait`,
 `exit`, `assert`, `render`, `diff`, `session-start`,
-`session-stop`, `session-list`, `version`, `capabilities`).
+`session-stop`, `session-list`, `version`, `capabilities` —
+15 ops, no prune op). Note: the schema's own `title` string still
+reads `tuiscotti op protocol v1` while the wire protocol is
+`2.0.0` (`PROTOCOL_VERSION`); the op list above is authoritative.
 
 ### `capture --out <OUT> [--timeout-ms <N>] [-- <ARGV>...]`
 
@@ -78,10 +82,12 @@ Never executes anything in the directory.
 ### `render --input <INPUT> [--format <F>]... [--out <PREFIX>] [--font-file <TTF>]`
 
 Renders a canonical `frame.json` to offline artifacts. Repeatable
-`--format` (`png`, `svg`, …); `--out` is the output prefix
-(default `shot`); `--font-file` overrides the primary face (hash
-recorded in the profile; the fallback chain still applies on top).
-Offline re-renders are byte-identical (pinned by tests). Writes
+`--format`, one of six (`txt`, `ansi`, `json`, `svg`, `html`,
+`png` — ASCII is a separate 7-bit loss-accounted projection in the
+Rust API, not a CLI format); `--out` is the output prefix (default
+`shot`); `--font-file` overrides the primary face (hash recorded
+in the profile; the fallback chain still applies on top). Offline
+re-renders are byte-identical (pinned by tests). Writes
 `<prefix>.png.fidelity.json` next to every PNG.
 
 ### `diff --expected <PNG> --actual <PNG>`

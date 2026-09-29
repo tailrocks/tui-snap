@@ -1,8 +1,8 @@
 # Architecture
 
-Head: `0f14262` (`redesign/rust-first-testing-platform`), 2026-09-29.
-Crate/binary/config names below are verbatim; a coordinated rename
-pass happens later and must update this file with it.
+Head: `75ff479` (`redesign/rust-first-testing-platform`), 2026-09-29.
+Graph below is normal-dependency edges from `cargo tree --edges
+normal` at head; dev-dependencies are noted separately.
 
 ## Workspace
 
@@ -11,33 +11,38 @@ crates/
   tuiscotti           facade: re-exports + examples/01–08 (no logic of its own)
   tuiscotti-core      pure models: frame, screen, locate, semant, names, ratatui
   tuiscotti-render    profiles, render (PNG/SVG/ANSI/HTML), diff, export
-  tuiscotti-runtime   tui + tui_shell (pty), command, runner, observe,
+  tuiscotti-runtime   tui + tui_shell + waits (pty), command, runner, observe,
                       proto, mcp, snapshot, grouped, import_compat
   tuiscotti-insta     assert_snapshot! / assert_screenshot! over Insta
   tuiscotti-cli       binary `tuiscotti` (thin arg parsing over the facade)
-  tuiscotti-fixtures  shared fixture app + committed approvals (publish = false)
-  xtask               repo automation skeleton (publish = false)
+  tuiscotti-fixtures  fixture app + 3 fixture binaries + committed approvals (publish = false)
+  xtask               repo automation: docs, fonts, fixtures, perf, brand, deps (publish = false)
 ```
 
-## Dependency graph (from `cargo metadata --no-deps` at head)
+## Dependency graph (from `cargo tree --edges normal` at head)
 
 Internal edges only; external deps per crate follow.
 
 ```text
 tuiscotti-cli ──▶ tuiscotti ──▶ tuiscotti-runtime ──▶ tuiscotti-insta
-      │                │  │            │  │                  │  │
-      │                │  │            │  └──────┐           │  └───────┐
-      │                │  │            │         ▼           │          ▼
-      │                │  └────────────┼──▶ tuiscotti-render │   tuiscotti-core
-      │                │               │         │           │          ▲
-      │                └───────────────┼─────────┘           └──────────┘
-      │                                ▼
-      │                         tuiscotti-core ◀── (pure; no internal deps)
-      ▼
-tuiscotti-fixtures ──▶ tuiscotti (+ crossterm, anyhow for the fixture app)
+                      │  │            │                         │  │
+                      │  │            │                         │  └───────┐
+                      │  │            └─────────────┐           │          ▼
+                      │  └────────────┐             │           │   tuiscotti-core
+                      │               ▼             ▼           │          ▲
+                      │        tuiscotti-render ◀──┴───────────┘          │
+                      └──────────────────────────────────────────────────┘
+
+tuiscotti-fixtures ──▶ (normal: anyhow, crossterm, ratatui only;
+                       tuiscotti/core/render are DEV-dependencies)
 
 xtask ──▶ (nothing; standalone binary)
 ```
+
+The facade depends on all four leaf crates directly; the runtime
+additionally depends on render + insta (gates next to execution).
+The CLI reaches fixtures only through the facade — there is no
+direct CLI → fixtures edge.
 
 External dependency shape (workspace-pinned, `=x.y.z` in root
 `Cargo.toml`):
@@ -45,19 +50,28 @@ External dependency shape (workspace-pinned, `=x.y.z` in root
 | Crate | External deps |
 |---|---|
 | tuiscotti-core | ratatui, serde, serde_json, unicode-width |
-| tuiscotti-render | + base64, fontdue, image, image-compare, sha2 |
-| tuiscotti-runtime | + portable-pty, alacritty_terminal, libc (all behind `pty`) |
+| tuiscotti-render | + base64, swash, image, image-compare, serde, serde_json, sha2 |
 | tuiscotti-insta | image, insta, serde_json, sha2 |
+| tuiscotti-runtime | + base64, serde, serde_json, sha2; pty-gated: portable-pty, alacritty_terminal, libc |
 | tuiscotti-cli | clap, serde_json |
-| tuiscotti-fixtures | anyhow, crossterm, ratatui |
+| tuiscotti-fixtures | anyhow, crossterm, ratatui (+ tuiscotti/core/render as dev-deps) |
+
+Feature flags (`pty`, default on): `tuiscotti-cli/pty` →
+`tuiscotti/pty` → `tuiscotti-runtime/pty` →
+`dep:portable-pty, dep:alacritty_terminal, dep:libc`.
+`tuiscotti-fixtures` has the same default. The facade pins
+`tuiscotti-runtime` with `default-features = false` and re-adds the
+terminal runtime only via its own `pty` feature, so
+`--no-default-features` builds pure-view tests without PTY or
+native deps. No other crate defines features.
 
 Layering rules:
 
 - `tuiscotti-core` is pure: no rendering, no PTY, no filesystem
   beyond parsing, no internal deps. Everything depends on it; it
   depends on nothing internal.
-- `tuiscotti-render` adds pixels: profiles + renderer + diff +
-  export. Depends only on core.
+- `tuiscotti-render` adds pixels: profiles + renderer (swash
+  raster backend) + diff + export. Depends only on core.
 - `tuiscotti-insta` adds review gates over Insta. Depends on core
   + render only — never on the runtime.
 - `tuiscotti-runtime` owns all execution (PTY, processes, sessions)
@@ -65,9 +79,6 @@ Layering rules:
 - `tuiscotti` is a facade: `pub use` re-exports, zero logic.
 - `tuiscotti-cli` is thin: Clap structs + `run()` dispatch onto the
   facade. No business logic in `main.rs` beyond arg shaping.
-- The `pty` feature (default on) gates `tui`/`tui_shell` and the
-  `portable-pty` + `alacritty_terminal` + `libc` deps.
-  `--no-default-features` builds pure-view tests without them.
 
 ## Data flow
 
@@ -111,8 +122,8 @@ AGENT PATH (no PTY required):
   (`.ansi`/`.txt`/`.png`/`.html`).
 - `runtime::tui::Tui`/`Session` — owned PTY sessions: spawn, key
   chords, mouse, resize, waits that fail with evidence on timeout.
-- `runtime::proto::{Op, execute}` — typed op protocol + named
-  sessions + bounded recording; the agent control plane.
+- `runtime::proto::{Op, execute}` — typed op protocol (15 ops) +
+  named sessions + bounded recording; the agent control plane.
 
 Public API design: [API.md](API.md). Snapshot semantics:
 [SNAPSHOTS.md](SNAPSHOTS.md). Durable rationale: [DECISIONS.md](DECISIONS.md).

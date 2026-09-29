@@ -1,7 +1,7 @@
 # tuiscotti — Rust TUI visual-regression toolkit
 
 Two capture paths share one canonical frame (`tuiscotti::Frame`,
-schema v3). Both produce full approved frames, readable PNGs, and
+schema v3). Both produce approved frames, readable PNGs, and
 portable HTML expected/actual/diff reports.
 
 ```text
@@ -21,84 +21,134 @@ Names: facade `tuiscotti`, binary `tuiscotti` (from
 `tuiscotti-cli`), config `tuiscotti.toml`.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Workflow 1: pure view test
+## Workflow 1: pure view + `assert_screenshot!`
 
 Render the ACTUAL production view from fixture data, gate it with
-`snapshot::Store`. First run fails with `missing-approval`
-(fail-closed) and still writes reviewable evidence
-(`actual/*.frame.json` + `*.png` + `report.html`).
+the compound macro (canonical text + generation-tagged PNG as one
+sample). Approvals are explicit: seed the reviewed sample first, as
+below — a first run with no approval fails closed.
 
 ```rust
 use ratatui::widgets::Paragraph;
-use tuiscotti::snapshot::Store;
-use tuiscotti::{Profile, Provenance, VENDORED_FACES};
+use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
 #[test]
-fn home_screen() {
-    let store = Store::new(std::path::Path::new("tests/visual"));
-    let profile = Profile::default_profile();
-    let frame = tuiscotti::ratatui::draw_frame(
-        120,
-        40,
-        Provenance::now("tuiscotti-default", "home", vec![]),
-        |f| f.render_widget(Paragraph::new("home"), f.area()),
-    );
-    let outcome = store.check("home", &frame, &profile, &VENDORED_FACES, 1.0).unwrap();
-    outcome.ensure_matched().unwrap();
+fn styled_shot() {
+    let screen = render_screen(
+        24,
+        4,
+        |f| f.render_widget(Paragraph::new("styled shot"), f.area()),
+        EdgePolicy::default(),
+    )
+    .unwrap()
+    .into_screen();
+    let tmp = tempfile::tempdir().unwrap();
+    let snaps = tmp.path().join("snaps");
+    std::fs::create_dir(&snaps).unwrap();
+    let policy = Policy::EvolvingIn {
+        snapshots: snaps.clone(),
+        evidence: tmp.path().join("evidence"),
+    };
+    // Review-then-accept, made explicit: seed the approved sample first.
+    let sample = render_sample(&screen).unwrap();
+    let generation = generation_id(&sample.canonical);
+    std::fs::write(
+        snaps.join("styled-shot.snap"),
+        format!(
+            "---\nsource: readme\ndescription: tuiscotti generation {generation}\n\
+             expression: canonical\n---\n{}",
+            sample.canonical
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        snaps.join("styled-shot-img.snap"),
+        format!(
+            "---\nsource: readme\ndescription: tuiscotti generation {generation}\n\
+             expression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        snaps.join("styled-shot-img.snap.png"),
+        png_tag_generation(&sample.png, &generation),
+    )
+    .unwrap();
+    tuiscotti::assert_screenshot!("styled-shot", &screen, &policy);
 }
 ```
 
-After reviewing the actuals, accept explicitly from Rust:
-
-```rust
-store.accept("home")?; // one snapshot
-for name in store.actual_names()? { // everything reviewed
-    store.accept(&name)?;
-}
-```
-
-Runnable end to end: `cargo run -p tuiscotti --example 01-pure-view`
-(exit 0, prints `EXAMPLE-01-OK`). Pure view tests build without the
+Runnable end to end: `cargo run -p tuiscotti --example 02-styled-shot`
+(exit 0, prints `EXAMPLE-02-OK`). Pure view tests build without the
 PTY engine: `cargo test -p tuiscotti --no-default-features`.
 
-## Workflow 2: interactive PTY test (feature `pty`, on by default)
+## Workflow 2: live spawn + locators + snapshot (feature `pty`, on by default)
 
 ```rust
 use std::time::{Duration, Instant};
 use tuiscotti::tui::{CancelToken, Tui};
 
-let mut s = Tui::new(["./my-tui"]).size(120, 40).spawn()?;
-let cancel = CancelToken::new();
-let obs = s.wait_predicate(
-    |o| tuiscotti::proto::screen_text(&o.screen).contains("Ready"),
-    Instant::now() + Duration::from_secs(5),
-    &cancel,
-)?; // timeout fails WITH the screen
-s.press("ctrl+Up")?; // modifiers + special keys, `+`-joined
-s.send_text("hello")?; // literal input (bracketed paste: `paste`)
-let settled = s.wait_stable(Instant::now() + Duration::from_secs(5), &cancel)?;
-let frame = tuiscotti::assert::frame_from_screen(&s.snapshot()?);
-s.close()?;
+#[test]
+fn live_menu() {
+    let mut s = Tui::new([
+        "/bin/sh",
+        "-c",
+        "printf 'menu: alpha\\nmenu: beta\\n'; sleep 30",
+    ])
+    .size(40, 8)
+    .spawn()
+    .unwrap();
+    let cancel = CancelToken::new();
+    s.wait_predicate(
+        |o| {
+            tuiscotti::proto::screen_text(&o.screen).contains("menu: beta")
+        },
+        Instant::now() + Duration::from_secs(5),
+        &cancel,
+    )
+    .unwrap();
+    let span = s.get_by_text("menu: beta").expect_visible().unwrap();
+    assert_eq!(span.text, "menu: beta");
+    let screen = s.snapshot().unwrap();
+    assert!(
+        tuiscotti::observe::screen_text(&screen).contains("menu: alpha")
+    );
+    s.close().unwrap();
+}
 ```
 
-Mouse input (`click`, `mouse_wheel`, …) requires the app to enable
-mouse reporting first; otherwise it fails with `ModeNotEnabled`
-instead of silently dropping.
+Timeouts fail WITH the last screen, never a bare deadline error.
+Mouse input without app-enabled reporting fails closed
+(`ModeNotEnabled`), never silently drops.
 
 Runnable end to end: `cargo run -p tuiscotti --example 04-interactive-tui`
 (exit 0, prints `EXAMPLE-04-OK`).
 
-## Workflow 3: CLI capture and offline review
+## Workflow 3: CLI capture + frozen review
 
 ```sh
-tuiscotti doctor                                        # toolchain / fonts / profile / env
-tuiscotti capture --out shots/demo -- ./my-tui --flag  # run + collect artifacts
-tuiscotti inspect --dir shots/demo                     # offline view; never executes
-tuiscotti render --input shot.frame.json --format png --out shot
-tuiscotti diff --expected a.png --actual b.png         # exit 4 on mismatch
-tuiscotti accept home --store shots                    # one reviewed snapshot, explicit
-echo '{"type":"capabilities"}' | tuiscotti machine     # typed op protocol over stdio
+tuiscotti capture --out /tmp/shots/demo -- echo hello
+# captured Exit(0) -> /tmp/shots/demo
+tuiscotti inspect --dir /tmp/shots/demo
+# artifacts in /tmp/shots/demo (3 files, offline view): manifest + stdout/stderr
+tuiscotti render --input crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.frame.json --format png --out /tmp/shots/shot
+# wrote /tmp/shots/shot.png
+tuiscotti diff --expected crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.png --actual /tmp/shots/shot.png
+# pixels_equal=true dims_equal=true score=1 (exit 0: offline re-render is byte-identical)
+tuiscotti render --input crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.frame.json --format ansi --format txt --format png --format html --out /tmp/frozen/shot
+tuiscotti import --dir /tmp/frozen
+# scenarios: 1 (shot); read-only — frozen trees never accept
+# (also reports "unsupported: 1" for shot.png.fidelity.json: extras are listed, never fatal)
+echo '{"type":"capabilities"}' | tuiscotti machine
+# {"ok":true,"result":{"type":"capabilities","capabilities":{"protocol":"2.0.0",…}}}
 ```
+
+Run the binary via `cargo run -q -p tuiscotti-cli -- <args>` (or
+`cargo build -p tuiscotti-cli`, then `./target/debug/tuiscotti`).
+Frozen roots are read-only by construction (`frozen_accept` always
+errors); the Rust side is `cargo run -p tuiscotti --example
+06-artifacts-review` (exit 0, prints `EXAMPLE-06-OK`).
 
 Exit statuses: 0 ok; 2 CLI usage error; 3 op error; 4 verification
 disagreement. `capture`/`record` preserve the child's exit code.

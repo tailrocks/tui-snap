@@ -1,6 +1,6 @@
 # Limitations
 
-Honest gaps at head `0f14262`. Labels: **tested** (ran green),
+Honest gaps at head `75ff479`. Labels: **tested** (ran green),
 **compiles-only**, **not run**, **unsupported** (explicitly out of
 scope, fails closed where applicable).
 
@@ -8,7 +8,7 @@ scope, fails closed where applicable).
 
 | Platform | Status | Evidence |
 |---|---|---|
-| macOS (aarch64) | tested | Full `cargo test` green (129 s); full nextest 415/415 green (52 s) at measure time. See PERFORMANCE.md. |
+| macOS (aarch64) | tested | Full nextest 519/519 green (~21 s) at head `75ff479`, 2026-09-29. See PERFORMANCE.md. |
 | Linux (x86_64) | tested in CI | CI lanes run `ubuntu-24.04` (`platform = "linux-x64"` in `.github/ci/project.toml`); latest `CI / PR` green incl. nextest + doctests. |
 | Windows (ConPTY) | compiles-only, not run | `cargo check --target x86_64-pc-windows-gnu --tests`: 0 errors. `portable-pty` 0.9 ships a ConPTY backend, but no Windows test process has ever executed and no Windows CI lane exists. Windows is never green until a CI lane runs it. |
 
@@ -57,6 +57,11 @@ running the same unit commands. Until then: "compiles for
   (covered by `tool_qualification` + PTY matrix tests).
 - Cell blink is dropped by the emulator (cursor blink still
   readable via cursor style).
+
+## Scope
+
+- Foreign-language SDKs (Python/JS/TS clients) are out of scope:
+  the transport is Rust-only (`tuiscotti` + `tuiscotti machine`).
 
 ## Security posture
 

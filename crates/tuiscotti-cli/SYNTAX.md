@@ -46,7 +46,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 |---|---|
 | Build | `Tui::new(argv)` / `Tui::cargo_bin(name)?` (eager, typed error) |
 | Args / size / child env/cwd | `.arg/.args/.size(c,r) / .env(k,v) / .cwd(dir)` |
-| Terminal behavior | `.profile(TerminalProfile)` (unsupported claims rejected) |
+| Terminal behavior | `.profile(TerminalProfile)` (unsupported claims rejected; fields: term/mouse/kitty_keyboard/modes/synchronized_output/cell_blink) |
 | Spawn | `.spawn()?` → `Session` (`Send + Sync`) |
 | Binary lookup (canonical: `command::cargo_bin_path`; `Tui`, `Command`, `runner` share it) | env `CARGO_BIN_EXE_<name>` exact → env normalized (`-`→`_`, UPPER) → next to test exe → `deps/` parent → cwd `target/debug` + `target/release` (every candidate `is_file`-checked; errors list all searched paths) |
 
@@ -80,7 +80,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 | Bound actions | `.expect_visible() → Span`; `.click()` (unique + stale-checked, at most once) |
 | Action errors (typed, sourced) | `ActionError::{Session(TuiError), Locate(LocateError)}` |
 | Detached queries (advanced/offline) | `Locator::text / regex / style / region`, `.mode/.within/.before/.after/.nth/.first/.last/.and/.or/.filter` |
-| Detached resolve | `.resolve / .resolve_unique / .resolve_obs` (+ `…_with_scrollback`) |
+| Detached resolve | `.resolve / .resolve_unique` (+ `…_with_scrollback` siblings) / `.resolve_obs` (no scrollback sibling) |
 | Readiness without sinks | `Locator::prepare_action / prepare_action_retry` → `PendingAction::click / submit` |
 
 ## Capture
@@ -107,7 +107,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 
 | Task | Rust |
 |---|---|
-| Session terminal | `TerminalProfile` fields (mouse/paste/focus/altscreen/kitty) |
+| Session terminal | `TerminalProfile` (paste/focus/altscreen live under `modes: TrackedModes`) |
 | Raster profile | `Profile::default_profile()` + `Renderer::new(&profile, &faces)` |
 | Strict render pins | `RenderProfile` (geometry/scale/palette/cursor/blink/missing/renderer version) |
 | PNG comparison | `PngPixelComparator::new(alpha)` / `png_comparator(alpha)`; `AlphaPolicy::{StraightRgba, Opaque}` |

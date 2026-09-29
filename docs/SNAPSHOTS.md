@@ -75,6 +75,46 @@ returns the accepted names.
 The classic `Store` is unaffected; both share statuses, report
 machinery, and the renderer.
 
+## Generations (same-sample binding)
+
+Every artifact of one capture belongs to one `formats::Generation`
+(frame + profile name). For the macro gates,
+`assert::generation_id` is the hex SHA-256 of the canonical text,
+embedded in each `.snap` description (`tuiscotti generation <hex>
+render <profile>/rv<N>/straight-rgba at <file>:<line>`) AND in the
+PNG `tEXt` chunk (`png_tag_generation`). `check_consistent` reads
+all three bindings (canonical `.snap`, PNG `.snap`, sidecar bytes)
+and fails on any mix — never half-passes. A changed screen yields a
+new generation; a changed renderer names itself in the description
+via the render identity.
+
+## Frozen vs evolving review
+
+Evolving roots accept: `Store::accept`, `GroupedStore::accept` /
+`accept_all`, `tuiscotti accept <name>`, `cargo insta review` —
+always explicit, per-name (or per-reviewed-actual), on a
+workstation. Frozen roots never accept:
+
+- Layout: `<root>/<name>.canonical.txt` + `<root>/<name>.png`
+  (generation-tagged bytes).
+- Gates: `check_frozen_snapshot` / `check_frozen_screenshot` /
+  `assert_frozen_snapshot` / `assert_frozen_screenshot`, or
+  `Policy::Frozen{root}`. Read-only: missing/corrupt files fail,
+  never self-heal.
+- `frozen_accept` always errors (`FrozenError::AcceptRejected`).
+- CLI: `tuiscotti import --dir <tree>` is the read-only frozen view
+  (`<stem>.{ansi,txt,png,html}` → scenarios; extras reported, never
+  fatal). `tuiscotti accept` against a frozen root rejects.
+
+## SHA256SUMS (fixture approvals)
+
+`crates/tuiscotti-fixtures/tests/SHA256SUMS` pins every committed
+approval byte. The `sha256sums_manifest_pins_every_approval` test
+fails on any drift; after a qualified approval change, re-record
+with `cargo xtask fixtures --bless-manifest`. This is tooling
+(`xtask`), not product code — no snapshot gate reads the manifest
+at runtime.
+
 ## Macro gates (`assert_snapshot!` / `assert_screenshot!`)
 
 - `assert_snapshot!(name, screen)` — Insta text gate over the
