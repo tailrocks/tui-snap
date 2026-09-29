@@ -1,4 +1,4 @@
-# tui-snap nextest configuration (N02-N10).
+# tuiscotti nextest configuration (N02-N10).
 # Default profile: plain `cargo nextest run` fast lane.
 # CI profile: no retries (failures stay visible), JUnit for evidence
 # correlation, leaky PTY tests fail instead of passing silently.

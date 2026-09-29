@@ -1,16 +1,16 @@
-//! M2 vertical slice, part 1: pure settings view + piped CLI error.
+//! M2 vertical slice, part 1: pure settings view.
 //!
-//! Item 1 (`settings_view`): a small production-style settings model loaded
+//! `settings_view`: a small production-style settings model loaded
 //! from `tests/fixtures/slice/settings.json`, rendered by a real draw closure
 //! (header `Paragraph`, stateful `Table` with a selected row, footer hint,
 //! explicit cursor) through the production adapter
 //! (`tuiscotti::ratatui::render_screen`), gated by `assert_snapshot!` and
 //! `assert_screenshot!`.
 //!
-//! Item 2 (`cli_error`): the real `tuisnap` binary run with a bad flag through
-//! the piped adapter (`tuiscotti::command::Command::cargo_bin`), asserting the
-//! exit code, usage text on stderr, and an insta snapshot of a documented
-//! stdout/stderr/exit projection.
+//! Item 2 (`cli_error`, the piped-CLI-error projection) lives in
+//! `tuiscotti-cli/tests/vertical_slice_cli_error.rs`: stable cargo cannot
+//! express a cross-package binary dependency, so the binary test runs where
+//! `CARGO_BIN_EXE_tuiscotti` is set.
 //!
 //! `INSTA_UPDATE` stays ambient (read-only): Insta exposes no `Settings`
 //! switch for the update behavior, and `set_var` is an `unsafe fn` in edition
@@ -19,8 +19,8 @@
 //! `INSTA_UPDATE=no` for fail-clean (never auto-bless) or
 //! `INSTA_UPDATE=always` to regenerate approvals.
 //!
-//! Both tests run inside a [`tuiscotti::runner::TestContext`] (attempt-qualified
-//! scratch isolation, child-only env) and finish with a journal completion
+//! The test runs inside a [`tuiscotti::runner::TestContext`] (attempt-qualified
+//! scratch isolation, child-only env) and finishes with a journal completion
 //! marker; completion is asserted, not assumed.
 
 use ratatui::{
@@ -28,14 +28,13 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell as TCell, Paragraph, Row, Table, TableState},
 };
-use tuiscotti::command::{Command, Termination};
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::runner::{Journal, JournalStatus, TestContext};
 
 /// Explicit snapshot dirs: the committed `tests/snapshots` (absolute: the
 /// facade's caller-derived default is a *relative* path, which Insta resolves
-/// against the facade crate instead of this test). The old
-/// `TUISNAP_SNAPSHOT_DIR` defaulting is now an explicit
+/// against the facade crate instead of this test). Ambient
+/// `TUISCOTTI_SNAPSHOT_DIR` defaulting is replaced by an explicit
 /// `tuiscotti::assert::Policy::EvolvingIn`, since `set_var` is unavailable;
 /// evidence keeps the default `tuiscotti::assert::evidence_dir`.
 fn policy() -> tuiscotti::assert::Policy {
@@ -94,7 +93,7 @@ fn draw_settings(frame: &mut ratatui::Frame<'_>, model: &Settings) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )
-        .block(Block::default().borders(Borders::ALL).title(" tuisnap "));
+        .block(Block::default().borders(Borders::ALL).title(" tuiscotti "));
     frame.render_widget(title, header);
 
     let header_row = Row::new(vec![
@@ -216,79 +215,6 @@ fn settings_view() {
     // This test spawns no children: nothing to leak, no global state beyond
     // ambient INSTA_UPDATE. The completion marker proves the run
     // reached its end; the status read-back proves the marker + tail agree.
-    journal.complete("pass").expect("journal complete");
-    match Journal::status(ctx.scratch_dir()) {
-        JournalStatus::Complete { status } => assert_eq!(status, "pass"),
-        JournalStatus::Incomplete { reason } => panic!("journal incomplete: {reason}"),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Item 2: piped CLI error
-// ---------------------------------------------------------------------------
-
-/// Documented projection of a piped run for snapshot review: exit code (or
-/// non-exit termination), per-stream byte lengths, then lossy stream bodies.
-/// No environment, path, or timing data enters the projection, so it is stable
-/// across machines and runners (the binary under test prints no paths for a
-/// flag-parse error).
-fn cli_projection(argv: &[&str], out: &tuiscotti::command::ProcessOutput) -> String {
-    let exit_code = match out.code() {
-        Some(code) => code.to_string(),
-        None => "none".to_string(),
-    };
-    format!(
-        "argv: tuisnap {}\ntermination: {:?}\nexit_code: {}\ntruncated: {}\n\
-         --- stdout ({} bytes) ---\n{}\n--- stderr ({} bytes) ---\n{}",
-        argv.join(" "),
-        out.status,
-        exit_code,
-        out.truncated,
-        out.stdout.len(),
-        out.stdout_lossy(),
-        out.stderr.len(),
-        out.stderr_lossy(),
-    )
-}
-
-#[test]
-fn cli_error() {
-    let ctx = TestContext::current("cli-error").expect("test context");
-    let mut journal = Journal::open(&ctx.journal_path()).expect("open journal");
-    journal.append("start", "cli-error").expect("journal start");
-
-    let argv = ["--bad-flag"];
-    let out = Command::cargo_bin("tuisnap").arg(argv[0]).run();
-    journal
-        .append("ran", &format!("status={:?}", out.status))
-        .expect("journal");
-
-    // Clap parse errors exit 2; the child is reaped (Exit, never a kill or
-    // spawn failure) with complete output.
-    assert_eq!(
-        out.status,
-        Termination::Exit(2),
-        "bad flag must exit 2, got {:?} (error: {:?})",
-        out.status,
-        out.error
-    );
-    assert!(!out.truncated, "error output must be complete");
-    assert!(out.stdout.is_empty(), "no stdout on parse error");
-    let stderr = out.stderr_lossy();
-    assert!(
-        stderr.contains("Usage:"),
-        "stderr carries usage text:\n{stderr}"
-    );
-    assert!(
-        stderr.contains("--bad-flag"),
-        "stderr names the offending flag:\n{stderr}"
-    );
-
-    // Piped run is fully reaped inside `run` (Exit status observed, pipes
-    // drained): no leaked children by construction, and the runner touched no
-    // global state (child env was never applied to this process).
-    insta::assert_snapshot!("cli_error", cli_projection(&argv, &out));
-
     journal.complete("pass").expect("journal complete");
     match Journal::status(ctx.scratch_dir()) {
         JournalStatus::Complete { status } => assert_eq!(status, "pass"),

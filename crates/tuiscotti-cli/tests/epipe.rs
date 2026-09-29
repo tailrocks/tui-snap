@@ -1,6 +1,6 @@
 //! Closed-stdout regression: no subcommand may panic with EPIPE.
 //!
-//! `println!` panics when stdout is closed (`tuisnap doctor | head -c0`
+//! `println!` panics when stdout is closed (`tuiscotti doctor | head -c0`
 //! exited 101). Every stdout path goes through a broken-pipe-tolerant
 //! writer — buffered commands flush once, streaming commands
 //! (`machine`, `trace`) write line-by-line — so a vanished reader is a
@@ -11,10 +11,10 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 fn bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_tuisnap"))
+    PathBuf::from(env!("CARGO_BIN_EXE_tuiscotti"))
 }
 
-/// Spawn `tuisnap <args>` with a piped stdout whose read end is dropped
+/// Spawn `tuiscotti <args>` with a piped stdout whose read end is dropped
 /// immediately, then return (exit code, stderr).
 fn run_with_closed_stdout(args: &[&str]) -> std::io::Result<(Option<i32>, String)> {
     let mut child = std::process::Command::new(bin())

@@ -179,7 +179,7 @@ macro_rules! assert_screenshot_in {
             &__tuiscotti_png_base,
         ) {
             panic!(
-                "tuisnap assert_screenshot!({:?}): {}",
+                "tuiscotti assert_screenshot!({:?}): {}",
                 $name, __tuiscotti_err
             );
         }

@@ -26,11 +26,11 @@ fn readme_cli_help_lists_documented_subcommands() {
         let out = Command::new(bin())
             .arg(stale)
             .output()
-            .expect("spawn tuisnap");
+            .expect("spawn tuiscotti");
         assert_eq!(
             out.status.code(),
             Some(2),
-            "`tuisnap {stale}` should be a usage error"
+            "`tuiscotti {stale}` should be a usage error"
         );
     }
     // Documented flags per subcommand.
@@ -120,7 +120,7 @@ fn home_frame_diff_png(dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>
     let frame = tuiscotti::ratatui::draw_frame(
         120,
         40,
-        Provenance::now("tuisnap-default", "other", vec![]),
+        Provenance::now("tuiscotti-default", "other", vec![]),
         |f| f.render_widget(Paragraph::new("other"), f.area()),
     );
     let profile = Profile::default_profile();
@@ -138,7 +138,7 @@ fn home_frame_diff_png(dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>
 
 #[test]
 fn readme_cli_machine_and_offline_commands() {
-    // tuisnap machine < ops.jsonl : one envelope line, exit 0.
+    // tuiscotti machine < ops.jsonl : one envelope line, exit 0.
     let mut child = Command::new(bin())
         .arg("machine")
         .stdin(Stdio::piped())
@@ -196,7 +196,7 @@ fn readme_cli_machine_and_offline_commands() {
     assert!(schema.status.success());
     let schema_text = String::from_utf8_lossy(&schema.stdout).into_owned();
     assert!(
-        schema_text.contains("tui-snap op protocol"),
+        schema_text.contains("tuiscotti op protocol"),
         "schema: {schema_text:.120}"
     );
     assert!(schema_text.contains("capabilities"));

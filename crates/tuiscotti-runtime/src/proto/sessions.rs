@@ -62,13 +62,13 @@ pub(crate) struct SessionEndpoint {
     pub(crate) owner: Option<u32>,
 }
 
-/// Runtime dir: `$TUISNAP_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/tuisnap`, else a
+/// Runtime dir: `$TUISCOTTI_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/tuiscotti`, else a
 /// per-uid temp dir. Created owner-only (0o700) on Unix.
 static RUNTIME_DIR_OVERRIDE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 /// Test-only runtime-dir override (no `unsafe`, unlike `set_var`, which is an
 /// `unsafe fn` in edition 2024 and cannot be used under the workspace lints).
-/// Checked before `$TUISNAP_RUNTIME_DIR` by [`runtime_dir`]. Callers sharing a
+/// Checked before `$TUISCOTTI_RUNTIME_DIR` by [`runtime_dir`]. Callers sharing a
 /// process must serialize (see the CLI tests' `ENV_LOCK`); pass `None` to
 /// clear. Never set in production code.
 pub fn set_runtime_dir_override(dir: Option<PathBuf>) {
@@ -90,12 +90,12 @@ pub fn runtime_dir() -> Result<PathBuf, OpError> {
     {
         return ensure_runtime_dir(&d);
     }
-    let dir = if let Ok(d) = std::env::var("TUISNAP_RUNTIME_DIR") {
+    let dir = if let Ok(d) = std::env::var("TUISCOTTI_RUNTIME_DIR") {
         PathBuf::from(d)
     } else if let Ok(d) = std::env::var("XDG_RUNTIME_DIR") {
-        PathBuf::from(d).join("tuisnap")
+        PathBuf::from(d).join("tuiscotti")
     } else {
-        std::env::temp_dir().join(format!("tuisnap-{}", current_uid()))
+        std::env::temp_dir().join(format!("tuiscotti-{}", current_uid()))
     };
     ensure_runtime_dir(&dir)
 }

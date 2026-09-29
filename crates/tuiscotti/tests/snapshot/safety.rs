@@ -56,7 +56,7 @@ fn report_links_png_files_not_base64() {
         "report must link files, not embed PNG bytes"
     );
     assert!(html.contains(".png"), "{html}");
-    assert!(html.contains("tuisnap-default"));
+    assert!(html.contains("tuiscotti-default"));
 }
 
 #[test]

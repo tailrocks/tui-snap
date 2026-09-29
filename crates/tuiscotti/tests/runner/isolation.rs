@@ -52,9 +52,9 @@ fn child_env_and_home_isolation_are_child_only() {
     .expect("context from_map succeeds");
 
     let vars: HashMap<_, _> = ctx.child_env().into_iter().collect();
-    assert_eq!(vars["TUISNAP_ATTEMPT"], "2");
-    assert_eq!(vars["TUISNAP_SCENARIO"], "s");
-    assert!(vars["TUISNAP_BASELINE"].contains("tuisnap"));
+    assert_eq!(vars["TUISCOTTI_ATTEMPT"], "2");
+    assert_eq!(vars["TUISCOTTI_SCENARIO"], "s");
+    assert!(vars["TUISCOTTI_BASELINE"].contains("tuiscotti"));
 
     let mut cmd = child_command(&ctx, "true");
     ctx.apply_home_isolation(&mut cmd)
@@ -72,10 +72,10 @@ fn child_env_and_home_isolation_are_child_only() {
         })
         .collect();
     assert_eq!(got["HOME"], home.to_string_lossy());
-    assert_eq!(got["TUISNAP_RUN_ID"], ctx.attempt().run);
+    assert_eq!(got["TUISCOTTI_RUN_ID"], ctx.attempt().run);
 
     // Parent process untouched.
-    assert!(std::env::var_os("TUISNAP_RUN_ID").is_none());
+    assert!(std::env::var_os("TUISCOTTI_RUN_ID").is_none());
     assert_ne!(
         std::env::var_os("HOME").expect("HOME is set"),
         std::ffi::OsString::from(home.to_string_lossy().into_owned())
@@ -153,10 +153,10 @@ fn resolve_bin_ambiguity_errors_never_silent_pick() {
 
 #[test]
 fn resolve_bin_live_env_best_effort() {
-    // Under nextest or cargo test the tuisnap binary vars may be present; when
+    // Under nextest or cargo test the tuiscotti binary vars may be present; when
     // present they must resolve to a real file. Absent env must yield Missing,
     // never a guessed path or Ambiguous-from-nothing.
-    match resolve_bin("tuisnap", "tuisnap") {
+    match resolve_bin("tuiscotti", "tuiscotti") {
         Ok(p) => assert!(p.is_file(), "resolved path must exist: {}", p.display()),
         Err(ResolveError::Missing { .. }) => {}
         Err(e) => panic!("unexpected live resolve error: {e}"),

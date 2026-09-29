@@ -14,7 +14,7 @@ crates/
   tuiscotti-runtime   tui + tui_shell (pty), command, runner, observe,
                       proto, mcp, snapshot, grouped, import_compat
   tuiscotti-insta     assert_snapshot! / assert_screenshot! over Insta
-  tuiscotti-cli       binary `tuisnap` (thin arg parsing over the facade)
+  tuiscotti-cli       binary `tuiscotti` (thin arg parsing over the facade)
   tuiscotti-fixtures  shared fixture app + committed approvals (publish = false)
   xtask               repo automation skeleton (publish = false)
 ```
@@ -86,7 +86,7 @@ INTERACTIVE PATH (feature pty):
 
 AGENT PATH (no PTY required):
   JSON ops ─▶ proto::execute / run_machine_line ─▶ envelopes
-  tuisnap machine │ mcp::serve │ proto session start/stop/list/prune
+  tuiscotti machine │ mcp::serve │ proto session start/stop/list/prune
 ```
 
 ## Key types
@@ -101,7 +101,7 @@ AGENT PATH (no PTY required):
   provenance.
 - `render::profile::Profile` — pinned render contract: font bytes
   (SHA-256), 10×21 cells at 16px, palette, scale ×2, cursor policy.
-  `tuisnap-default` is the one shipping profile.
+  `tuiscotti-default` is the one shipping profile.
 - `render::Renderer` — `Frame`/`Screen` → PNG/SVG/ANSI/HTML +
   fidelity sidecar. Per-glyph fallback chain; never system fonts.
 - `runtime::snapshot::Store` — classic store: `approved/` +

@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "tuisnap"
+name = "tuiscotti"
 path = "src/main.rs"
 
 # No required-features: the binary always builds. Offline commands (inspect,
@@ -24,6 +24,7 @@ clap.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+insta.workspace = true
 ratatui.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

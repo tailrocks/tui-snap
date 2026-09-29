@@ -144,17 +144,17 @@ fn spawn_error_reports_detail() {
 }
 
 #[test]
-fn cargo_bin_resolves_tuisnap_itself() {
-    let path = cargo_bin_path("tuisnap").expect("tuisnap binary resolvable");
+fn cargo_bin_resolves_tuiscotti_itself() {
+    let path = cargo_bin_path("tuiscotti").expect("tuiscotti binary resolvable");
     assert!(path.is_file(), "not a file: {}", path.display());
-    let out = Command::cargo_bin("tuisnap").arg("--version").run();
+    let out = Command::cargo_bin("tuiscotti").arg("--version").run();
     assert_eq!(out.status, Termination::Exit(0));
-    assert!(out.stdout_lossy().contains("tuisnap"));
+    assert!(out.stdout_lossy().contains("tuiscotti"));
 }
 
 #[test]
 fn cargo_bin_missing_reports_searched_paths() {
-    let out = Command::cargo_bin("tuisnap-no-such-bin-xyz").run();
+    let out = Command::cargo_bin("tuiscotti-no-such-bin-xyz").run();
     assert_eq!(out.status, Termination::SpawnError);
     let err = out.error.expect("searched locations reported");
     assert_eq!(
@@ -162,7 +162,7 @@ fn cargo_bin_missing_reports_searched_paths() {
         tuiscotti::command::SpawnErrorKind::BinaryNotFound
     );
     assert!(!err.searched().is_empty(), "searched paths: {err}");
-    assert!(err.detail().contains("tuisnap-no-such-bin-xyz"), "{err}");
+    assert!(err.detail().contains("tuiscotti-no-such-bin-xyz"), "{err}");
 }
 
 #[test]
@@ -170,14 +170,14 @@ fn env_is_child_only() {
     // `remove_var` is an `unsafe fn` in edition 2024, so instead of forcing a
     // clean precondition, assert the parent value is unchanged by the spawn
     // (strictly stronger: holds regardless of ambient state).
-    let before = std::env::var("TUISNAP_PIPED_PROBE").ok();
+    let before = std::env::var("TUISCOTTI_PIPED_PROBE").ok();
     let out = Command::new("/bin/sh")
-        .args(["-c", "printf '%s' \"$TUISNAP_PIPED_PROBE\""])
-        .env("TUISNAP_PIPED_PROBE", "child-value")
+        .args(["-c", "printf '%s' \"$TUISCOTTI_PIPED_PROBE\""])
+        .env("TUISCOTTI_PIPED_PROBE", "child-value")
         .run();
     assert_eq!(out.stdout, b"child-value");
     assert_eq!(
-        std::env::var("TUISNAP_PIPED_PROBE").ok(),
+        std::env::var("TUISCOTTI_PIPED_PROBE").ok(),
         before,
         "parent env must be untouched"
     );

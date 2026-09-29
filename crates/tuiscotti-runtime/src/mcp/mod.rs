@@ -7,10 +7,10 @@
 //! Transport: newline-delimited JSON-RPC 2.0 on stdio, hand-rolled on
 //! `serde_json` only (no new dependencies).
 //!
-//! Composition note: there is intentionally no `tuisnap mcp` subcommand here
+//! Composition note: there is intentionally no `tuiscotti mcp` subcommand here
 //! (`main.rs` is owned by another agent). Agents either link this module
 //! ([`run_stdio`]) or drive the equivalent vocabulary through the already
-//! shipped `tuisnap --machine` JSON-lines protocol, which speaks the same
+//! shipped `tuiscotti --machine` JSON-lines protocol, which speaks the same
 //! [`crate::proto::Op`] / envelope types. Tests drive [`serve`] over piped
 //! buffers.
 //!

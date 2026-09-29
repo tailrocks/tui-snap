@@ -1,4 +1,4 @@
-# tuisnap — Rust TUI visual-regression toolkit
+# tuiscotti — Rust TUI visual-regression toolkit
 
 Two capture paths share one canonical frame (`tuiscotti::Frame`,
 schema v3). Both produce full approved frames, readable PNGs, and
@@ -17,8 +17,8 @@ gates). There is deliberately **no** `BLESS=1` / auto-accept: CI must
 never approve snapshots by itself. Equality only validates the
 fixtures covered — never every app state.
 
-Crates and binaries keep their current names: facade `tuiscotti`,
-binary `tuisnap` (from `tuiscotti-cli`), config `tui-snap.toml`.
+Names: facade `tuiscotti`, binary `tuiscotti` (from
+`tuiscotti-cli`), config `tuiscotti.toml`.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Workflow 1: pure view test
@@ -40,7 +40,7 @@ fn home_screen() {
     let frame = tuiscotti::ratatui::draw_frame(
         120,
         40,
-        Provenance::now("tuisnap-default", "home", vec![]),
+        Provenance::now("tuiscotti-default", "home", vec![]),
         |f| f.render_widget(Paragraph::new("home"), f.area()),
     );
     let outcome = store.check("home", &frame, &profile, &VENDORED_FACES, 1.0).unwrap();
@@ -91,13 +91,13 @@ Runnable end to end: `cargo run -p tuiscotti --example 04-interactive-tui`
 ## Workflow 3: CLI capture and offline review
 
 ```sh
-tuisnap doctor                                        # toolchain / fonts / profile / env
-tuisnap capture --out shots/demo -- ./my-tui --flag  # run + collect artifacts
-tuisnap inspect --dir shots/demo                     # offline view; never executes
-tuisnap render --input shot.frame.json --format png --out shot
-tuisnap diff --expected a.png --actual b.png         # exit 4 on mismatch
-tuisnap accept home --store shots                    # one reviewed snapshot, explicit
-echo '{"type":"capabilities"}' | tuisnap machine     # typed op protocol over stdio
+tuiscotti doctor                                        # toolchain / fonts / profile / env
+tuiscotti capture --out shots/demo -- ./my-tui --flag  # run + collect artifacts
+tuiscotti inspect --dir shots/demo                     # offline view; never executes
+tuiscotti render --input shot.frame.json --format png --out shot
+tuiscotti diff --expected a.png --actual b.png         # exit 4 on mismatch
+tuiscotti accept home --store shots                    # one reviewed snapshot, explicit
+echo '{"type":"capabilities"}' | tuiscotti machine     # typed op protocol over stdio
 ```
 
 Exit statuses: 0 ok; 2 CLI usage error; 3 op error; 4 verification

@@ -42,16 +42,16 @@
 //! - [`SNAPSHOT_DIR_ENV`]: explicit Insta snapshot directory (tests point it at a
 //!   tempdir; unset means the caller-derived default above).
 //! - [`EVIDENCE_DIR_ENV`]: candidate-evidence root for [`crate::assert_screenshot!`] (default
-//!   `target/tuisnap-evidence`). Files are `<name>.{png,ansi,txt,html}`.
+//!   `target/tuiscotti-evidence`). Files are `<name>.{png,ansi,txt,html}`.
 
 /// Env var overriding the Insta snapshot directory for the facade macros.
-pub const SNAPSHOT_DIR_ENV: &str = "TUISNAP_SNAPSHOT_DIR";
+pub const SNAPSHOT_DIR_ENV: &str = "TUISCOTTI_SNAPSHOT_DIR";
 /// Env var overriding the candidate-evidence root for [`crate::assert_screenshot!`].
-pub const EVIDENCE_DIR_ENV: &str = "TUISNAP_EVIDENCE_DIR";
+pub const EVIDENCE_DIR_ENV: &str = "TUISCOTTI_EVIDENCE_DIR";
 /// PNG `tEXt` keyword carrying the sample generation inside the PNG bytes.
-pub const PNG_GEN_KEYWORD: &str = "tuisnap:generation";
+pub const PNG_GEN_KEYWORD: &str = "tuiscotti:generation";
 /// Snapshot-description prefix carrying the sample generation (parse: first token).
-pub const GEN_DESC_PREFIX: &str = "tuisnap generation ";
+pub const GEN_DESC_PREFIX: &str = "tuiscotti generation ";
 /// Suffix mapping a screenshot name to its PNG snapshot base (`<name>-img`).
 pub const PNG_SNAPSHOT_SUFFIX: &str = "-img";
 /// File stem used by [`emit_four`] (`snapshot.{ansi,txt,png,html}`).

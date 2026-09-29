@@ -131,7 +131,7 @@ pub(crate) fn join_one(
 ) {
     let (tx, rx) = mpsc::channel::<bool>();
     let waiter = std::thread::Builder::new()
-        .name(format!("tuisnap-tui-join-{name}"))
+        .name(format!("tuiscotti-tui-join-{name}"))
         .spawn(move || {
             let panicked = h.join().is_err();
             // The joiner may have given up waiting (timeout arm); then the

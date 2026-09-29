@@ -148,7 +148,7 @@ pub fn isolated_env() -> std::io::Result<IsolatedEnv> {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos());
-        let root = base.join(format!("tuisnap-env-{pid}-{nanos}-{n}"));
+        let root = base.join(format!("tuiscotti-env-{pid}-{nanos}-{n}"));
         match std::fs::create_dir(&root) {
             Ok(()) => {
                 #[cfg(unix)]

@@ -14,7 +14,9 @@ usage: cargo xtask brand\n\
 scans active paths (crates/, root configs, README, examples) for old-brand\n\
 tokens (tui-snap spellings). Historical docs, font notices, .github, and the\n\
 lockfile are out of scope: docs/ research may cite history, and .github is\n\
-velnor-owned. Any hit in active paths fails.\n\
+velnor-owned. Repository-identity strings (the tailrocks/tui-snap GitHub\n\
+path) are not brand usage and are scrubbed before matching. Any other hit\n\
+in active paths fails.\n\
 ";
 
 /// Old-brand spellings that must not appear in active paths.
@@ -24,6 +26,11 @@ const OLD_TOKENS: &[&str] = &[
 
 /// This module's own token table is the one allowed self-match.
 const SELF_FILE: &str = "crates/xtask/src/brand.rs";
+
+/// Repository-identity strings: the code brand moved to tuiscotti while
+/// the repo still lives at this GitHub path, so these are scrubbed before
+/// matching (a CODEOWNERS owner proof is not brand usage).
+const REPO_IDENTITY: &[&str] = &["tailrocks/tui-snap", "donbeave/tui-snap"];
 
 /// Max hits printed before truncation.
 const MAX_HITS: usize = 50;
@@ -91,7 +98,8 @@ fn scan_active(root: &Path, files: &[PathBuf]) -> Status {
             continue;
         };
         for (index, line) in lines.iter().enumerate() {
-            if let Some(token) = OLD_TOKENS.iter().find(|t| line.contains(*t)) {
+            let scrubbed = scrub_repo_identity(line);
+            if let Some(token) = OLD_TOKENS.iter().find(|t| scrubbed.contains(*t)) {
                 hits.push(format!("{}:{}: {token}", rel, index + 1));
             }
         }
@@ -107,6 +115,15 @@ fn scan_active(root: &Path, files: &[PathBuf]) -> Status {
         println!("brand: FAIL ... and {} more", hits.len() - MAX_HITS);
     }
     Status::Fail
+}
+
+/// Remove repository-identity substrings before old-brand matching.
+fn scrub_repo_identity(line: &str) -> String {
+    let mut out = line.to_string();
+    for id in REPO_IDENTITY {
+        out = out.replace(id, "");
+    }
+    out
 }
 
 /// Active paths are everything except documented historical/foreign scopes.
@@ -125,4 +142,23 @@ fn is_active(rel: &str) -> bool {
         rel,
         "Cargo.lock" | "IMPLEMENTATION-GOAL.md" | "IMPLEMENTATION-GOAL.txt" | "REFERENCE-SPEC.md"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OLD_TOKENS, scrub_repo_identity};
+
+    #[test]
+    fn repo_identity_scrubs_but_brand_still_matches() {
+        let scrubbed = scrub_repo_identity("# committer of all 82 commits on tailrocks/tui-snap");
+        assert!(
+            OLD_TOKENS.iter().all(|t| !scrubbed.contains(t)),
+            "repo path must not read as brand usage: {scrubbed}"
+        );
+        let kept = scrub_repo_identity("binary `tuisnap` (from `tuiscotti-cli`)");
+        assert!(
+            OLD_TOKENS.iter().any(|t| kept.contains(t)),
+            "real brand usage must still match: {kept}"
+        );
+    }
 }

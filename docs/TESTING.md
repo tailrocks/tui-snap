@@ -87,7 +87,7 @@ Notes:
   bytes = byte-identical PNGs (tested). Runners need no system fonts.
 - Review flow for a red run: download `visual-evidence`, open
   `report.html`, reproduce locally if needed, then
-  `tuisnap accept --store <dir> <name>` locally and push the updated
+  `tuiscotti accept --store <dir> <name>` locally and push the updated
   `approved/` tree.
 - Parallel jobs are safe: per-name files + atomic renames.
   Concurrent jobs sharing one store directory only race on

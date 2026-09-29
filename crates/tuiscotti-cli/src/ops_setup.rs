@@ -7,7 +7,7 @@ use std::path::Path;
 
 use tuiscotti::proto::EXIT_OP_ERROR;
 
-const SCAFFOLD_TOML: &str = r#"# tui-snap capture + assertion policy. Scheduling lives in
+const SCAFFOLD_TOML: &str = r#"# tuiscotti capture + assertion policy. Scheduling lives in
 # .config/nextest.toml; review behaviour is Insta's.
 [capture]
 cols = 120
@@ -18,18 +18,18 @@ timeout_ms = 10000
 term = "xterm-256color"
 
 [render]
-profile = "tuisnap-default"
+profile = "tuiscotti-default"
 
 [gates]
 pixel_policy = "exact-decoded-rgba"
 "#;
 
-const SCAFFOLD_NEXTEST: &str = r#"# cargo-nextest scheduling only. tui-snap never parses this file.
+const SCAFFOLD_NEXTEST: &str = r#"# cargo-nextest scheduling only. tuiscotti never parses this file.
 [profile.default]
 test-threads = "num-cpus"
 "#;
 
-const SCAFFOLD_TEST: &str = r#"// Example tui-snap visual test. Run: cargo nextest run --profile default
+const SCAFFOLD_TEST: &str = r#"// Example tuiscotti visual test. Run: cargo nextest run --profile default
 use tuiscotti::runner::TestContext;
 
 #[test]
@@ -43,7 +43,7 @@ fn example_view() {
 
 pub(crate) fn cmd_init(dir: &Path, force: bool) -> i32 {
     let files: &[(&str, &str)] = &[
-        ("tui-snap.toml", SCAFFOLD_TOML),
+        ("tuiscotti.toml", SCAFFOLD_TOML),
         (".config/nextest.toml", SCAFFOLD_NEXTEST),
         ("tests/visual.rs", SCAFFOLD_TEST),
     ];
@@ -91,7 +91,7 @@ pub(crate) fn cmd_doctor() -> i32 {
     let profile = tuiscotti::Profile::default_profile();
     let caps = tuiscotti::proto::capabilities();
     let mut buf = format!(
-        "tuisnap {}\nprotocol v{}\n\n[toolchain]\n  rustc: {}\n  cargo: {}\n  nextest: {}\n\n[fonts]\n  regular sha256: {}\n  fallback faces: {}\n\n[profile]\n  {}: cell {}x{} font_px {} scale {} pad {}\n\n[platform]\n  os: {}\n  pty: {}\n\n[env]\n",
+        "tuiscotti {}\nprotocol v{}\n\n[toolchain]\n  rustc: {}\n  cargo: {}\n  nextest: {}\n\n[fonts]\n  regular sha256: {}\n  fallback faces: {}\n\n[profile]\n  {}: cell {}x{} font_px {} scale {} pad {}\n\n[platform]\n  os: {}\n  pty: {}\n\n[env]\n",
         env!("CARGO_PKG_VERSION"),
         tuiscotti::proto::PROTOCOL_VERSION,
         probe("rustc", &["--version"]),
@@ -112,9 +112,9 @@ pub(crate) fn cmd_doctor() -> i32 {
         "TERM",
         "CI",
         "NEXTEST_PROFILE",
-        "TUISNAP_RUNTIME_DIR",
-        "TUISNAP_EVIDENCE_DIR",
-        "TUISNAP_SNAPSHOT_DIR",
+        "TUISCOTTI_RUNTIME_DIR",
+        "TUISCOTTI_EVIDENCE_DIR",
+        "TUISCOTTI_SNAPSHOT_DIR",
     ] {
         match std::env::var(key) {
             Ok(v) => crate::push_line(&mut buf, &format!("  {key}={v}")),

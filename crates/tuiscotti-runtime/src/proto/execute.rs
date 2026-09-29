@@ -18,7 +18,7 @@ pub fn execute(op: &Op) -> Result<OpResult, OpError> {
     match op {
         Op::Version => Ok(OpResult::Version {
             protocol: PROTOCOL_VERSION.to_string(),
-            tuisnap: env!("CARGO_PKG_VERSION").to_string(),
+            tuiscotti: env!("CARGO_PKG_VERSION").to_string(),
         }),
         Op::Capabilities => Ok(OpResult::Capabilities {
             capabilities: capabilities(),

@@ -16,9 +16,9 @@ fn store() -> Store {
 
 fn prov() -> Provenance {
     Provenance {
-        tool: "tuisnap".into(),
+        tool: "tuiscotti".into(),
         tool_version: env!("CARGO_PKG_VERSION").into(),
-        profile: "tuisnap-default".into(),
+        profile: "tuiscotti-default".into(),
         source: "fixture".into(),
         argv: vec![],
         created_unix: 0,

@@ -175,7 +175,7 @@ fn session_tools() -> Vec<Tool> {
         },
         Tool {
             name: "version",
-            description: "Protocol + tuisnap versions.",
+            description: "Protocol + tuiscotti versions.",
             input_schema: schema(&[], &json!({})),
         },
         Tool {

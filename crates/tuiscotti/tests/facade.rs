@@ -2,8 +2,8 @@
 //!
 //! Hermetic dirs via [`Policy::EvolvingIn`]: `set_var` is an `unsafe fn` in
 //! edition 2024 and cannot be used under the workspace lints, so tests pass
-//! tempdirs explicitly instead of `TUISNAP_SNAPSHOT_DIR` /
-//! `TUISNAP_EVIDENCE_DIR`. `INSTA_UPDATE` stays ambient (read-only): green-path
+//! tempdirs explicitly instead of `TUISCOTTI_SNAPSHOT_DIR` /
+//! `TUISCOTTI_EVIDENCE_DIR`. `INSTA_UPDATE` stays ambient (read-only): green-path
 //! assertions hold under every mode, while pending/no-bless assertions guard
 //! on the effective mode (see `common`). All snapshot/evidence dirs are
 //! tempdirs; nothing touches `tests/snapshots`. Insta dedups repeat names per
@@ -121,7 +121,7 @@ fn write_text_snap(
     body: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
-        "---\nsource: tests/facade.rs\ndescription: tuisnap generation {generation}\nexpression: canonical\n---\n{body}"
+        "---\nsource: tests/facade.rs\ndescription: tuiscotti generation {generation}\nexpression: canonical\n---\n{body}"
     );
     Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }
@@ -133,7 +133,7 @@ fn write_binary_snap(
     sidecar: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let meta = format!(
-        "---\nsource: tests/facade.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        "---\nsource: tests/facade.rs\ndescription: tuiscotti generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
     fs::write(dir.join(format!("{name}.snap")), meta)?;
     Ok(fs::write(dir.join(format!("{name}.snap.png")), sidecar)?)

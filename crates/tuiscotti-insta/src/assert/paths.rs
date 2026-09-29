@@ -59,7 +59,7 @@ pub fn default_snapshot_dir() -> PathBuf {
 }
 
 /// Candidate-evidence root: [`EVIDENCE_DIR_ENV`] when set, else
-/// `target/tuisnap-evidence` under the enclosing workspace root (the test
+/// `target/tuiscotti-evidence` under the enclosing workspace root (the test
 /// working directory is a package dir under `cargo test`, so resolve upward;
 /// falls back to the cwd when no workspace manifest is found).
 #[must_use]
@@ -70,7 +70,7 @@ pub fn evidence_dir() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     workspace_root_of(&cwd)
         .join("target")
-        .join("tuisnap-evidence")
+        .join("tuiscotti-evidence")
 }
 
 /// Nearest enclosing cargo workspace root for `start`: the closest

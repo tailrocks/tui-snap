@@ -77,4 +77,4 @@ mod review;
 
 const GEN1: &str = "gen-001";
 const GEN2: &str = "gen-002";
-const PNG_GEN_KEYWORD: &str = "tuisnap:generation";
+const PNG_GEN_KEYWORD: &str = "tuiscotti:generation";

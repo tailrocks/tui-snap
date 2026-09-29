@@ -40,7 +40,7 @@ impl Profile {
     #[must_use]
     pub fn default_profile() -> Self {
         Self {
-            name: "tuisnap-default".to_string(),
+            name: "tuiscotti-default".to_string(),
             font_px: 16.0,
             cell_w: 10,
             cell_h: 21,

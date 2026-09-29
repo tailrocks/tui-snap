@@ -115,7 +115,7 @@ fn same_sample_renders_deterministically() {
 
 fn write_text_snap(dir: &Path, name: &str, generation: &str, body: &str) -> std::io::Result<()> {
     let content = format!(
-        "---\nsource: tests/compound.rs\ndescription: tuisnap generation {generation}\nexpression: canonical\n---\n{body}"
+        "---\nsource: tests/compound.rs\ndescription: tuiscotti generation {generation}\nexpression: canonical\n---\n{body}"
     );
     fs::write(dir.join(format!("{name}.snap")), content)
 }
@@ -127,7 +127,7 @@ fn write_binary_snap(
     sidecar: &[u8],
 ) -> std::io::Result<()> {
     let meta = format!(
-        "---\nsource: tests/compound.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        "---\nsource: tests/compound.rs\ndescription: tuiscotti generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
     fs::write(dir.join(format!("{name}.snap")), meta)?;
     fs::write(dir.join(format!("{name}.snap.png")), sidecar)
@@ -177,10 +177,10 @@ fn render_identity_is_recorded_in_descriptions() {
     );
     let description = settings.description().unwrap_or_default();
     assert!(
-        description.contains("tuisnap generation abc123"),
+        description.contains("tuiscotti generation abc123"),
         "{description}"
     );
-    assert!(description.contains("tuisnap-default"), "{description}");
+    assert!(description.contains("tuiscotti-default"), "{description}");
     assert!(
         description.contains(&format!(
             "rv{}",

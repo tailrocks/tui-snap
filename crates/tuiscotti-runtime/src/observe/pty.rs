@@ -71,7 +71,7 @@ mod pty_paths {
             let worker_session = Arc::clone(&session);
             let worker_inner = Arc::clone(&inner);
             let thread = std::thread::Builder::new()
-                .name("tuisnap-observe-watcher".to_string())
+                .name("tuiscotti-observe-watcher".to_string())
                 .spawn(move || watch_loop(&worker_session, &worker_inner, capacity, poll))
                 .ok();
             Self {

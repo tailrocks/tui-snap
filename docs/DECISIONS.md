@@ -7,7 +7,7 @@ rationale, and where it is pinned in code/tests.
 
 There is no bless flag, env var, or accepting CI mode — and there
 must never be. Approval is `Store::accept` /
-`GroupedStore::accept(_all)` / `tuisnap accept` (per-name) /
+`GroupedStore::accept(_all)` / `tuiscotti accept` (per-name) /
 `cargo insta review`, on a workstation only, after reviewing
 actuals. A test proves no env var accepts. Rationale: ambient
 approval lets a broken renderer bless its own breakage.
@@ -63,24 +63,24 @@ scrollback reflow) are documented in LIMITATIONS.md, not hidden.
 
 ## 7. Typed op protocol over stdio, no daemon
 
-Agents drive `proto::{Op, execute}` / `tuisnap machine`: 17 typed
-ops, JSON envelopes, versioned protocol (`1.0.0`) with a printed
-schema (`tuisnap schema`). Named sessions use versioned endpoint
+Agents drive `proto::{Op, execute}` / `tuiscotti machine`: 17 typed
+ops, JSON envelopes, versioned protocol (`2.0.0`) with a printed
+schema (`tuiscotti schema`). Named sessions use versioned endpoint
 files in an owner-only runtime dir — no daemon process, no sockets
 to leak. The MCP bridge (`mcp::serve`) speaks the same ops.
 
 ## 8. Config responsibilities are split by owner
 
-`tui-snap.toml` (capture + assertion policy, owned by tui-snap) vs
+`tuiscotti.toml` (capture + assertion policy, owned by tuiscotti) vs
 `.config/nextest.toml` (scheduling only, owned by cargo-nextest,
 never parsed here) vs Insta config (review behaviour, owned by
-Insta). Printed by `tuisnap init` and pinned in `proto::CONFIG_DOCS`.
+Insta). Printed by `tuiscotti init` and pinned in `proto::CONFIG_DOCS`.
 Rationale: each tool owns its file; no cross-parsing, no drift.
 
 ## 9. Layering: pure core, thin edges
 
 `tuiscotti-core` is pure (no rendering, PTY, or I/O) and every
-crate depends on it; `tuiscotti` is re-exports only; `tuisnap`
+crate depends on it; `tuiscotti` is re-exports only; `tuiscotti`
 `main.rs` is arg parsing over the facade. Only `tuiscotti-runtime`
 may spawn. New public API goes in the owning leaf crate and is
 re-exported. Rationale: the dependency graph in ARCHITECTURE.md is
@@ -102,7 +102,7 @@ retired with the crates/ restructure; full text survives in git history
 
 - SUPERSEDED — A09 (thin JS/TS + Python clients): foreign-language SDKs
   are out of scope. Clients, manifests, and client tests were removed;
-  transport stays Rust-only (`tuiscotti` + `tuisnap machine`).
+  transport stays Rust-only (`tuiscotti` + `tuiscotti machine`).
 - SUPERSEDED — R04 (registry portable-pty + alacritty_terminal backend):
   replaced by the termpane-only backend boundary (G1). No direct,
   renamed, or target-specific dependency on portable-pty,

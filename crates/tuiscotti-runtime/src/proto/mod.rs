@@ -1,7 +1,7 @@
 //! Typed op protocol (A01) + named sessions (A02) + trace journal (A04).
 //!
 //! One JSON-serializable [`Op`]/[`OpResult`]/[`OpError`] vocabulary shared by
-//! the Rust library entry ([`execute`]) and the CLI machine mode (`tuisnap
+//! the Rust library entry ([`execute`]) and the CLI machine mode (`tuiscotti
 //! --machine`: JSON lines in on stdin, JSON envelopes out on stdout).
 //!
 //! PTY-backed ops (`spawn`, `stdin`, `observe`, `snapshot`, `screenshot`,

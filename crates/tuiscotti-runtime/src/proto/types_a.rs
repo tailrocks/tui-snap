@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Machine-protocol version. Bumped on any incompatible Op/OpResult change.
-pub const PROTOCOL_VERSION: &str = "1.0.0";
+pub const PROTOCOL_VERSION: &str = "2.0.0";
 
 /// CLI usage error (matches clap's exit code for parse failures).
 pub const EXIT_USAGE: i32 = 2;
@@ -25,8 +25,8 @@ pub const EXIT_VERIFY_FAIL: i32 = 4;
 pub struct Capabilities {
     /// Machine-protocol version string.
     pub protocol: String,
-    /// Tuisnap build version string.
-    pub tuisnap: String,
+    /// Tuiscotti build version string.
+    pub tuiscotti: String,
     /// True when this build implements PTY-backed ops.
     pub pty: bool,
     /// True when this build implements render/diff ops.
@@ -42,7 +42,7 @@ pub struct Capabilities {
 pub fn capabilities() -> Capabilities {
     Capabilities {
         protocol: PROTOCOL_VERSION.to_string(),
-        tuisnap: env!("CARGO_PKG_VERSION").to_string(),
+        tuiscotti: env!("CARGO_PKG_VERSION").to_string(),
         pty: cfg!(feature = "pty"),
         render: true,
         record: true,
@@ -54,17 +54,17 @@ pub fn capabilities() -> Capabilities {
 // Config responsibilities (referenced by `init --help`)
 // ---------------------------------------------------------------------------
 
-/// Which file owns which decision. Printed by `tui-snap init` and embedded in
+/// Which file owns which decision. Printed by `tuiscotti init` and embedded in
 /// its `--help`.
 pub const CONFIG_DOCS: &str = "\
-tui-snap.toml        Capture + assertion policy: default viewport, terminal and\n\
+tuiscotti.toml        Capture + assertion policy: default viewport, terminal and\n\
                      render profiles, snapshot/screenshot gates, evidence dir.\n\
-                     Owned by tui-snap; read by tests via the Rust API.\n\
+                     Owned by tuiscotti; read by tests via the Rust API.\n\
 .config/nextest.toml Scheduling only: profiles, retries, threads, test groups.\n\
-                     Owned by cargo-nextest; tui-snap never writes it except\n\
+                     Owned by cargo-nextest; tuiscotti never writes it except\n\
                      via `init` scaffolding and never parses it.\n\
 insta config         Snapshot review behaviour (`INSTA_UPDATE`, snapshot\n\
-                     paths). Owned by Insta; tui-snap honours it and pins\n\
+                     paths). Owned by Insta; tuiscotti honours it and pins\n\
                      `INSTA_UPDATE=no` only inside its own frozen checks.\n";
 
 // ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ pub enum Op {
     },
     /// List named sessions with liveness.
     SessionList,
-    /// Report protocol and tuisnap versions.
+    /// Report protocol and tuiscotti versions.
     Version,
     /// Report what this build can do.
     Capabilities,
@@ -350,8 +350,8 @@ pub enum OpResult {
     Version {
         /// Machine-protocol version.
         protocol: String,
-        /// Tuisnap version.
-        tuisnap: String,
+        /// Tuiscotti version.
+        tuiscotti: String,
     },
     /// Capability report.
     Capabilities {

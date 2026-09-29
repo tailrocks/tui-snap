@@ -9,7 +9,7 @@ use tuiscotti::command::{Command, Termination};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Missing binary: SpawnError carries the OS detail, no exception thrown.
-    let missing = Command::new("/nonexistent-tuisnap-binary-xyz").run();
+    let missing = Command::new("/nonexistent-tuiscotti-binary-xyz").run();
     assert_eq!(missing.status, Termination::SpawnError);
     assert!(!missing.success());
     assert!(

@@ -42,7 +42,7 @@ Statuses (`snapshot::Status`): `matched`, `cells-differ`,
 `ensure_matched()` warns instead of silently passing.
 
 Acceptance is explicit and per-name: `Store::accept(name)` (Rust)
-or `tuisnap accept --store <dir> <name>` (CLI). `actual_names()`
+or `tuiscotti accept --store <dir> <name>` (CLI). `actual_names()`
 lists reviewable candidates. `report` / `report_with` re-verify and
 rewrite `report.html`; `StoreReport::failed()` counts failures.
 

@@ -42,7 +42,7 @@ fn nextest_env(root: &Path) -> Result<HashMap<String, String>, Box<dyn std::erro
 
 fn tmp_root(tag: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let p = std::env::temp_dir().join(format!(
-        "tuisnap-runner-{}-{}-{}",
+        "tuiscotti-runner-{}-{}-{}",
         tag,
         std::process::id(),
         // nanos make parallel nextest processes distinct

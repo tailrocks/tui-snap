@@ -296,7 +296,7 @@
       "name": "session-list"
     },
     {
-      "description": "Protocol + tuisnap versions.",
+      "description": "Protocol + tuiscotti versions.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},

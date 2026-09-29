@@ -191,7 +191,7 @@ impl CompareOutcome {
         }
         write!(
             msg,
-            "\n  review the report, then accept explicitly: tuisnap accept {}",
+            "\n  review the report, then accept explicitly: tuiscotti accept {}",
             self.name
         )
         .ok();

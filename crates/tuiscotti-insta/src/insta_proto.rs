@@ -97,7 +97,7 @@ fn cursor_style_token(s: CursorStyle) -> &'static str {
 /// or timestamps are involved, so the output is stable across runs.
 #[must_use]
 pub fn insta_string(screen: &Screen) -> String {
-    let mut out = String::from("tuisnap screen snapshot v1\n");
+    let mut out = String::from("tuiscotti screen snapshot v1\n");
     let (ox, oy) = screen.origin();
     writeln!(
         out,

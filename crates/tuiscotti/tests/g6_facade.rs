@@ -21,7 +21,7 @@ fn write_text_snap(
     body: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
-        "---\nsource: tests/g6_facade.rs\ndescription: tuisnap generation {generation}\nexpression: canonical\n---\n{body}"
+        "---\nsource: tests/g6_facade.rs\ndescription: tuiscotti generation {generation}\nexpression: canonical\n---\n{body}"
     );
     Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }
@@ -33,7 +33,7 @@ fn write_binary_snap(
     sidecar: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let meta = format!(
-        "---\nsource: tests/g6_facade.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        "---\nsource: tests/g6_facade.rs\ndescription: tuiscotti generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
     fs::write(dir.join(format!("{name}.snap")), meta)?;
     Ok(fs::write(dir.join(format!("{name}.snap.png")), sidecar)?)

@@ -143,7 +143,7 @@ fn no_global_mutation() {
     drop(BaselineId::from_env("probe"));
     drop(AttemptId::from_env());
     let _nextest_probe = is_nextest();
-    drop(resolve_bin("tuisnap", "tuisnap"));
+    drop(resolve_bin("tuiscotti", "tuiscotti"));
     drop(JunitKey::current());
 
     let env_after: HashMap<String, String> = std::env::vars().collect();

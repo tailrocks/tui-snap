@@ -24,7 +24,7 @@ impl Provenance {
     #[must_use]
     pub fn now(profile: &str, source: &str, argv: Vec<String>) -> Self {
         Self {
-            tool: "tuisnap".to_string(),
+            tool: "tuiscotti".to_string(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             profile: profile.to_string(),
             source: source.to_string(),

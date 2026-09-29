@@ -106,7 +106,7 @@ impl<'a> RenderProfile<'a> {
     #[must_use]
     pub fn vendored() -> RenderProfile<'static> {
         RenderProfile::strict(
-            "tuisnap-default".to_string(),
+            "tuiscotti-default".to_string(),
             VENDORED_FACES,
             [
                 VENDORED_FONT_SHA256,
@@ -230,7 +230,7 @@ impl<'a> RenderProfile<'a> {
     #[must_use]
     pub fn hash(&self) -> String {
         let mut h = Sha256::new();
-        h.update(b"tuisnap-render-profile/1\n");
+        h.update(b"tuiscotti-render-profile/1\n");
         h.update(self.name.as_bytes());
         h.update(b"\n");
         for pin in &self.face_hashes {

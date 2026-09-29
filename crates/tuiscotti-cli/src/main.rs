@@ -1,21 +1,21 @@
-//! `tuisnap`: capture, inspect, sessions, render, diff, review/report.
+//! `tuiscotti`: capture, inspect, sessions, render, diff, review/report.
 //!
 //! ```text
-//! tuisnap init --dir .                  # scaffold tui-snap.toml + nextest config + example
-//! tuisnap doctor                         # toolchain / fonts / profile / env report
-//! tuisnap schema                         # print the op-protocol JSON schema
-//! tuisnap capture --out shots/home -- ./my-tui --flag
-//! tuisnap inspect --dir shots/home      # offline view; never executes
-//! tuisnap render --input shot.frame.json --format png --out shot
-//! tuisnap diff --expected a.png --actual b.png
-//! tuisnap review --dir verdicts          # list verdicts; fails on any fail
-//! tuisnap accept --store shots home      # approve one snapshot (explicit, per-name)
-//! tuisnap report --dir verdicts --out report.html
-//! tuisnap import --dir frozen           # read-only frozen-tree import
-//! tuisnap session start --name demo -- ./my-tui
-//! tuisnap record --out trace.jsonl -- ./my-tui
-//! tuisnap trace --input trace.jsonl
-//! tuisnap machine < ops.jsonl          # typed op protocol over stdio
+//! tuiscotti init --dir .                  # scaffold tuiscotti.toml + nextest config + example
+//! tuiscotti doctor                         # toolchain / fonts / profile / env report
+//! tuiscotti schema                         # print the op-protocol JSON schema
+//! tuiscotti capture --out shots/home -- ./my-tui --flag
+//! tuiscotti inspect --dir shots/home      # offline view; never executes
+//! tuiscotti render --input shot.frame.json --format png --out shot
+//! tuiscotti diff --expected a.png --actual b.png
+//! tuiscotti review --dir verdicts          # list verdicts; fails on any fail
+//! tuiscotti accept --store shots home      # approve one snapshot (explicit, per-name)
+//! tuiscotti report --dir verdicts --out report.html
+//! tuiscotti import --dir frozen           # read-only frozen-tree import
+//! tuiscotti session start --name demo -- ./my-tui
+//! tuiscotti record --out trace.jsonl -- ./my-tui
+//! tuiscotti trace --input trace.jsonl
+//! tuiscotti machine < ops.jsonl          # typed op protocol over stdio
 //! ```
 //!
 //! Exit statuses: 0 ok; 2 CLI usage error; 3 op error
@@ -34,7 +34,7 @@ use clap::Parser;
 
 /// Write a complete report to stdout without panicking on a closed pipe.
 ///
-/// `println!` panics with EPIPE (`tuisnap doctor | head -c0` exits 101), so
+/// `println!` panics with EPIPE (`tuiscotti doctor | head -c0` exits 101), so
 /// pure-report commands buffer their output and flush once here: a broken
 /// pipe is a clean exit 0 (the reader went away; nothing is lost), any other
 /// error is reported on stderr with an op-error status.

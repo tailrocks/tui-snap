@@ -93,7 +93,7 @@ pub fn render_home(f: &mut RFrame<'_>, model: &Model, area: Rect) {
         .split(area);
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
-            "tuisnap fixture ",
+            "tuiscotti fixture ",
             Style::default().add_modifier(Modifier::BOLD),
         ),
         Span::raw(format!("count={}", model.count)),

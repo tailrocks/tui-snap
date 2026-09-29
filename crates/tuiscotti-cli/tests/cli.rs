@@ -14,7 +14,7 @@ use tuiscotti::proto;
 // ---------------------------------------------------------------------------
 
 fn bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_tuisnap"))
+    PathBuf::from(env!("CARGO_BIN_EXE_tuiscotti"))
 }
 
 fn run_cli(

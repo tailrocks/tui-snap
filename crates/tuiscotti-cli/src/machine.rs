@@ -1,4 +1,4 @@
-//! Explicit machine interface: `tuisnap machine < ops.jsonl`.
+//! Explicit machine interface: `tuiscotti machine < ops.jsonl`.
 //!
 //! Op JSON per line on stdin, one envelope JSON per line on stdout. Exit 0
 //! when every op succeeded, else [`EXIT_OP_ERROR`]. This subcommand replaces

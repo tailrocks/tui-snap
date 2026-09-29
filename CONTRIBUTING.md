@@ -12,7 +12,7 @@ cargo nextest run --locked --offline   # full suite (preferred runner)
 ```
 
 Pure-view-only build (no PTY engine): append `--no-default-features`
-to `cargo build` / `cargo test`. The `tuisnap` binary requires the
+to `cargo build` / `cargo test`. The `tuiscotti` binary requires the
 default `pty` feature.
 
 ## Gates (run before every push)
@@ -40,7 +40,7 @@ Workspace lints forbid `unwrap_used`, `expect_used`, `panic!`,
   piped `command`, `runner`, op `proto`, `snapshot`/`grouped` stores.
 - `crates/tuiscotti-insta` — `assert_snapshot!` / `assert_screenshot!`
   gates over Insta.
-- `crates/tuiscotti-cli` — the `tuisnap` binary. Thin: parse args,
+- `crates/tuiscotti-cli` — the `tuiscotti` binary. Thin: parse args,
   call the facade.
 - `crates/tuiscotti-fixtures` — shared fixture app + committed approvals.
 - `crates/xtask` — repo automation entry point (`cargo xtask …`).
@@ -53,7 +53,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   or deprecation periods. Breaking changes are preferred.
 - **CI must never auto-accept.** There is no bless flag or variable;
   do not add one. Approval is `Store::accept` / `GroupedStore::accept`
-  / `tuisnap accept` / `cargo insta review`, on a workstation only.
+  / `tuiscotti accept` / `cargo insta review`, on a workstation only.
   See [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md).
 - **Fail closed.** Missing or corrupt approvals fail the gate; unknown
   input to a guard fails rather than passes. New statuses go through

@@ -187,7 +187,7 @@ fn readme_macro_gates_pass_preapproved() {
     std::fs::write(
         snaps.join("readme-lock.snap"),
         format!(
-            "---\nsource: tests/readme_lock.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: tests/readme_lock.rs\ndescription: tuiscotti generation {generation}\n\
              expression: canonical\n---\n{canonical}"
         ),
     )
@@ -201,7 +201,7 @@ fn readme_macro_gates_pass_preapproved() {
     std::fs::write(
         snaps.join("readme-lock-shot.snap"),
         format!(
-            "---\nsource: tests/readme_lock.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: tests/readme_lock.rs\ndescription: tuiscotti generation {generation}\n\
              expression: canonical\n---\n{}",
             sample.canonical
         ),
@@ -210,7 +210,7 @@ fn readme_macro_gates_pass_preapproved() {
     std::fs::write(
         snaps.join("readme-lock-shot-img.snap"),
         format!(
-            "---\nsource: tests/readme_lock.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: tests/readme_lock.rs\ndescription: tuiscotti generation {generation}\n\
              expression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
         ),
     )

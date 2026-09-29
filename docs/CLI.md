@@ -1,14 +1,14 @@
-# CLI reference (`tuisnap`)
+# CLI reference (`tuiscotti`)
 
-Transcribed from the implemented Clap grammar (`tuisnap --help`,
+Transcribed from the implemented Clap grammar (`tuiscotti --help`,
 per-command `--help`) at head `0f14262`, verified by running the
 binary. `crates/tuiscotti-cli/tests/readme_lock.rs` pins every
 subcommand and flag below against live `--help` output; removed
 commands (`check`, `run`) are pinned as exit-2 usage errors.
 
-Global shape: `tuisnap <COMMAND>`. No global flags — `machine` is
+Global shape: `tuiscotti <COMMAND>`. No global flags — `machine` is
 a regular subcommand, so usage text stays
-exactly `Usage: tuisnap <COMMAND>`.
+exactly `Usage: tuiscotti <COMMAND>`.
 
 Exit statuses: `0` ok; `2` CLI usage error; `3` op error
 (`proto::EXIT_OP_ERROR`); `4` verification disagreement
@@ -18,44 +18,44 @@ exit code instead.
 ## Commands
 
 ```text
-tuisnap init --dir .                  # scaffold tui-snap.toml + nextest config + example
-tuisnap doctor                         # toolchain / fonts / profile / env report
-tuisnap schema                         # print the op-protocol JSON schema
-tuisnap capture --out shots/home -- ./my-tui --flag
-tuisnap inspect --dir shots/home      # offline view; never executes
-tuisnap render --input shot.frame.json --format png --out shot
-tuisnap diff --expected a.png --actual b.png
-tuisnap review --dir verdicts          # list verdicts; fails on any fail
-tuisnap accept --store shots home      # approve one snapshot (explicit, per-name)
-tuisnap report --dir verdicts --out report.html
-tuisnap import --dir frozen           # read-only frozen-tree import
-tuisnap session start --name demo -- ./my-tui
-tuisnap record --out trace.jsonl -- ./my-tui
-tuisnap trace --input trace.jsonl
-tuisnap machine < ops.jsonl           # typed op protocol over stdio
+tuiscotti init --dir .                  # scaffold tuiscotti.toml + nextest config + example
+tuiscotti doctor                         # toolchain / fonts / profile / env report
+tuiscotti schema                         # print the op-protocol JSON schema
+tuiscotti capture --out shots/home -- ./my-tui --flag
+tuiscotti inspect --dir shots/home      # offline view; never executes
+tuiscotti render --input shot.frame.json --format png --out shot
+tuiscotti diff --expected a.png --actual b.png
+tuiscotti review --dir verdicts          # list verdicts; fails on any fail
+tuiscotti accept --store shots home      # approve one snapshot (explicit, per-name)
+tuiscotti report --dir verdicts --out report.html
+tuiscotti import --dir frozen           # read-only frozen-tree import
+tuiscotti session start --name demo -- ./my-tui
+tuiscotti record --out trace.jsonl -- ./my-tui
+tuiscotti trace --input trace.jsonl
+tuiscotti machine < ops.jsonl           # typed op protocol over stdio
 ```
 
 ### `init [--dir <DIR>] [--force]`
 
-Scaffolds `tui-snap.toml`, `.config/nextest.toml`, and
+Scaffolds `tuiscotti.toml`, `.config/nextest.toml`, and
 `tests/visual.rs` under `--dir` (default `.`). Refuses to overwrite
 without `--force`. Prints the config-responsibility contract:
 
-- `tui-snap.toml` — capture + assertion policy. Owned by tui-snap;
+- `tuiscotti.toml` — capture + assertion policy. Owned by tuiscotti;
   read by tests via the Rust API.
 - `.config/nextest.toml` — scheduling only. Owned by cargo-nextest;
-  tui-snap never parses it.
-- Insta config — snapshot review behaviour. Owned by Insta; tui-snap
+  tuiscotti never parses it.
+- Insta config — snapshot review behaviour. Owned by Insta; tuiscotti
   honours it and never auto-accepts in CI.
 
 ### `doctor`
 
-Prints `tuisnap <version>`, `protocol v<version>`, then `[toolchain]`
+Prints `tuiscotti <version>`, `protocol v<version>`, then `[toolchain]`
 (rustc/cargo/nextest probes), `[fonts]` (regular SHA-256, fallback
 face count), `[profile]` (cell geometry, font px, scale, pad),
 `[platform]` (os, pty availability), `[env]` (`TERM`, `CI`,
-`NEXTEST_PROFILE`, `TUISNAP_RUNTIME_DIR`, `TUISNAP_EVIDENCE_DIR`,
-`TUISNAP_SNAPSHOT_DIR`).
+`NEXTEST_PROFILE`, `TUISCOTTI_RUNTIME_DIR`, `TUISCOTTI_EVIDENCE_DIR`,
+`TUISCOTTI_SNAPSHOT_DIR`).
 
 ### `schema`
 
@@ -132,14 +132,14 @@ Offline journal view. Never executes the recorded command.
 
 ### `machine` (stdio mode)
 
-`tuisnap machine < ops.jsonl`: one Op JSON object per stdin line,
+`tuiscotti machine < ops.jsonl`: one Op JSON object per stdin line,
 one envelope JSON object per stdout line (`{"ok":true,…}` /
 `{"ok":false,"error":{"code","message"}}`). Blank lines skipped.
 Exit 0 when every op succeeded, else 3. Example:
 
 ```sh
-echo '{"type":"capabilities"}' | tuisnap machine
-# {"ok":true,"result":{"type":"capabilities","capabilities":{"protocol":"1.0.0",…}}}
+echo '{"type":"capabilities"}' | tuiscotti machine
+# {"ok":true,"result":{"type":"capabilities","capabilities":{"protocol":"2.0.0",…}}}
 ```
 
 ## Removed commands

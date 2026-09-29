@@ -1,9 +1,9 @@
 ---
-source: src/assert.rs
-description: "tuisnap generation e2b7fa7474491a63585baa3adeca5be1c0631e7702e5522f50eeb2e10330ff63 at tests/journey.rs:92"
-expression: canonical
+source: crates/tuiscotti-fixtures/tests/journey.rs
+description: "tuiscotti generation 020bf5246ebb4557aeadf56bf74bd836141e6d9c03d1bbfe609ec143437ad3e9 render tuiscotti-default/rv1/straight-rgba at crates/tuiscotti-fixtures/tests/journey.rs:125"
+expression: canonical screen
 ---
-tuisnap screen snapshot v1
+tuiscotti screen snapshot v1
 geometry cols=48 rows=12 ox=0 oy=0
 cursor x=0 y=0 visible=false style=block blinking=false
 cell 0,0 sym="S" w=1 cont=false fg=default bg=default mods=-

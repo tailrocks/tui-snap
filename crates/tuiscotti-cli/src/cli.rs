@@ -20,20 +20,20 @@ use std::path::PathBuf;
 
 /// Config responsibilities (kept in sync with `proto::CONFIG_DOCS`).
 pub(crate) const INIT_HELP: &str = "\
-Scaffold tui-snap.toml, nextest config, and an example test.
+Scaffold tuiscotti.toml, nextest config, and an example test.
 
 Config responsibilities:
-  tui-snap.toml        Capture + assertion policy (viewport, terminal and
+  tuiscotti.toml        Capture + assertion policy (viewport, terminal and
                        render profiles, gates, evidence dir). Owned by
-                       tui-snap; read by tests via the Rust API.
+                       tuiscotti; read by tests via the Rust API.
   .config/nextest.toml Scheduling only (profiles, retries, threads, groups).
-                       Owned by cargo-nextest; tui-snap never parses it.
-  insta config         Snapshot review behaviour. Owned by Insta; tui-snap
+                       Owned by cargo-nextest; tuiscotti never parses it.
+  insta config         Snapshot review behaviour. Owned by Insta; tuiscotti
                        honours it and never auto-accepts in CI.";
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "tuisnap",
+    name = "tuiscotti",
     version,
     about = "TUI visual regression: capture, inspect, sessions, render, diff, review"
 )]
@@ -104,7 +104,7 @@ impl TraceKind {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Cmd {
-    /// Scaffold tui-snap.toml, nextest config, and an example test.
+    /// Scaffold tuiscotti.toml, nextest config, and an example test.
     #[command(long_about = INIT_HELP)]
     Init {
         #[arg(long, default_value = ".")]
@@ -169,7 +169,7 @@ pub(crate) enum Cmd {
         dir: PathBuf,
         #[arg(long)]
         out: PathBuf,
-        #[arg(long, default_value = "tuisnap visual report")]
+        #[arg(long, default_value = "tuiscotti visual report")]
         title: String,
     },
     /// Read-only import of a frozen four-artifact tree (writes nothing).

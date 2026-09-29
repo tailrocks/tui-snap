@@ -27,7 +27,7 @@ pub fn frame_from_screen(screen: &Screen, profile_name: &str) -> Frame {
 /// - `"screen"`: the render pipeline itself ([`frame_from_screen`], used by
 ///   [`Renderer::render_screen`](super::Renderer::render_screen) and redaction) —
 ///   the frame came straight from a live or replayed screen.
-/// - `"tuisnap-assert"`: `tuiscotti-insta` assertion evidence
+/// - `"tuiscotti-assert"`: `tuiscotti-insta` assertion evidence
 ///   (`tuiscotti::assert::frame_from_screen`) — the frame backs an Insta
 ///   snapshot gate, so the source names the asserting tool for provenance
 ///   audits rather than the generic screen origin.
@@ -40,7 +40,7 @@ pub fn frame_from_screen_with_source(screen: &Screen, profile_name: &str, source
         cells: screen.cells().to_vec(),
         cursor: *screen.cursor(),
         provenance: tuiscotti_core::frame::Provenance {
-            tool: "tuisnap".to_string(),
+            tool: "tuiscotti".to_string(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             profile: profile_name.to_string(),
             source: source.to_string(),

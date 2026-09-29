@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tuiscotti::command::{cargo_bin_env_names, cargo_bin_path_with_map};
 use tuiscotti::runner::{ResolveError, resolve_bin_with_map};
 
-const BIN: &str = "tuisnap-g6-unify-xyz";
+const BIN: &str = "tuiscotti-g6-unify-xyz";
 
 fn env(pairs: &[(&str, &str)]) -> HashMap<String, String> {
     pairs
@@ -35,13 +35,13 @@ fn canonical_env_names_are_exact_then_normalized() {
         cargo_bin_env_names(BIN),
         vec![
             format!("CARGO_BIN_EXE_{BIN}"),
-            "CARGO_BIN_EXE_TUISNAP_G6_UNIFY_XYZ".to_string(),
+            "CARGO_BIN_EXE_TUISCOTTI_G6_UNIFY_XYZ".to_string(),
         ]
     );
     // Already-normalized names yield a single entry (no duplicate lookup).
     assert_eq!(
-        cargo_bin_env_names("TUISNAP_G6_UNIFY_XYZ"),
-        vec!["CARGO_BIN_EXE_TUISNAP_G6_UNIFY_XYZ".to_string()]
+        cargo_bin_env_names("TUISCOTTI_G6_UNIFY_XYZ"),
+        vec!["CARGO_BIN_EXE_TUISCOTTI_G6_UNIFY_XYZ".to_string()]
     );
     // Directory components are stripped to the file name.
     assert_eq!(

@@ -36,7 +36,7 @@ pub fn set_no_cache_override(enabled: bool) {
 #[must_use]
 pub fn screen_content_hash(screen: &Screen) -> String {
     let mut h = Sha256::new();
-    h.update(b"tuisnap-screen/1\n");
+    h.update(b"tuiscotti-screen/1\n");
     h.update(screen.cols().to_le_bytes());
     h.update(screen.rows().to_le_bytes());
     for c in screen.cells() {
@@ -116,7 +116,7 @@ impl RenderCache {
     #[must_use]
     pub fn key(screen_hash: &str, rp: &RenderProfile<'_>) -> String {
         let mut h = Sha256::new();
-        h.update(b"tuisnap-render-cache/1\n");
+        h.update(b"tuiscotti-render-cache/1\n");
         h.update(screen_hash.as_bytes());
         h.update(b"\n");
         h.update(rp.hash().as_bytes());

@@ -1,9 +1,9 @@
 ---
-source: src/assert.rs
-description: "tuisnap generation d231a201f284ff4c2ff850f12f096913791f8a17e3750c517614a12e61bc15dc at tests/vertical_slice.rs:220"
-expression: canonical
+source: crates/tuiscotti-fixtures/tests/vertical_slice.rs
+description: "tuiscotti generation f9dd6751b33c5930b86bf0e761194a3fa8064e1f1f77ad0242e8dc49c35d81c3 render tuiscotti-default/rv1/straight-rgba at crates/tuiscotti-fixtures/tests/vertical_slice.rs:212"
+expression: canonical screen
 ---
-tuisnap screen snapshot v1
+tuiscotti screen snapshot v1
 geometry cols=64 rows=18 ox=0 oy=0
 cursor x=19 y=7 visible=true style=block blinking=false
 cell 0,0 sym="┌" w=1 cont=false fg=index=6 bg=default mods=bold
@@ -12,12 +12,12 @@ cell 2,0 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
 cell 3,0 sym="u" w=1 cont=false fg=index=6 bg=default mods=bold
 cell 4,0 sym="i" w=1 cont=false fg=index=6 bg=default mods=bold
 cell 5,0 sym="s" w=1 cont=false fg=index=6 bg=default mods=bold
-cell 6,0 sym="n" w=1 cont=false fg=index=6 bg=default mods=bold
-cell 7,0 sym="a" w=1 cont=false fg=index=6 bg=default mods=bold
-cell 8,0 sym="p" w=1 cont=false fg=index=6 bg=default mods=bold
-cell 9,0 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
-cell 10,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
-cell 11,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 6,0 sym="c" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 7,0 sym="o" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 8,0 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 9,0 sym="t" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 10,0 sym="i" w=1 cont=false fg=index=6 bg=default mods=bold
+cell 11,0 sym=" " w=1 cont=false fg=index=6 bg=default mods=bold
 cell 12,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
 cell 13,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold
 cell 14,0 sym="─" w=1 cont=false fg=index=6 bg=default mods=bold

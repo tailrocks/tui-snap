@@ -114,7 +114,7 @@ fn initialize_result(params: &Value) -> Value {
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "capabilities": { "tools": {} },
         "serverInfo": {
-            "name": "tuisnap",
+            "name": "tuiscotti",
             "version": env!("CARGO_PKG_VERSION"),
         },
     })

@@ -69,5 +69,5 @@ running the same unit commands. Until then: "compiles for
 - `inspect`/`trace`/`import`/`review`/`report` never execute
   directory contents; `capture`/`record`/`session start` execute
   only the argv you pass.
-- Session runtime dirs are owner-only (unix); `TUISNAP_RUNTIME_DIR`
+- Session runtime dirs are owner-only (unix); `TUISCOTTI_RUNTIME_DIR`
   overrides the location.

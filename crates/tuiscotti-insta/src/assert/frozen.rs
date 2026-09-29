@@ -83,7 +83,7 @@ pub enum Policy {
     /// Same flow with explicit snapshot and evidence directories (no env).
     /// Hermetic tests pass tempdirs here: `set_var` is an `unsafe fn` in
     /// edition 2024 and cannot be used under the workspace lints, so the
-    /// `TUISNAP_SNAPSHOT_DIR` / `TUISNAP_EVIDENCE_DIR` overrides are
+    /// `TUISCOTTI_SNAPSHOT_DIR` / `TUISCOTTI_EVIDENCE_DIR` overrides are
     /// unreachable in-process.
     EvolvingIn {
         /// Snapshot directory (approvals are read here, never written).
@@ -270,7 +270,7 @@ pub fn check_frozen_screenshot(
 )]
 pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_snapshot(root, name, screen) {
-        panic!("tuisnap frozen snapshot {name:?} failed: {e}");
+        panic!("tuiscotti frozen snapshot {name:?} failed: {e}");
     }
 }
 
@@ -286,7 +286,7 @@ pub fn assert_frozen_snapshot(root: &Path, name: &str, screen: &Screen) {
 )]
 pub fn assert_frozen_screenshot(root: &Path, name: &str, screen: &Screen) {
     if let Err(e) = check_frozen_screenshot(root, name, screen) {
-        panic!("tuisnap frozen screenshot {name:?} failed: {e}");
+        panic!("tuiscotti frozen screenshot {name:?} failed: {e}");
     }
 }
 

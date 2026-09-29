@@ -45,7 +45,7 @@ impl TestContext {
         let nextest = is_nextest_map(env);
         let root = PathBuf::from(&baseline.workspace)
             .join("target")
-            .join("tuisnap-scratch")
+            .join("tuiscotti-scratch")
             .join(sanitize(&format!(
                 "{}-{}-{}-{}",
                 baseline.package, baseline.binary, baseline.test, baseline.scenario
@@ -104,27 +104,27 @@ impl TestContext {
     #[must_use]
     pub fn child_env(&self) -> Vec<(String, String)> {
         let mut v = vec![
-            ("TUISNAP_RUN_ID".to_string(), self.attempt.run.clone()),
+            ("TUISCOTTI_RUN_ID".to_string(), self.attempt.run.clone()),
             (
-                "TUISNAP_ATTEMPT".to_string(),
+                "TUISCOTTI_ATTEMPT".to_string(),
                 self.attempt.attempt.to_string(),
             ),
             (
-                "TUISNAP_SCENARIO".to_string(),
+                "TUISCOTTI_SCENARIO".to_string(),
                 self.baseline.scenario.clone(),
             ),
             (
-                "TUISNAP_SCRATCH".to_string(),
+                "TUISCOTTI_SCRATCH".to_string(),
                 self.scratch.to_string_lossy().into_owned(),
             ),
             (
-                "TUISNAP_EVIDENCE".to_string(),
+                "TUISCOTTI_EVIDENCE".to_string(),
                 self.evidence.to_string_lossy().into_owned(),
             ),
-            ("TUISNAP_BASELINE".to_string(), self.baseline.stable_key()),
+            ("TUISCOTTI_BASELINE".to_string(), self.baseline.stable_key()),
         ];
         if let Some(i) = self.attempt.stress_iter {
-            v.push(("TUISNAP_STRESS_ITER".to_string(), i.to_string()));
+            v.push(("TUISCOTTI_STRESS_ITER".to_string(), i.to_string()));
         }
         v
     }

@@ -26,8 +26,8 @@ use tuiscotti::tui::{CancelToken, Tui, process_exists};
 
 /// Explicit snapshot dirs: the committed `tests/snapshots` (absolute: the
 /// facade's caller-derived default is a *relative* path, which Insta resolves
-/// against the facade crate instead of this test). The old
-/// `TUISNAP_SNAPSHOT_DIR` defaulting is now an explicit
+/// against the facade crate instead of this test). Ambient
+/// `TUISCOTTI_SNAPSHOT_DIR` defaulting is replaced by an explicit
 /// `tuiscotti::assert::Policy::EvolvingIn`, since `set_var` is unavailable;
 /// evidence keeps the default `tuiscotti::assert::evidence_dir`.
 fn policy() -> tuiscotti::assert::Policy {

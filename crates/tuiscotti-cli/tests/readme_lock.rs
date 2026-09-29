@@ -13,7 +13,7 @@ use ratatui::widgets::Paragraph;
 use tuiscotti::Provenance;
 
 fn bin() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_tuisnap"))
+    PathBuf::from(env!("CARGO_BIN_EXE_tuiscotti"))
 }
 
 fn help(args: &[&str]) -> std::io::Result<String> {
@@ -26,7 +26,7 @@ fn home_frame() -> tuiscotti::Frame {
     tuiscotti::ratatui::draw_frame(
         120,
         40,
-        Provenance::now("tuisnap-default", "home", vec![]),
+        Provenance::now("tuiscotti-default", "home", vec![]),
         |f| f.render_widget(Paragraph::new("home"), f.area()),
     )
 }

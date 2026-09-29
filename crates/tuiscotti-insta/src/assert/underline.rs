@@ -59,6 +59,6 @@ pub fn assert_underline_at(
     want_color: Color,
 ) {
     if let Err(e) = check_underline_at(screen, x, y, want_style, want_color) {
-        panic!("tuisnap assert_underline_at: {e}");
+        panic!("tuiscotti assert_underline_at: {e}");
     }
 }

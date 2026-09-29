@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(
         snaps.join("styled-shot.snap"),
         format!(
-            "---\nsource: examples/02-styled-shot.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: examples/02-styled-shot.rs\ndescription: tuiscotti generation {generation}\n\
              expression: canonical\n---\n{}",
             sample.canonical
         ),
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(
         snaps.join("styled-shot-img.snap"),
         format!(
-            "---\nsource: examples/02-styled-shot.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: examples/02-styled-shot.rs\ndescription: tuiscotti generation {generation}\n\
              expression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
         ),
     )?;

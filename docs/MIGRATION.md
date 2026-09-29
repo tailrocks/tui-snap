@@ -3,6 +3,17 @@
 No shims, no aliases, no deprecation periods: removed items stay
 removed. This file records what changed and what to do about it.
 
+## G8 brand rename (`tuiscotti`)
+
+The `tuisnap` binary became `tuiscotti` (crate `tuiscotti-cli`
+`[[bin]]` name); `TUISNAP_*` env became `TUISCOTTI_*` with no
+compat aliases; `tui-snap.toml` became `tuiscotti.toml`;
+`tuisnap-default` / `tuisnap-assert` profile and provenance strings
+became `tuiscotti-*`; machine-protocol brand fields
+(`Capabilities.tuiscotti`, `OpResult::Version.tuiscotti`) renamed
+likewise. The "Before" column and the history sections below keep
+the old names as history (marked; not current surfaces).
+
 ## Current layout (head `0f14262`)
 
 The workspace moved from a single crate (`src/`, `tests/`,
@@ -11,15 +22,16 @@ The workspace moved from a single crate (`src/`, `tests/`,
 | Before | After |
 |---|---|
 | `src/*` (crate `tuisnap`) | `crates/tuiscotti-{core,render,runtime,insta}/src/*` (facade `tuiscotti`) |
-| `src/main.rs` (binary `tuisnap`) | `crates/tuiscotti-cli/src/main.rs` (same binary name) |
+| `src/main.rs` (binary `tuisnap`) | `crates/tuiscotti-cli/src/main.rs` (binary renamed to `tuiscotti` in G8) |
 | `tests/visual/approved` | `crates/tuiscotti-fixtures/tests/visual/approved` |
 | `tests/fixtures/*` | `crates/tuiscotti-fixtures/tests/fixtures/*` |
 | `tests/snapshots/*` | `crates/tuiscotti-fixtures/tests/snapshots/*` |
 | `examples/01–08` | `crates/tuiscotti/examples/01–08` |
-| `tuisnap::…` paths | `tuiscotti::…` paths (binary and `tui-snap.toml` unchanged) |
+| `tuisnap::…` paths | `tuiscotti::…` paths (binary and config renamed in G8; see above) |
 
-Rust imports change (`tuisnap::` → `tuiscotti::`); the `tuisnap`
-binary name, `tui-snap.toml`, and CLI grammar are unchanged.
+Rust imports change (`tuisnap::` → `tuiscotti::`); the CLI grammar
+is unchanged. The `tuisnap` binary name and `tui-snap.toml` named
+here were renamed in G8 (see above).
 
 ## Schema versions
 
@@ -37,8 +49,8 @@ binary name, `tui-snap.toml`, and CLI grammar are unchanged.
 
 | Removed | Replacement |
 |---|---|
-| `BLESS=1` / `UPDATE_SNAPSHOT=1` ambient approval | Explicit `Store::accept` / `GroupedStore::accept` / `tuisnap accept` / `cargo insta review` |
-| CLI `check`, `run`, `digest`; `accept --all`; `report --store`; `render` of raw `*.ansi` | Current grammar in [CLI.md](CLI.md); scriptable surface is `tuisnap machine` + `proto::execute` |
+| `BLESS=1` / `UPDATE_SNAPSHOT=1` ambient approval | Explicit `Store::accept` / `GroupedStore::accept` / `tuiscotti accept` / `cargo insta review` |
+| CLI `check`, `run`, `digest`; `accept --all`; `report --store`; `render` of raw `*.ansi` | Current grammar in [CLI.md](CLI.md); scriptable surface is `tuiscotti machine` + `proto::execute` |
 | `tuisnap::ratatui_shot::{widget_frame, draw_frame}` | `tuiscotti::ratatui::{widget_frame, draw_frame, capture}` (signatures take `Provenance`) |
 | `tuisnap::Baseline` | `tuiscotti::snapshot::Store` / `grouped::GroupedStore` |
 | `PtySession` / `run_once(argv, opts, sends)` | `tui::{Tui, Session}`; waits fail on timeout instead of returning `false` |
@@ -69,6 +81,6 @@ UPDATE_BASELINE=1 cargo test   # ambient bless — gone
 
 # now
 cargo nextest run --locked --offline --all-features   # writes actuals, fails missing/changed
-tuisnap accept --store <dir> <name>                   # explicit, per-name, after review
+tuiscotti accept --store <dir> <name>                # explicit, per-name, after review
 cargo nextest run --locked --offline --all-features   # green
 ```

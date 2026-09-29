@@ -75,7 +75,7 @@ fn cell_change_fails_ansi_gate_as_cells_differ() {
         .expect_err("outcome.ensure_matched() is an error")
         .to_string();
     assert!(err.contains("cells-differ"), "{err}");
-    assert!(err.contains("tuisnap accept"), "{err}");
+    assert!(err.contains("tuiscotti accept"), "{err}");
 }
 
 #[test]

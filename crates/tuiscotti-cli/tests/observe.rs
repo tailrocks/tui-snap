@@ -111,27 +111,27 @@ fn inject_while_watching_round_trip() {
 
 #[test]
 fn attach_cli_smoke() {
-    let bin = env!("CARGO_BIN_EXE_tuisnap");
+    let bin = env!("CARGO_BIN_EXE_tuiscotti");
     let tmp = tempfile::tempdir().expect("tempdir");
     let rt = tmp.path().join("rt");
     let run = |args: &[&str], input: Option<&[u8]>| -> std::process::Output {
         use std::io::Write;
         let mut cmd = std::process::Command::new(bin);
-        cmd.env("TUISNAP_RUNTIME_DIR", &rt).args(args);
+        cmd.env("TUISCOTTI_RUNTIME_DIR", &rt).args(args);
         if let Some(data) = input {
             cmd.stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
-            let mut child = cmd.spawn().expect("spawn tuisnap");
+            let mut child = cmd.spawn().expect("spawn tuiscotti");
             child
                 .stdin
                 .take()
                 .expect("piped stdin")
                 .write_all(data)
                 .expect("write stdin");
-            child.wait_with_output().expect("wait tuisnap")
+            child.wait_with_output().expect("wait tuiscotti")
         } else {
-            cmd.output().expect("run tuisnap")
+            cmd.output().expect("run tuiscotti")
         }
     };
     // Start a sleep session, then attach with piped stdin (immediate EOF).

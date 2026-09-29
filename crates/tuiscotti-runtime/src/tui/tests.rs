@@ -49,17 +49,17 @@ fn join_one_detaches_stuck_thread() {
 #[test]
 fn resolve_cargo_bin_matches_canonical_lookup() {
     use std::collections::HashMap;
-    let dir = std::env::temp_dir().join(format!("tuisnap-tui-resolve-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("tuiscotti-tui-resolve-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("tmpdir");
-    let exe = dir.join("tuisnap-g6-probe-xyz");
+    let exe = dir.join("tuiscotti-g6-probe-xyz");
     std::fs::write(&exe, "fake").expect("write fake exe");
     let exe_s = exe.to_str().expect("utf8 tmp path").to_string();
 
-    for var in crate::command::cargo_bin_env_names("tuisnap-g6-probe-xyz") {
+    for var in crate::command::cargo_bin_env_names("tuiscotti-g6-probe-xyz") {
         let env = HashMap::from([(var, exe_s.clone())]);
-        let via_tui =
-            resolve_cargo_bin_with_map(OsStr::new("tuisnap-g6-probe-xyz"), &env).expect("tui hit");
-        let via_command = crate::command::cargo_bin_path_with_map("tuisnap-g6-probe-xyz", &env)
+        let via_tui = resolve_cargo_bin_with_map(OsStr::new("tuiscotti-g6-probe-xyz"), &env)
+            .expect("tui hit");
+        let via_command = crate::command::cargo_bin_path_with_map("tuiscotti-g6-probe-xyz", &env)
             .expect("command hit");
         assert_eq!(via_tui, via_command.into_os_string());
     }
@@ -67,10 +67,10 @@ fn resolve_cargo_bin_matches_canonical_lookup() {
     // Missing everywhere: both paths fail, and the tui error still names
     // the binary and the searched locations.
     let env = HashMap::new();
-    let err = resolve_cargo_bin_with_map(OsStr::new("tuisnap-g6-probe-xyz"), &env)
+    let err = resolve_cargo_bin_with_map(OsStr::new("tuiscotti-g6-probe-xyz"), &env)
         .expect_err("missing binary must fail");
     let msg = err.to_string();
-    assert!(msg.contains("tuisnap-g6-probe-xyz"), "{msg}");
+    assert!(msg.contains("tuiscotti-g6-probe-xyz"), "{msg}");
     assert!(msg.contains("searched:"), "{msg}");
-    assert!(crate::command::cargo_bin_path_with_map("tuisnap-g6-probe-xyz", &env).is_err());
+    assert!(crate::command::cargo_bin_path_with_map("tuiscotti-g6-probe-xyz", &env).is_err());
 }

@@ -25,7 +25,7 @@ pub(crate) fn settings_for(dir: &Path, generation: &str) -> insta::Settings {
     let mut s = insta::Settings::new();
     s.set_snapshot_path(dir);
     s.set_prepend_module_to_snapshot(false);
-    s.set_description(format!("tuisnap generation {generation}"));
+    s.set_description(format!("tuiscotti generation {generation}"));
     s
 }
 
@@ -87,7 +87,7 @@ pub(crate) fn write_text_snap(
     body: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
-        "---\nsource: tests/insta_spike.rs\ndescription: tuisnap generation {generation}\nexpression: insta_string\n---\n{body}"
+        "---\nsource: tests/insta_spike.rs\ndescription: tuiscotti generation {generation}\nexpression: insta_string\n---\n{body}"
     );
     Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }
@@ -99,7 +99,7 @@ pub(crate) fn write_binary_snap(
     sidecar: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let meta = format!(
-        "---\nsource: tests/insta_spike.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        "---\nsource: tests/insta_spike.rs\ndescription: tuiscotti generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
     fs::write(dir.join(format!("{name}.snap")), meta)?;
     Ok(fs::write(dir.join(format!("{name}.snap.png")), sidecar)?)
@@ -118,7 +118,7 @@ pub(crate) fn snap_description(snap_path: &Path) -> Option<String> {
         if let Some(v) = line.trim().strip_prefix("description:") {
             let v = v.trim().trim_matches('"');
             return v
-                .strip_prefix("tuisnap generation ")
+                .strip_prefix("tuiscotti generation ")
                 .map(ToString::to_string);
         }
     }

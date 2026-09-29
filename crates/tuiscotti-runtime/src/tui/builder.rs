@@ -199,13 +199,13 @@ impl Tui {
             shared: Arc::clone(&shared),
         };
         let worker = std::thread::Builder::new()
-            .name("tuisnap-tui-worker".to_string())
+            .name("tuiscotti-tui-worker".to_string())
             .spawn(move || run_worker(params))
             .map_err(|e| TuiError::Spawn(format!("worker spawn failed: {e}")))?;
 
         let feed_tx = op_tx.clone();
         let reader_thread = std::thread::Builder::new()
-            .name("tuisnap-tui-reader".to_string())
+            .name("tuiscotti-tui-reader".to_string())
             .spawn(move || run_reader(reader, &feed_tx))
             .map_err(|e| TuiError::Spawn(format!("reader spawn failed: {e}")))?;
 

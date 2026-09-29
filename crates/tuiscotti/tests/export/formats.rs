@@ -26,7 +26,7 @@ fn cast_deterministic_and_pinned() {
     let mut lines = text.lines();
     assert_eq!(
         lines.next().expect("lines.next() is some"),
-        r#"{"version":2,"width":80,"height":24,"timestamp":0,"title":"tuisnap","env":{"TERM":"tuisnap"}}"#
+        r#"{"version":2,"width":80,"height":24,"timestamp":0,"title":"tuiscotti","env":{"TERM":"tuiscotti"}}"#
     );
     assert_eq!(
         lines.next().expect("lines.next() is some"),

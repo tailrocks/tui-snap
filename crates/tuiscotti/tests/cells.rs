@@ -8,7 +8,7 @@ use tuiscotti::{Cell, Color, Cursor, CursorStyle, Frame, Mods, Provenance, Rgb, 
 
 fn prov() -> Provenance {
     Provenance {
-        tool: "tuisnap".into(),
+        tool: "tuiscotti".into(),
         tool_version: "test".into(),
         profile: "test".into(),
         source: "test".into(),

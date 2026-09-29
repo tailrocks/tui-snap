@@ -51,7 +51,7 @@ impl ScenarioManifest {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut text = String::from("# tui-snap required scenarios, one per line\n");
+        let mut text = String::from("# tuiscotti required scenarios, one per line\n");
         for r in &self.required {
             text.push_str(r);
             text.push('\n');

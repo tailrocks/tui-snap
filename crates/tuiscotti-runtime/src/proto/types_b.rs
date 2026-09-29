@@ -100,7 +100,7 @@ pub fn run_machine_line(line: &str) -> (String, bool) {
 /// would keep (e.g. `bytes_b64` must decode).
 pub const PROTOCOL_SCHEMA_JSON: &str = r##"{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "tui-snap op protocol v1",
+  "title": "tuiscotti op protocol v1",
   "type": "object",
   "definitions": {
     "op": {

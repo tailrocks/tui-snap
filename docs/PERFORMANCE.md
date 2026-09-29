@@ -33,7 +33,7 @@ old "82/82" claims are deleted (see git history if needed).
 | 5 | Full `cargo nextest run --locked --offline --all-features` | 52 s | 415/415 pass (1 leaky) at measure time; current tree holds 413 `#[test]` (see TESTING.md) |
 | 6 | `cargo test --test tui` (PTY suite) | 2 s | test-time 1.12 s → ~45 ms/test avg |
 | 7 | Single PTY test (`tui-* chord_press_sends_key --exact`) | 63 ms | test-time 0.06 s |
-| 8 | Single piped capture (`tuisnap capture --out … -- echo hello`) | 10 ms | child `Exit(0)` + artifacts |
+| 8 | Single piped capture (`tuiscotti capture --out … -- echo hello`) | 10 ms | child `Exit(0)` + artifacts |
 | 9 | `cargo test --test render_qual` (render throughput) | 17 s | test-time 15.93 s → ~760 ms/test avg (font rasterization heavy) |
 | 10 | `cargo test --test render` | 13 s | test-time 11.09 s |
 
@@ -42,7 +42,7 @@ old "82/82" claims are deleted (see git history if needed).
 | Artifact | Size |
 |----------|------|
 | Committed insta snapshots + PNGs | 388 K |
-| `target/debug/tuisnap` (debug CLI) | 69 M |
+| `target/debug/tuiscotti` (debug CLI) | 69 M |
 | Full debug target dir (true-cold) | 1.4 G |
 | nextest archive (31 binaries + std) | 310 M |
 
@@ -51,7 +51,7 @@ old "82/82" claims are deleted (see git history if needed).
 | # | Measurement | Peak RSS |
 |---|-------------|----------|
 | M1 | Pure-view snapshot test incl. PNG render/compare | ~333 MiB |
-| M2 | Piped `tuisnap capture -- echo hello` | ~6.2 MiB |
+| M2 | Piped `tuiscotti capture -- echo hello` | ~6.2 MiB |
 | M3 | One PTY session test | ~4.1 MiB |
 | M4 | One 200×60 mixed-script render → 4048×2568 PNG (5.6 MiB) + sidecar | ~380 MiB |
 

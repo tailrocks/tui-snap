@@ -19,15 +19,15 @@ use tuiscotti_render::render::Renderer;
 /// identical screens (the timestamp is informational and excluded from gates).
 ///
 /// Delegates to the canonical screen→frame adaptation in
-/// `tuiscotti_render` with the assert profile override (`"tuisnap-default"`)
-/// and the assert source (`"tuisnap-assert"`, naming the asserting tool for
+/// `tuiscotti_render` with the assert profile override (`"tuiscotti-default"`)
+/// and the assert source (`"tuiscotti-assert"`, naming the asserting tool for
 /// provenance audits — the render pipeline itself passes `"screen"`).
 #[must_use]
 pub fn frame_from_screen(screen: &Screen) -> Frame {
     tuiscotti_render::render::frame::frame_from_screen_with_source(
         screen,
-        "tuisnap-default",
-        "tuisnap-assert",
+        "tuiscotti-default",
+        "tuiscotti-assert",
     )
 }
 
@@ -82,7 +82,7 @@ pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
     let frame = frame_from_screen(screen);
     let profile = Profile::default_profile();
     let mut renderer = Renderer::new(&profile, &VENDORED_FACES)?;
-    let artifacts = renderer.render_artifacts(&frame, "tuisnap")?;
+    let artifacts = renderer.render_artifacts(&frame, "tuiscotti")?;
     Ok(Sample {
         canonical: insta_string(screen),
         ansi: artifacts.ansi,
@@ -154,12 +154,12 @@ pub struct PreparedScreenshot {
 )]
 pub fn prepare_screenshot(name: &str, screen: &Screen, evidence_dir: &Path) -> PreparedScreenshot {
     let sample = render_sample(screen).unwrap_or_else(|e| {
-        panic!("tuisnap assert_screenshot!({name:?}): cannot render sample: {e}")
+        panic!("tuiscotti assert_screenshot!({name:?}): cannot render sample: {e}")
     });
     let generation = generation_id(&sample.canonical);
     let png = png_tag_generation(&sample.png, &generation);
     write_evidence_in(evidence_dir, name, &sample, &png).unwrap_or_else(|e| {
-        panic!("tuisnap assert_screenshot!({name:?}): cannot write evidence: {e}")
+        panic!("tuiscotti assert_screenshot!({name:?}): cannot write evidence: {e}")
     });
     PreparedScreenshot {
         canonical: sample.canonical,

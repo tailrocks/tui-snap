@@ -109,7 +109,7 @@ fn redaction_destroys_content_and_validates() {
     c.mods.hidden = true;
     let mut frame = frame_from_leads(6, 2, vec![c, cell(1, 0, "東", 2), cont(2, 0)])
         .expect("frame_from_leads succeeds");
-    frame.provenance.argv = vec!["tuisnap".into(), "--password=s3cret".into()];
+    frame.provenance.argv = vec!["tuiscotti".into(), "--password=s3cret".into()];
     let red = redact_frame(&frame);
     red.validate().expect("red.validate() succeeds");
     assert!(!red.to_json().contains('S'));

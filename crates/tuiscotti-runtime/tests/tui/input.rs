@@ -309,9 +309,9 @@ fn child_env_and_cwd_are_child_only() {
     let mut s = Tui::new([
         "/bin/sh",
         "-c",
-        "printf \"v=$TUISNAP_TUI_PROBE pwd=$PWD\\n\"; cat",
+        "printf \"v=$TUISCOTTI_TUI_PROBE pwd=$PWD\\n\"; cat",
     ])
-    .env("TUISNAP_TUI_PROBE", "probe-7")
+    .env("TUISCOTTI_TUI_PROBE", "probe-7")
     .cwd("/tmp".into())
     .size(80, 8)
     .spawn()
@@ -331,7 +331,7 @@ fn child_env_and_cwd_are_child_only() {
         .find(|r| r.contains("v=probe-7"))
         .expect("contains succeeds");
     assert!(row.contains("pwd=") && row.contains("tmp"), "row: {row:?}");
-    assert!(std::env::var_os("TUISNAP_TUI_PROBE").is_none());
+    assert!(std::env::var_os("TUISCOTTI_TUI_PROBE").is_none());
     s.close().expect("close succeeds");
 }
 

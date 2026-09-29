@@ -1,4 +1,4 @@
-# tuisnap syntax matrix (G6)
+# tuiscotti syntax matrix (G6)
 
 One place for every Rust and CLI surface: setup, render, launch, waits,
 input, locators, capture, assertions, profiles, exports, frozen review,
@@ -8,9 +8,9 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 
 | Task | Rust | CLI |
 |---|---|---|
-| Scaffold project | — | `tuisnap init --dir . [--force]` |
-| Toolchain/fonts/profile/env report | — | `tuisnap doctor` |
-| Op-protocol schema | `proto::PROTOCOL_SCHEMA_JSON` | `tuisnap schema` |
+| Scaffold project | — | `tuiscotti init --dir . [--force]` |
+| Toolchain/fonts/profile/env report | — | `tuiscotti doctor` |
+| Op-protocol schema | `proto::PROTOCOL_SCHEMA_JSON` | `tuiscotti schema` |
 | Attempt-safe test dirs | `runner::TestContext::current(s)` | — |
 
 ## Pure render (no PTY, no subprocess)
@@ -139,7 +139,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 
 | Task | CLI / Rust |
 |---|---|
-| Op protocol over stdio | `tuisnap machine < ops.jsonl` (envelope JSON per line; exit 0/3) |
+| Op protocol over stdio | `tuiscotti machine < ops.jsonl` (envelope JSON per line; exit 0/3) |
 | Typed ops (spawn/observe/input/assert/…) | `proto::Op`, `proto::execute`, `proto::run_machine_line` |
 | Named sessions | `session {start --name N [--force] -- argv… \| stop \| list \| prune \| attach --name N}` |
 | Session API | `proto::session_start_os (OsString) / session_start / session_stop / session_list / session_prune` |

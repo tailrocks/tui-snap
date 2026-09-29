@@ -9,9 +9,9 @@ use tuiscotti::{Profile, Provenance, VENDORED_FACES};
 
 fn prov() -> Provenance {
     Provenance {
-        tool: "tuisnap".into(),
+        tool: "tuiscotti".into(),
         tool_version: "test".into(),
-        profile: "tuisnap-default".into(),
+        profile: "tuiscotti-default".into(),
         source: "test".into(),
         argv: vec![],
         created_unix: 0,
@@ -95,7 +95,7 @@ fn changed_snapshot_reports_cells_and_diff_image() {
         .ensure_matched()
         .expect_err("ensure matched must fail")
         .to_string();
-    assert!(err.contains("actual:") && err.contains("diff:") && err.contains("tuisnap accept"));
+    assert!(err.contains("actual:") && err.contains("diff:") && err.contains("tuiscotti accept"));
 }
 
 #[test]
@@ -145,7 +145,7 @@ fn corrupt_approval_is_explicit() {
 #[test]
 fn no_env_var_can_auto_accept() {
     // CI-safety: acceptance is an explicit command, never ambient state.
-    // (Historically this test set BLESS / TUISNAP_ACCEPT / UPDATE_SNAPSHOT;
+    // (Historically this test set bless-style vars (BLESS / *_ACCEPT / UPDATE_SNAPSHOT);
     // nothing reads them and `set_var` is an `unsafe fn` in edition 2024, so
     // the store is checked against the ambient environment instead.)
     let (_dir, st) = tmp_store("noauto").expect("tmp store");
@@ -171,7 +171,7 @@ fn report_links_png_files_not_base64() {
         "report must link files, not embed PNG bytes"
     );
     assert!(html.contains(".png"), "{html}");
-    assert!(html.contains("tuisnap-default"));
+    assert!(html.contains("tuiscotti-default"));
 }
 
 #[test]

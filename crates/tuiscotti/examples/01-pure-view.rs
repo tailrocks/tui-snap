@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shot = render_screen(
         20,
         4,
-        |f| f.render_widget(Paragraph::new("hello tui-snap"), f.area()),
+        |f| f.render_widget(Paragraph::new("hello tuiscotti"), f.area()),
         EdgePolicy::default(),
     )?;
     assert!(!shot.has_clips());
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for x in 0..screen.cols() {
         row0.push_str(&screen.get(x, 0).ok_or("row0 cell missing")?.symbol);
     }
-    assert!(row0.contains("hello tui-snap"), "row0 was {row0:?}");
+    assert!(row0.contains("hello tuiscotti"), "row0 was {row0:?}");
 
     // Pre-approve: exact canonical bytes under a temp snapshot dir.
     let tmp = tempfile::tempdir()?;
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(
         snaps.join("pure-view.snap"),
         format!(
-            "---\nsource: examples/01-pure-view.rs\ndescription: tuisnap generation {generation}\n\
+            "---\nsource: examples/01-pure-view.rs\ndescription: tuiscotti generation {generation}\n\
              expression: canonical\n---\n{canonical}"
         ),
     )?;

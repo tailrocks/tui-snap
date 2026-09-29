@@ -1,6 +1,6 @@
 //! Agent interface tests (A08/A09): MCP JSON-RPC round trips over piped
 //! buffers, committed schema snapshot, thin-client e2e against the built
-//! `tuisnap` binary.
+//! `tuiscotti` binary.
 
 use std::io::{BufReader, Cursor};
 
@@ -74,7 +74,7 @@ fn initialize_reports_protocol_and_capabilities() {
     assert_eq!(r["id"], 1);
     assert_eq!(r["result"]["protocolVersion"], mcp::MCP_PROTOCOL_VERSION);
     assert_eq!(r["result"]["capabilities"], json!({"tools": {}}));
-    assert_eq!(r["result"]["serverInfo"]["name"], "tuisnap");
+    assert_eq!(r["result"]["serverInfo"]["name"], "tuiscotti");
 }
 
 #[test]

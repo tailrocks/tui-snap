@@ -1,16 +1,16 @@
 ---
-source: tests/vertical_slice.rs
+source: crates/tuiscotti-cli/tests/vertical_slice_cli_error.rs
 expression: "cli_projection(&argv, &out)"
 ---
-argv: tuisnap --bad-flag
+argv: tuiscotti --bad-flag
 termination: Exit(2)
 exit_code: 2
 truncated: false
 --- stdout (0 bytes) ---
 
---- stderr (109 bytes) ---
+--- stderr (111 bytes) ---
 error: unexpected argument '--bad-flag' found
 
-Usage: tuisnap <COMMAND>
+Usage: tuiscotti <COMMAND>
 
 For more information, try '--help'.

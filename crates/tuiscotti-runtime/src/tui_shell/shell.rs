@@ -132,7 +132,7 @@ impl Shell {
             .env("ENV", "/dev/null")
             // Prompt-silence: an interactive shell prints PS1 before reading
             // each line. Under load that prompt can land on an attestation
-            // row (observed: `# __TUISNAP_SETUP_OK__`), breaking the exact
+            // row (observed: `# __TUISCOTTI_SETUP_OK__`), breaking the exact
             // protocol match. Empty prompts remove the interleaving
             // structurally; boundaries stay strict.
             .env("PS1", "")
@@ -184,14 +184,14 @@ impl Shell {
     ///
     /// Returns [`ShellError`] if setup output or confirmation times out.
     pub fn setup(&mut self, deadline: Instant) -> Result<(), ShellError> {
-        const SETUP: &str = "__tuisnap_c(){ printf '__TUISNAP_C__ %s\\n' \"$1\"; printf '\\033]133;C\\a'; }; __tuisnap_d(){ printf '\\033]133;D;%s\\a' \"$2\"; printf '__TUISNAP_D__ %s %s\\n' \"$1\" \"$2\"; }; echo __TUISNAP_SETUP_OK__";
+        const SETUP: &str = "__tuiscotti_c(){ printf '__TUISCOTTI_C__ %s\\n' \"$1\"; printf '\\033]133;C\\a'; }; __tuiscotti_d(){ printf '\\033]133;D;%s\\a' \"$2\"; printf '__TUISCOTTI_D__ %s %s\\n' \"$1\" \"$2\"; }; echo __TUISCOTTI_SETUP_OK__";
         self.session.send_text(&format!("{SETUP}\n"))?;
         let cancel = CancelToken::new();
         self.session.wait_predicate(
             |o| {
                 screen_rows(&o.screen)
                     .iter()
-                    .any(|r| r == "__TUISNAP_SETUP_OK__")
+                    .any(|r| r == "__TUISCOTTI_SETUP_OK__")
             },
             deadline,
             &cancel,
@@ -223,11 +223,11 @@ impl Shell {
         let n = self.runs.fetch_add(1, Ordering::SeqCst);
         let token = format!("{}-{n}", self.tag);
         let line = format!(
-            "__tuisnap_c {token}; {cmd}; __tuisnap_code=$?; __tuisnap_d {token} \"$__tuisnap_code\"\n"
+            "__tuiscotti_c {token}; {cmd}; __tuiscotti_code=$?; __tuiscotti_d {token} \"$__tuiscotti_code\"\n"
         );
         self.session.send_text(&line)?;
-        let start_marker = format!("__TUISNAP_C__ {token}");
-        let end_prefix = format!("__TUISNAP_D__ {token} ");
+        let start_marker = format!("__TUISCOTTI_C__ {token}");
+        let end_prefix = format!("__TUISCOTTI_D__ {token} ");
         let cancel = CancelToken::new();
         let obs = self.session.wait_predicate(
             |o| {

@@ -37,7 +37,7 @@ pub(crate) fn get(env: &HashMap<String, String>, key: &str) -> Option<String> {
 /// Stable baseline identity: what is under test (N02).
 ///
 /// Equal across retries, stress iterations, and shards of the same scenario;
-/// see [`BaselineId::stable_key`]. `scenario` is caller-supplied (the tui-snap
+/// see [`BaselineId::stable_key`]. `scenario` is caller-supplied (the tuiscotti
 /// capture scenario); everything else comes from the environment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaselineId {

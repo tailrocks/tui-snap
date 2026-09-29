@@ -10,9 +10,12 @@ use tuiscotti::proto::{self, Capabilities, Op, OpResult};
 #[test]
 fn op_version_and_capabilities() {
     match proto::execute(&Op::Version).expect("version") {
-        OpResult::Version { protocol, tuisnap } => {
+        OpResult::Version {
+            protocol,
+            tuiscotti,
+        } => {
             assert_eq!(protocol, proto::PROTOCOL_VERSION);
-            assert!(!tuisnap.is_empty());
+            assert!(!tuiscotti.is_empty());
         }
         r => panic!("wrong result: {r:?}"),
     }
@@ -220,7 +223,7 @@ fn op_pty_lifecycle() {
         OpResult::Screenshot {
             canonical, png_b64, ..
         } => {
-            assert!(canonical.contains("tuisnap screen snapshot"));
+            assert!(canonical.contains("tuiscotti screen snapshot"));
             assert!(!png_b64.is_empty());
         }
         r => panic!("wrong result: {r:?}"),

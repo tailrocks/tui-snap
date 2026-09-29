@@ -19,8 +19,8 @@ pub struct CastPolicy {
 impl Default for CastPolicy {
     fn default() -> Self {
         Self {
-            title: "tuisnap".to_string(),
-            term: "tuisnap".to_string(),
+            title: "tuiscotti".to_string(),
+            term: "tuiscotti".to_string(),
             timestamp: 0,
         }
     }

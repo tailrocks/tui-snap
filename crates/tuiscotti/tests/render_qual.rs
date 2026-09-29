@@ -31,9 +31,9 @@ mod styles;
 
 fn prov() -> Provenance {
     Provenance {
-        tool: "tuisnap".into(),
+        tool: "tuiscotti".into(),
         tool_version: "test".into(),
-        profile: "tuisnap-default".into(),
+        profile: "tuiscotti-default".into(),
         source: "test".into(),
         argv: vec![],
         created_unix: 0,
