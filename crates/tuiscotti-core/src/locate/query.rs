@@ -35,35 +35,41 @@ pub struct StyleQuery {
 }
 
 impl StyleQuery {
+    /// Empty query: matches every lead cell until constrained.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Require this foreground color.
     #[must_use]
     pub fn fg(mut self, c: Color) -> Self {
         self.fg = Some(c);
         self
     }
 
+    /// Require this background color.
     #[must_use]
     pub fn bg(mut self, c: Color) -> Self {
         self.bg = Some(c);
         self
     }
 
+    /// Require bold (`true`) or non-bold (`false`).
     #[must_use]
     pub fn bold(mut self, v: bool) -> Self {
         self.bold = Some(v);
         self
     }
 
+    /// Require dim (`true`) or non-dim (`false`).
     #[must_use]
     pub fn dim(mut self, v: bool) -> Self {
         self.dim = Some(v);
         self
     }
 
+    /// Require italic (`true`) or non-italic (`false`).
     #[must_use]
     pub fn italic(mut self, v: bool) -> Self {
         self.italic = Some(v);
@@ -91,31 +97,35 @@ impl StyleQuery {
         self
     }
 
+    /// Require strikethrough (`true`) or not (`false`).
     #[must_use]
     pub fn strikethrough(mut self, v: bool) -> Self {
         self.strikethrough = Some(v);
         self
     }
 
+    /// Require reverse video (`true`) or not (`false`).
     #[must_use]
     pub fn reverse(mut self, v: bool) -> Self {
         self.reverse = Some(v);
         self
     }
 
+    /// Require concealed (`true`) or visible (`false`) cells.
     #[must_use]
     pub fn hidden(mut self, v: bool) -> Self {
         self.hidden = Some(v);
         self
     }
 
+    /// Require blinking (`true`) or steady (`false`) cells.
     #[must_use]
     pub fn blink(mut self, v: bool) -> Self {
         self.blink = Some(v);
         self
     }
 
-    /// Extra caller predicate, ANDed with the field constraints.
+    /// Extra caller predicate, combined with the field constraints.
     #[must_use]
     pub fn custom(mut self, p: fn(&Cell) -> bool) -> Self {
         self.custom = Some(p);
@@ -126,15 +136,15 @@ impl StyleQuery {
         if cell.continuation {
             return false;
         }
-        if let Some(fg) = self.fg {
-            if cell.fg != fg {
-                return false;
-            }
+        if let Some(fg) = self.fg
+            && cell.fg != fg
+        {
+            return false;
         }
-        if let Some(bg) = self.bg {
-            if cell.bg != bg {
-                return false;
-            }
+        if let Some(bg) = self.bg
+            && cell.bg != bg
+        {
+            return false;
         }
         let m = cell.mods;
         for (want, got) in [
@@ -147,26 +157,26 @@ impl StyleQuery {
             (self.hidden, m.hidden),
             (self.blink, m.blink),
         ] {
-            if let Some(w) = want {
-                if w != got {
-                    return false;
-                }
-            }
-        }
-        if let Some(s) = self.underline_style {
-            if cell.mods.effective_underline_style() != s {
+            if let Some(w) = want
+                && w != got
+            {
                 return false;
             }
         }
-        if let Some(uc) = self.underline_color {
-            if cell.underline_color != uc {
-                return false;
-            }
+        if let Some(s) = self.underline_style
+            && cell.mods.effective_underline_style() != s
+        {
+            return false;
         }
-        if let Some(p) = self.custom {
-            if !p(cell) {
-                return false;
-            }
+        if let Some(uc) = self.underline_color
+            && cell.underline_color != uc
+        {
+            return false;
+        }
+        if let Some(p) = self.custom
+            && !p(cell)
+        {
+            return false;
         }
         true
     }

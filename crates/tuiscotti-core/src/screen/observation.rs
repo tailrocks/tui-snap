@@ -11,12 +11,16 @@ use std::hash::{Hash, Hasher};
 /// cannot provide it) — never `false`, empty, or default-conflated.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Maybe<T> {
+    /// Observed value.
     Known(T),
+    /// Not yet observed.
     Unknown,
+    /// Backend cannot provide it.
     Unsupported,
 }
 
 impl<T> Maybe<T> {
+    /// Borrowed value, or `None` unless [`Maybe::Known`].
     #[must_use]
     pub fn known(&self) -> Option<&T> {
         match self {
@@ -25,6 +29,7 @@ impl<T> Maybe<T> {
         }
     }
 
+    /// True only for [`Maybe::Known`].
     #[must_use]
     pub fn is_known(&self) -> bool {
         matches!(self, Maybe::Known(_))
@@ -38,11 +43,17 @@ impl<T> Maybe<T> {
 /// Why a capture was taken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CaptureReason {
+    /// First capture of a session.
     Initial,
+    /// Periodic poll capture.
     Poll,
+    /// Capture after delivered input.
     Input,
+    /// Capture after a resize.
     Resize,
+    /// Final capture at exit.
     Exit,
+    /// Explicitly requested capture.
     Manual,
 }
 
@@ -78,13 +89,18 @@ impl Default for TermState {
 /// approval key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureProvenance {
+    /// Capture time as Unix milliseconds.
     pub captured_unix_ms: u64,
+    /// Captured process id, when known.
     pub pid: Option<u32>,
+    /// Capture source path, when applicable.
     pub source_path: Option<String>,
+    /// Retry attempt counter (0 for first try).
     pub attempt: u64,
 }
 
 impl CaptureProvenance {
+    /// Full provenance record.
     #[must_use]
     pub fn new(
         captured_unix_ms: u64,
@@ -110,14 +126,20 @@ impl CaptureProvenance {
 /// timestamps, PIDs, paths, or attempt counters (M08).
 #[derive(Debug, Clone)]
 pub struct Observation {
+    /// Captured grid.
     pub screen: Screen,
+    /// Monotonic capture revision.
     pub revision: u64,
+    /// Why the capture was taken.
     pub reason: CaptureReason,
+    /// Observed terminal state beyond the grid.
     pub state: TermState,
+    /// Informational provenance (excluded from equality/hash).
     pub provenance: CaptureProvenance,
 }
 
 impl Observation {
+    /// One atomic capture.
     #[must_use]
     pub fn new(
         screen: Screen,

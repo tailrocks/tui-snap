@@ -1,42 +1,48 @@
-//! Semantic provider + deterministic event harness (backlog Q06, Q07, Q09).
+//! Semantic provider + locators (backlog Q06, Q07).
 //!
-//! - [`SemanticProvider`]: explicit role/id/label/focused/disabled/hit-region
-//!   data. Semantics NEVER come from appearance: nothing here inspects pixels,
-//!   glyphs, styles, or [`Screen`](crate::screen::Screen) cells.
-//! - Locators ([`by_role`], [`by_id`], [`by_label`]) resolve provider nodes to
-//!   hit-region-center screen coordinates for REAL input. They return coords
-//!   only and never call application controllers (Q07).
-//! - [`RatatuiTestAdapter`]: example provider fed by test code alongside a
-//!   draw closure; tests map widget areas to nodes manually.
-//! - [`Harness`]: deterministic `update`/`render` + manual clock harness for
-//!   runtime tests (Q09). No live clock, threads, or services.
-
-use crate::ratatui::{EdgePolicy, render_screen};
-use crate::screen::Screen;
+//! [`SemanticProvider`] carries explicit role/id/label/focused/disabled/hit-region
+//! data. Semantics NEVER come from appearance: nothing here inspects pixels,
+//! glyphs, styles, or [`Screen`](crate::screen::Screen) cells. Locators
+//! ([`by_role`], [`by_id`], [`by_label`]) resolve provider nodes to
+//! hit-region-center screen coordinates for REAL input. They return coords
+//! only and never call application controllers (Q07).
+//! [`RatatuiTestAdapter`] is the example provider fed by test code alongside a
+//! draw closure; tests map widget areas to nodes manually.
 
 /// Widget role. Fixed set; providers needing more map them onto these or use
 /// [`Role::Static`] for non-interactive text.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Role {
+    /// Activable push button.
     Button,
+    /// Editable text field.
     Textbox,
+    /// Toggleable checkbox.
     Checkbox,
+    /// Selectable list entry.
     ListItem,
+    /// Navigable link.
     Link,
+    /// Non-interactive text.
     Static,
 }
 
-/// Hit region in screen grid coordinates (same space as [`Screen`] cells).
-/// The locator clicks its center.
+/// Hit region in screen grid coordinates (same space as
+/// [`Screen`](crate::screen::Screen) cells). The locator clicks its center.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct HitRegion {
+    /// Grid column of the region start.
     pub x: u16,
+    /// Grid row of the region start.
     pub y: u16,
+    /// Region width in columns.
     pub cols: u16,
+    /// Region height in rows.
     pub rows: u16,
 }
 
 impl HitRegion {
+    /// Region center, the locator click point.
     #[must_use]
     pub fn center(&self) -> (u16, u16) {
         (self.x + self.cols / 2, self.y + self.rows / 2)
@@ -46,15 +52,22 @@ impl HitRegion {
 /// One semantic node: explicit provider data only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemNode {
+    /// Widget role.
     pub role: Role,
+    /// Stable node id, when assigned.
     pub id: Option<String>,
+    /// Visible label, when present.
     pub label: Option<String>,
+    /// Whether the node holds focus.
     pub focused: bool,
+    /// Disabled nodes are excluded from click targets.
     pub disabled: bool,
+    /// Clickable screen region.
     pub hit: HitRegion,
 }
 
 impl SemNode {
+    /// Enabled unfocused node without id or label.
     #[must_use]
     pub fn new(role: Role, hit: HitRegion) -> Self {
         Self {
@@ -67,24 +80,28 @@ impl SemNode {
         }
     }
 
+    /// Attach a stable node id.
     #[must_use]
     pub fn with_id(mut self, id: &str) -> Self {
         self.id = Some(id.to_string());
         self
     }
 
+    /// Attach a visible label.
     #[must_use]
     pub fn with_label(mut self, label: &str) -> Self {
         self.label = Some(label.to_string());
         self
     }
 
+    /// Mark the node focused.
     #[must_use]
     pub fn focused(mut self) -> Self {
         self.focused = true;
         self
     }
 
+    /// Mark the node disabled (excluded from click targets).
     #[must_use]
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
@@ -97,7 +114,9 @@ impl SemNode {
 /// The provider revision tracks the screen revision the nodes were built for.
 /// Locators refuse to resolve when the two differ ([`SemanticError::Stale`]).
 pub trait SemanticProvider {
+    /// Screen revision the nodes were built for.
     fn revision(&self) -> u64;
+    /// Explicit nodes; never inferred from rendering.
     fn nodes(&self) -> &[SemNode];
 }
 
@@ -107,12 +126,19 @@ pub enum SemanticError {
     /// No enabled node matched.
     NotFound(String),
     /// More than one enabled node matched; disambiguate.
-    Ambiguous { what: String, count: usize },
+    Ambiguous {
+        /// What was matched.
+        what: String,
+        /// Number of enabled matches.
+        count: usize,
+    },
     /// The matched node is disabled: excluded from click targets.
     Disabled(String),
     /// Provider data is for another screen revision; re-capture first.
     Stale {
+        /// Screen revision under test.
         screen_revision: u64,
+        /// Revision the provider data was built for.
         provider_revision: u64,
     },
 }
@@ -160,7 +186,7 @@ fn check_fresh(
 /// Disabled nodes are excluded from click targets: if every match is disabled
 /// the resolution fails with [`SemanticError::Disabled`]; disabled matches
 /// never win over enabled ones.
-fn pick(what: String, matches: Vec<&SemNode>) -> Result<(u16, u16), SemanticError> {
+fn pick(what: String, matches: &[&SemNode]) -> Result<(u16, u16), SemanticError> {
     let enabled: Vec<&&SemNode> = matches.iter().filter(|n| !n.disabled).collect();
     match enabled.len() {
         0 if matches.is_empty() => Err(SemanticError::NotFound(what)),
@@ -174,6 +200,13 @@ fn pick(what: String, matches: Vec<&SemNode>) -> Result<(u16, u16), SemanticErro
 ///
 /// Returns screen coordinates only; the caller feeds them to real input. This
 /// function never calls application controllers (Q07).
+///
+/// # Errors
+///
+/// Returns [`SemanticError::Stale`] on revision mismatch,
+/// [`SemanticError::NotFound`] on zero matches,
+/// [`SemanticError::Ambiguous`] on 2+, or [`SemanticError::Disabled`] when
+/// every match is disabled.
 pub fn by_role(
     provider: &impl SemanticProvider,
     screen_revision: u64,
@@ -186,11 +219,15 @@ pub fn by_role(
         .iter()
         .filter(|n| &n.role == role)
         .collect();
-    pick(what, matches)
+    pick(what, &matches)
 }
 
 /// Resolve the clickable center of the node with this id (same Q07 contract
 /// as [`by_role`]).
+///
+/// # Errors
+///
+/// Same failures as [`by_role`].
 pub fn by_id(
     provider: &impl SemanticProvider,
     screen_revision: u64,
@@ -203,11 +240,15 @@ pub fn by_id(
         .iter()
         .filter(|n| n.id.as_deref() == Some(id))
         .collect();
-    pick(what, matches)
+    pick(what, &matches)
 }
 
 /// Resolve the clickable center of the node with this label (same Q07
 /// contract as [`by_role`]).
+///
+/// # Errors
+///
+/// Same failures as [`by_role`].
 pub fn by_label(
     provider: &impl SemanticProvider,
     screen_revision: u64,
@@ -220,7 +261,7 @@ pub fn by_label(
         .iter()
         .filter(|n| n.label.as_deref() == Some(label))
         .collect();
-    pick(what, matches)
+    pick(what, &matches)
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +279,7 @@ pub struct RatatuiTestAdapter {
 }
 
 impl RatatuiTestAdapter {
+    /// Empty adapter targeting `revision`.
     #[must_use]
     pub fn new(revision: u64) -> Self {
         Self {
@@ -266,124 +308,5 @@ impl SemanticProvider for RatatuiTestAdapter {
 
     fn nodes(&self) -> &[SemNode] {
         &self.nodes
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Harness: deterministic update/render + manual clock (Q09).
-// ---------------------------------------------------------------------------
-
-/// One input to `Harness::update`: clock movement or a scripted event.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HarnessEvent<E> {
-    /// The manual clock advanced; payload is the new `now_ms`.
-    Tick(u64),
-    /// A scripted event fired.
-    Event(E),
-}
-
-/// Deterministic runtime harness: caller-supplied `update` + `render`, a
-/// manual millisecond clock, and a scripted event schedule.
-///
-/// No live clock, threads, or services. [`Harness::run`] renders the initial
-/// state plus one [`Screen`] per scheduled event, in schedule order; identical
-/// scripts produce identical screens.
-pub struct Harness<S, E> {
-    state: S,
-    update: fn(&mut S, HarnessEvent<E>),
-    render: for<'a> fn(&S, &mut ratatui::Frame<'a>),
-    cols: u16,
-    rows: u16,
-    now_ms: u64,
-    schedule: Vec<(u64, E)>,
-    policy: EdgePolicy,
-}
-
-impl<S, E> Harness<S, E> {
-    pub fn new(
-        state: S,
-        cols: u16,
-        rows: u16,
-        update: fn(&mut S, HarnessEvent<E>),
-        render: for<'a> fn(&S, &mut ratatui::Frame<'a>),
-    ) -> Self {
-        Self {
-            state,
-            update,
-            render,
-            cols,
-            rows,
-            now_ms: 0,
-            schedule: Vec::new(),
-            policy: EdgePolicy::default(),
-        }
-    }
-
-    /// Script one event at an absolute manual-clock time.
-    pub fn schedule(&mut self, at_ms: u64, event: E) {
-        self.schedule.push((at_ms, event));
-    }
-
-    /// Current manual-clock time.
-    #[must_use]
-    pub fn now(&self) -> u64 {
-        self.now_ms
-    }
-
-    #[must_use]
-    pub fn state(&self) -> &S {
-        &self.state
-    }
-
-    /// Move the clock forward by `ms`, firing due scripted events through
-    /// `update` (a [`HarnessEvent::Tick`] first, then each due
-    /// [`HarnessEvent::Event`] in schedule order). Returns the new time.
-    pub fn advance(&mut self, ms: u64) -> u64 {
-        self.now_ms += ms;
-        let now = self.now_ms;
-        (self.update)(&mut self.state, HarnessEvent::Tick(now));
-        let mut i = 0;
-        while i < self.schedule.len() {
-            if self.schedule[i].0 <= now {
-                let (_, ev) = self.schedule.remove(i);
-                (self.update)(&mut self.state, HarnessEvent::Event(ev));
-            } else {
-                i += 1;
-            }
-        }
-        now
-    }
-
-    /// Render the current state to a validated [`Screen`].
-    ///
-    /// Total: under [`EdgePolicy::ClipWithReplacement`] the render fails only
-    /// on invalid dimensions, which [`Screen::blank`] re-asserts loudly
-    /// instead of hiding the failure behind an empty grid.
-    pub fn screen(&self) -> Screen {
-        let state = &self.state;
-        let render = self.render;
-        match render_screen(self.cols, self.rows, |f| render(state, f), self.policy) {
-            Ok(capture) => capture.into_screen(),
-            Err(_) => Screen::blank(self.cols, self.rows),
-        }
-    }
-
-    /// Run the whole script deterministically: initial screen plus one screen
-    /// per scheduled event, in `(time, insertion)` order. Consumes the
-    /// schedule; the clock ends at the last event time (or 0 when empty).
-    pub fn run(mut self) -> Vec<Screen> {
-        // Stable sort keeps insertion order within a timestamp.
-        let mut times: Vec<u64> = self.schedule.iter().map(|(t, _)| *t).collect();
-        times.sort();
-        let mut out = Vec::with_capacity(times.len() + 1);
-        out.push(self.screen());
-        for at in times {
-            let delta = at.saturating_sub(self.now_ms);
-            // Entries sharing a timestamp fire together on the first step
-            // that reaches them; later same-time steps render unchanged.
-            self.advance(delta);
-            out.push(self.screen());
-        }
-        out
     }
 }

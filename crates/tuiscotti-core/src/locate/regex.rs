@@ -86,11 +86,7 @@ impl MiniRegex {
 
     /// Apply a `*`/`+`/`?` quantifier to the last pushed atom. Dangling
     /// quantifiers and quantifiers on anchors are usage errors.
-    fn apply_quantifier(
-        atoms: &mut Vec<ReAtom>,
-        c: char,
-        pattern: &str,
-    ) -> Result<(), LocateError> {
+    fn apply_quantifier(atoms: &mut [ReAtom], c: char, pattern: &str) -> Result<(), LocateError> {
         let usage = |m: String| LocateError::Usage(format!("bad regex {pattern:?}: {m}"));
         let prev = atoms
             .last_mut()

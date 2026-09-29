@@ -3,6 +3,12 @@ use super::rows::{logical_lines, span_for_char_range};
 use super::{LocateError, Locator, Span, TextMode};
 use crate::screen::Screen;
 
+/// Scrollback char offsets are `u16` span fields; saturate absurd (>64k char)
+/// lines instead of wrapping them.
+fn offset_u16(v: usize) -> u16 {
+    u16::try_from(v).unwrap_or(u16::MAX)
+}
+
 /// Collapse every whitespace run to one space; returns normalized chars plus
 /// the source index of each normalized char.
 fn normalize_with_map(chars: &[char]) -> (Vec<char>, Vec<usize>) {
@@ -99,11 +105,11 @@ pub(crate) fn match_text_scrollback(
         .map(|(s, e)| {
             let text: String = chars[s..e].iter().collect();
             Span {
-                x: s as u16,
+                x: offset_u16(s),
                 y: 0,
-                end_x: e as u16,
+                end_x: offset_u16(e),
                 end_y: 0,
-                width_cols: (e - s) as u16,
+                width_cols: offset_u16(e - s),
                 origin,
                 revision,
                 text,
@@ -155,11 +161,11 @@ pub(crate) fn match_regex_scrollback(
         .map(|(s, e)| {
             let text: String = chars[s..e].iter().collect();
             Span {
-                x: s as u16,
+                x: offset_u16(s),
                 y: 0,
-                end_x: e as u16,
+                end_x: offset_u16(e),
                 end_y: 0,
-                width_cols: (e - s) as u16,
+                width_cols: offset_u16(e - s),
                 origin,
                 revision,
                 text,

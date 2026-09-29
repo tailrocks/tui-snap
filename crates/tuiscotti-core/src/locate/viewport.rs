@@ -65,8 +65,8 @@ pub(crate) fn match_region_viewport(
             "region dimensions must be nonzero".to_string(),
         ));
     }
-    if x as u32 + cols as u32 > screen.cols() as u32
-        || y as u32 + rows as u32 > screen.rows() as u32
+    if u32::from(x) + u32::from(cols) > u32::from(screen.cols())
+        || u32::from(y) + u32::from(rows) > u32::from(screen.rows())
     {
         return Err(LocateError::Usage(format!(
             "region ({x},{y}) {cols}x{rows} outside {}x{} screen",

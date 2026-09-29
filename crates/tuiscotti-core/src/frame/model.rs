@@ -5,21 +5,32 @@ use std::collections::BTreeMap;
 /// Schema version. Bump on any incompatible change and migrate readers.
 pub const FRAME_VERSION: u8 = 3;
 
-/// Maximum viewport dimension accepted on import (DoS bound).
+/// Maximum viewport dimension accepted on import (`DoS` bound).
 pub const MAX_DIM: u16 = 512;
 
 /// The canonical frame: `rows` × `cols` cells in row-major order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frame {
+    /// Schema version; must equal [`FRAME_VERSION`].
     pub version: u8,
+    /// Grid width in columns.
     pub cols: u16,
+    /// Grid height in rows.
     pub rows: u16,
+    /// Row-major cells, `rows` × `cols` entries.
     pub cells: Vec<Cell>,
+    /// Cursor state.
     pub cursor: Cursor,
+    /// Capture provenance (excluded from digests).
     pub provenance: Provenance,
 }
 
 impl Frame {
+    /// Blank frame: all-space cells, hidden default cursor.
+    ///
+    /// # Panics
+    ///
+    /// Panics when either dimension is zero or exceeds [`MAX_DIM`].
     #[must_use]
     pub fn blank(cols: u16, rows: u16, provenance: Provenance) -> Self {
         assert!(
@@ -50,12 +61,14 @@ impl Frame {
         }
     }
 
+    /// Store `cell` at its own `(x, y)`; out-of-bounds cells are ignored.
     pub fn set(&mut self, cell: Cell) {
         if let Some(i) = self.idx(cell.x, cell.y) {
             self.cells[i] = cell;
         }
     }
 
+    /// Cell at `(x, y)`, or `None` when out of bounds.
     #[must_use]
     pub fn get(&self, x: u16, y: u16) -> Option<&Cell> {
         self.idx(x, y).map(|i| &self.cells[i])
@@ -66,6 +79,11 @@ impl Frame {
     /// (`Single`): in v3 the bool could only mean single, so this loses no
     /// information and keeps representation out of comparison — in memory,
     /// `underline == underline_style.is_some()` always holds.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] when the text is not valid JSON or fails
+    /// [`Frame::validate`].
     pub fn from_json(text: &str) -> Result<Self, FrameError> {
         let mut frame: Self =
             serde_json::from_str(text).map_err(|e| FrameError(format!("bad JSON: {e}")))?;
@@ -108,10 +126,10 @@ impl Frame {
             }
             let mut row = String::new();
             for x in 0..self.cols {
-                if let Some(c) = self.get(x, y) {
-                    if !c.continuation {
-                        row.push_str(&c.symbol);
-                    }
+                if let Some(c) = self.get(x, y)
+                    && !c.continuation
+                {
+                    row.push_str(&c.symbol);
                 }
             }
             out.push_str(row.trim_end());
@@ -166,6 +184,10 @@ impl Frame {
     /// render cursor-aware summaries (see [`Frame::summarize_cursor`]): when only
     /// the cursor changed, the cells at that position compare equal.
     /// Dimensions must match; a dimension mismatch is an Err, not a diff.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] when the two frames differ in dimensions.
     pub fn diff_cells(&self, other: &Self) -> Result<Vec<(u16, u16)>, FrameError> {
         if self.cols != other.cols || self.rows != other.rows {
             return Err(FrameError(format!(
@@ -218,7 +240,7 @@ impl Frame {
     }
     /// Returns (fg, bg) after reverse/underline-color/dim handling.
     #[must_use]
-    pub fn resolve_cell(cell: &Cell, default_fg: Rgb, default_bg: Rgb) -> (Rgb, Rgb) {
+    pub fn resolve_cell(cell: &Cell, foreground: Rgb, background: Rgb) -> (Rgb, Rgb) {
         fn rgb(c: Color, dflt: Rgb) -> Rgb {
             match c {
                 Color::Default => dflt,
@@ -226,13 +248,16 @@ impl Frame {
                 Color::Rgb(r) => r,
             }
         }
-        let (mut fg, mut bg) = (rgb(cell.fg, default_fg), rgb(cell.bg, default_bg));
+        let (mut fg, mut bg) = (rgb(cell.fg, foreground), rgb(cell.bg, background));
         if cell.mods.reverse {
             std::mem::swap(&mut fg, &mut bg);
         }
         if cell.mods.dim {
             // 60% fg over bg (matches common terminal dim treatment).
-            let mix = |f: u8, b: u8| ((u32::from(f) * 6 + u32::from(b) * 4) / 10) as u8;
+            // Weighted mean of bytes is at most 255, so this never saturates.
+            let mix = |f: u8, b: u8| {
+                u8::try_from((u32::from(f) * 6 + u32::from(b) * 4) / 10).unwrap_or(u8::MAX)
+            };
             fg = Rgb::new(mix(fg.r, bg.r), mix(fg.g, bg.g), mix(fg.b, bg.b));
         }
         (fg, bg)
@@ -246,6 +271,7 @@ impl Frame {
 
     /// Deterministic reruns must produce identical digests AND identical PNG
     /// bytes under the same profile; see `render` tests.
+    #[must_use]
     pub fn palette_map() -> BTreeMap<u8, Rgb> {
         (0..=255).map(|i| (i, Rgb::from_indexed(i))).collect()
     }

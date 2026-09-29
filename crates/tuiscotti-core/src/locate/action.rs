@@ -19,6 +19,11 @@ impl Locator {
     /// Single-shot readiness: unique viewport target at this observation's
     /// revision. Scrollback-only matches fail with
     /// [`LocateError::ViewportOnly`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError`] when no unique viewport target exists at this
+    /// revision (not found, ambiguous, or scrollback-only).
     pub fn prepare_action(&self, obs: &Observation) -> Result<PendingAction, LocateError> {
         let span = self.resolve_unique(&obs.screen, obs.revision)?;
         PendingAction::from_span(self.clone(), span, obs.revision)
@@ -26,6 +31,11 @@ impl Locator {
 
     /// Retryable readiness: poll until a unique viewport target exists, or
     /// the ONE `timeout` deadline. Never invokes any action sink (Q05).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Timeout`] past the deadline, or an immediate
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`] without waiting.
     pub fn prepare_action_retry<F>(
         &self,
         observe: &mut F,
@@ -69,6 +79,11 @@ impl PendingAction {
     /// Bind an already-resolved span. Fails with [`LocateError::ViewportOnly`]
     /// for scrollback spans and [`LocateError::Usage`] when the span's
     /// revision differs from `revision` (a cross-revision bind is meaningless).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::ViewportOnly`] for scrollback spans and
+    /// [`LocateError::Usage`] on revision mismatch.
     pub fn from_span(locator: Locator, span: Span, revision: u64) -> Result<Self, LocateError> {
         if span.scrollback {
             return Err(LocateError::ViewportOnly { span });
@@ -86,11 +101,13 @@ impl PendingAction {
         })
     }
 
+    /// The bound target span.
     #[must_use]
     pub fn span(&self) -> &Span {
         &self.span
     }
 
+    /// Revision the target was bound at.
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
@@ -100,6 +117,11 @@ impl PendingAction {
     /// [`Action::Click`] to `sink` exactly once. Revision mismatch fails with
     /// [`LocateError::StaleTarget`] WITHOUT delivering or resolving further:
     /// a click is never sent stale.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::StaleTarget`] on revision mismatch (the sink
+    /// is not invoked), or re-resolution failures.
     pub fn click(
         &self,
         current: &Observation,
@@ -109,6 +131,10 @@ impl PendingAction {
     }
 
     /// Like [`PendingAction::click`] but delivers [`Action::Submit`].
+    ///
+    /// # Errors
+    ///
+    /// Same failures as [`PendingAction::click`].
     pub fn submit(
         &self,
         current: &Observation,

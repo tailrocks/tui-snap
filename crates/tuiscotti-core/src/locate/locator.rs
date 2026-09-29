@@ -83,6 +83,11 @@ impl Locator {
 
     /// Tiny-regex query (see module docs for the supported subset).
     /// Unsupported constructs fail here with [`LocateError::Usage`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Usage`] when the pattern uses an unsupported
+    /// construct or is otherwise invalid.
     pub fn regex(pattern: &str) -> Result<Self, LocateError> {
         Ok(Self {
             kind: LocatorKind::Regex {
@@ -95,6 +100,11 @@ impl Locator {
 
     /// Case-insensitive tiny-regex query. Non-ASCII haystacks fail at resolve
     /// time with [`LocateError::Unsupported`] (first-char lowering only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Usage`] when the pattern uses an unsupported
+    /// construct or is otherwise invalid.
     pub fn regex_case_insensitive(pattern: &str) -> Result<Self, LocateError> {
         Ok(Self {
             kind: LocatorKind::Regex {

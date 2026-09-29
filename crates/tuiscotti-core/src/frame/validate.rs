@@ -4,6 +4,10 @@ impl Frame {
     /// Strict validation for imports. Rejects: wrong version, zero/oversize
     /// dimensions, cell-count mismatch, out-of-order or out-of-bounds cells,
     /// bad widths, dangling continuations, empty lead symbols.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameError`] describing the first defect found.
     pub fn validate(&self) -> Result<(), FrameError> {
         self.check_header()?;
         for (i, c) in self.cells.iter().enumerate() {
@@ -57,10 +61,11 @@ impl Frame {
     /// Reject a cell whose stored coordinates disagree with its row-major index.
     fn check_position(&self, c: &Cell, i: usize) -> Result<(), FrameError> {
         let bad = |m: &str| FrameError(m.to_string());
-        let (ex, ey) = (
-            (i % self.cols as usize) as u16,
-            (i / self.cols as usize) as u16,
-        );
+        // Validated dims bound both below `MAX_DIM`, so this is infallible.
+        let ex =
+            u16::try_from(i % self.cols as usize).map_err(|_| bad("cell index overflows u16"))?;
+        let ey =
+            u16::try_from(i / self.cols as usize).map_err(|_| bad("cell index overflows u16"))?;
         if c.x != ex || c.y != ey {
             return Err(bad(&format!(
                 "cell {i} positioned at ({},{}) but stored at ({ex},{ey})",

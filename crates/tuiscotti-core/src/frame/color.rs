@@ -3,17 +3,22 @@ use serde::{Deserialize, Serialize};
 /// RGB color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rgb {
+    /// Red channel (0-255).
     pub r: u8,
+    /// Green channel (0-255).
     pub g: u8,
+    /// Blue channel (0-255).
     pub b: u8,
 }
 
 impl Rgb {
+    /// Direct RGB color from channels.
     #[must_use]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
 
+    /// Lowercase `#rrggbb` hex form.
     #[must_use]
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
@@ -57,9 +62,12 @@ impl Rgb {
 /// A cell color: terminal default, palette index, or direct RGB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Color {
+    /// Terminal default (context-resolved).
     #[default]
     Default,
+    /// Palette entry 0-255.
     Indexed(u8),
+    /// Direct RGB color.
     Rgb(Rgb),
 }
 

@@ -17,8 +17,11 @@ pub enum EdgePolicy {
 /// original symbol preserved for evidence).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClippedCell {
+    /// Grid column of the clipped glyph.
     pub x: u16,
+    /// Grid row of the clipped glyph.
     pub y: u16,
+    /// Original symbol (replaced by [`REPLACEMENT`] on the grid).
     pub symbol: String,
 }
 
@@ -44,16 +47,19 @@ pub struct ScreenCapture {
 }
 
 impl ScreenCapture {
+    /// Borrowed validated grid.
     #[must_use]
     pub fn screen(&self) -> &Screen {
         &self.screen
     }
 
+    /// Owned validated grid, dropping the capture record.
     #[must_use]
     pub fn into_screen(self) -> Screen {
         self.screen
     }
 
+    /// True when at least one glyph was replaced at a row end.
     #[must_use]
     pub fn has_clips(&self) -> bool {
         !self.clipped.is_empty()

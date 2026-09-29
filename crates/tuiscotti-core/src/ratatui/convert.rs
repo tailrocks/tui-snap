@@ -52,7 +52,8 @@ pub(crate) fn convert_mods(m: Modifier) -> Mods {
 /// the caller emits the continuation follower.
 pub(crate) fn lead_cell(x: u16, y: u16, rc: &RCell) -> (Cell, u8) {
     let symbol = rc.symbol().to_string();
-    let width = UnicodeWidthStr::width(symbol.as_str()).min(2) as u8;
+    // Clamped to 2, so this never saturates.
+    let width = u8::try_from(UnicodeWidthStr::width(symbol.as_str()).min(2)).unwrap_or(u8::MAX);
     let width = width.max(1);
     (
         Cell {

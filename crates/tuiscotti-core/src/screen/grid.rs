@@ -32,6 +32,10 @@ impl Screen {
     /// hidden/blink, styled blanks, continuations, cursor) are preserved.
     /// Imported screens sit at origin (0,0). Also available as
     /// `TryFrom<&Frame>` for generic conversion sites.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ScreenError`] when the frame fails validation.
     pub fn from_frame(frame: &Frame) -> Result<Self, ScreenError> {
         frame
             .validate()
@@ -46,8 +50,11 @@ impl Screen {
         )
     }
 
-    /// Blank screen at origin (0,0) with a hidden default cursor. Panics on
-    /// zero/oversize dimensions like [`Frame::blank`].
+    /// Blank screen at origin (0,0) with a hidden default cursor.
+    ///
+    /// # Panics
+    ///
+    /// Panics on zero/oversize dimensions like [`Frame::blank`].
     #[must_use]
     pub fn blank(cols: u16, rows: u16) -> Self {
         assert!(
@@ -70,11 +77,13 @@ impl Screen {
         }
     }
 
+    /// Grid width in columns.
     #[must_use]
     pub fn cols(&self) -> u16 {
         self.cols
     }
 
+    /// Grid height in rows.
     #[must_use]
     pub fn rows(&self) -> u16 {
         self.rows
@@ -86,16 +95,19 @@ impl Screen {
         (self.ox, self.oy)
     }
 
+    /// Row-major cells, `rows` × `cols` entries.
     #[must_use]
     pub fn cells(&self) -> &[Cell] {
         &self.cells
     }
 
+    /// Cursor state.
     #[must_use]
     pub fn cursor(&self) -> &Cursor {
         &self.cursor
     }
 
+    /// Cell at `(x, y)`, or `None` when out of bounds.
     #[must_use]
     pub fn get(&self, x: u16, y: u16) -> Option<&Cell> {
         if x < self.cols && y < self.rows {
@@ -112,6 +124,11 @@ impl Screen {
     /// Refuses to split a wide grapheme: if the left edge would cut a
     /// continuation cell, or the right edge would strand a wide lead without
     /// its continuation, returns an error naming the grapheme (M07).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ScreenError`] for zero dimensions, out-of-bounds rects, or
+    /// crops that would split a wide grapheme.
     pub fn region(
         &self,
         x: u16,
@@ -124,7 +141,9 @@ impl Screen {
         if cols == 0 || rows == 0 {
             return Err(bad("region dimensions must be nonzero".to_string()));
         }
-        if x as u32 + cols as u32 > self.cols as u32 || y as u32 + rows as u32 > self.rows as u32 {
+        if u32::from(x) + u32::from(cols) > u32::from(self.cols)
+            || u32::from(y) + u32::from(rows) > u32::from(self.rows)
+        {
             return Err(bad(format!(
                 "region ({x},{y}) {cols}x{rows} outside {}x{} screen",
                 self.cols, self.rows

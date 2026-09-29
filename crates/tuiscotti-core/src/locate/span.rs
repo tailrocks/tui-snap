@@ -10,15 +10,25 @@
 ///   matches span rows, see docs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Span {
+    /// Start column (viewport cell, or scrollback char offset).
     pub x: u16,
+    /// Start row (always 0 for scrollback spans).
     pub y: u16,
+    /// Exclusive end column.
     pub end_x: u16,
+    /// End row (`end_y == y` for single-row matches).
     pub end_y: u16,
+    /// Display columns covered (wide leads count 2).
     pub width_cols: u16,
+    /// Origin of the resolved screen.
     pub origin: (i32, i32),
+    /// Screen revision this span was resolved at.
     pub revision: u64,
+    /// Matched text.
     pub text: String,
+    /// True for scrollback (non-clickable) matches.
     pub scrollback: bool,
+    /// Scrollback line index (oldest = 0); `None` for viewport spans.
     pub scrollback_index: Option<usize>,
 }
 
@@ -82,6 +92,18 @@ impl std::fmt::Display for Span {
 /// call; readiness retries never touch the sink (Q05).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    Click { x: u16, y: u16 },
-    Submit { x: u16, y: u16 },
+    /// Click at the target point.
+    Click {
+        /// Viewport column.
+        x: u16,
+        /// Viewport row.
+        y: u16,
+    },
+    /// Submit (confirm) at the target point.
+    Submit {
+        /// Viewport column.
+        x: u16,
+        /// Viewport row.
+        y: u16,
+    },
 }

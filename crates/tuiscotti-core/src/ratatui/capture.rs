@@ -8,6 +8,7 @@ use ratatui::layout::Position;
 ///
 /// `cursor`: `(position, visible)`. Read it from
 /// `TestBackend::get_cursor_position` after draw; `None` hides the cursor.
+#[must_use]
 pub fn from_buffer(
     buf: &Buffer,
     cols: u16,
@@ -119,11 +120,15 @@ where
 
 /// Render via a draw closure (full-app frames, layouts, stateful widgets).
 /// Cursor is captured post-draw, so stateful cursor placement is preserved.
+///
+/// # Panics
+///
+/// Panics when the test terminal or the draw closure itself fails.
 pub fn draw_frame(
     cols: u16,
     rows: u16,
     provenance: Provenance,
-    draw: impl FnOnce(&mut ratatui::Frame),
+    draw: impl FnOnce(&mut ratatui::Frame<'_>),
 ) -> Frame {
     let backend = ratatui::backend::TestBackend::new(cols, rows);
     let mut term = ratatui::Terminal::new(backend).expect("test terminal");

@@ -16,21 +16,43 @@ pub enum LocateError {
     /// regex over non-ASCII text, where first-char lowering is unreliable).
     Unsupported(String),
     /// No match where at least one was required.
-    NotFound { message: String },
+    NotFound {
+        /// What was missing.
+        message: String,
+    },
     /// 2+ matches where exactly one was required. Lists every match so the
     /// caller can disambiguate (`nth`/`first`/`within`/tighter query).
-    Ambiguous { matches: Vec<Span> },
+    Ambiguous {
+        /// Every match, in resolution order.
+        matches: Vec<Span>,
+    },
     /// A retryable assertion never reached its condition before its ONE
     /// deadline.
-    Timeout { waited: Duration, reason: String },
+    Timeout {
+        /// How long was waited.
+        waited: Duration,
+        /// Why the wait ended without success.
+        reason: String,
+    },
     /// Action refused: the target lives in scrollback, which has no viewport
     /// coordinates to click.
-    ViewportOnly { span: Span },
+    ViewportOnly {
+        /// The scrollback target.
+        span: Span,
+    },
     /// Action refused: the screen revision changed after readiness was
     /// established. The click/submit was NOT delivered.
-    StaleTarget { expected: u64, current: u64 },
+    StaleTarget {
+        /// Revision at readiness time.
+        expected: u64,
+        /// Revision at delivery time.
+        current: u64,
+    },
     /// [`Locator::remains_absent`](crate::locate::Locator::remains_absent) observed a match during the watch window.
-    UnexpectedlyPresent { matches: Vec<Span> },
+    UnexpectedlyPresent {
+        /// Matches observed during the window.
+        matches: Vec<Span>,
+    },
 }
 
 impl LocateError {

@@ -8,6 +8,11 @@ pub(crate) const POLL_INTERVAL: Duration = Duration::from_millis(5);
 impl Locator {
     /// Retry until at least one match, or the ONE `timeout` deadline.
     /// [`LocateError::Usage`]/[`LocateError::Unsupported`] fail immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Timeout`] past the deadline, or an immediate
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`] without waiting.
     pub fn expect_visible<F>(
         &self,
         observe: &mut F,
@@ -46,6 +51,11 @@ impl Locator {
     /// Retry until exactly one match whose text equals `expected`, or the ONE
     /// `timeout` deadline. Wrong text / zero / 2+ matches all keep retrying
     /// (the screen may still be settling); usage/unsupported fail immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Timeout`] past the deadline, or an immediate
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`] without waiting.
     pub fn expect_text<F>(
         &self,
         observe: &mut F,
@@ -85,6 +95,11 @@ impl Locator {
 
     /// Retry until the match count equals `expected`, or the ONE `timeout`
     /// deadline. Usage/unsupported fail immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Timeout`] past the deadline, or an immediate
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`] without waiting.
     pub fn expect_count<F>(
         &self,
         observe: &mut F,
@@ -122,17 +137,32 @@ impl Locator {
     }
 
     /// Single-shot presence check against one observation (no retry).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Usage`] for invalid patterns/regions and
+    /// [`LocateError::Unsupported`] for non-ASCII case-insensitive haystacks.
     pub fn present_now(&self, obs: &Observation) -> Result<bool, LocateError> {
         Ok(!self.resolve_obs(obs)?.is_empty())
     }
 
     /// Single-shot absence check against one observation (no retry).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Usage`] for invalid patterns/regions and
+    /// [`LocateError::Unsupported`] for non-ASCII case-insensitive haystacks.
     pub fn not_present_now(&self, obs: &Observation) -> Result<bool, LocateError> {
         Ok(self.resolve_obs(obs)?.is_empty())
     }
 
     /// Retry until zero matches, or the ONE `timeout` deadline.
     /// Usage/unsupported fail immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Timeout`] past the deadline, or an immediate
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`] without waiting.
     pub fn eventually_absent<F>(
         &self,
         observe: &mut F,
@@ -171,6 +201,11 @@ impl Locator {
     /// Watch for the FULL `duration`: any match at any poll fails with
     /// [`LocateError::UnexpectedlyPresent`]. Usage/unsupported fail
     /// immediately. Returns `Ok(())` only after the whole window stays empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::UnexpectedlyPresent`] on any match during the
+    /// window, or an immediate [`LocateError::Usage`]/[`LocateError::Unsupported`].
     pub fn remains_absent<F>(&self, observe: &mut F, duration: Duration) -> Result<(), LocateError>
     where
         F: FnMut() -> Observation,

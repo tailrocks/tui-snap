@@ -120,9 +120,12 @@ fn translate_cursor(
         let lx = i32::from(pos.x) - ox;
         let ly = i32::from(pos.y) - oy;
         if visible && lx >= 0 && ly >= 0 && lx < i32::from(cols) && ly < i32::from(rows) {
+            // Guarded non-negative and below `cols`/`rows`, so this never saturates.
+            let x = u16::try_from(lx).unwrap_or(u16::MAX);
+            let y = u16::try_from(ly).unwrap_or(u16::MAX);
             cur = Cursor {
-                x: lx as u16,
-                y: ly as u16,
+                x,
+                y,
                 visible: true,
                 style: CursorStyle::Block,
                 blinking: false,
@@ -154,7 +157,9 @@ fn convert_buffer(
         while gx < cols {
             let rc = buffer_cell(buf, gx, gy)?;
             let symbol = rc.symbol().to_string();
-            let width = UnicodeWidthStr::width(symbol.as_str()).clamp(1, 2) as u8;
+            // Clamped to 1..=2, so this never saturates.
+            let width = u8::try_from(UnicodeWidthStr::width(symbol.as_str()).clamp(1, 2))
+                .unwrap_or(u8::MAX);
             if width == 2 && gx + 1 >= cols {
                 gx = clip_row_end(policy, rc, symbol, gx, gy, &mut cells, &mut clipped)?;
                 continue;
@@ -193,15 +198,20 @@ fn convert_buffer(
 /// |---|---|---|
 /// | symbol, display width, wide continuations | `symbol`, `width`, `continuation` | preserved |
 /// | fg/bg incl Reset/indexed/RGB | `fg`, `bg` | preserved |
-/// | BOLD/DIM/ITALIC/UNDERLINED/CROSSED_OUT/REVERSED | `mods` flags | preserved |
+/// | `BOLD/DIM/ITALIC/UNDERLINED/CROSSED_OUT/REVERSED` | `mods` flags | preserved |
 /// | HIDDEN | `mods.hidden` | preserved (intent; renderers omit the glyph) |
-/// | SLOW_BLINK/RAPID_BLINK | `mods.blink` | preserved (intent; stills freeze phase) |
+/// | `SLOW_BLINK/RAPID_BLINK` | `mods.blink` | preserved (intent; stills freeze phase) |
 /// | underline color | `underline_color` | preserved via the `underline-color` cargo feature (`Reset` → `Default`) |
 /// | underline style | `mods.underline` | PARTIAL: ratatui 0.30 exposes only the UNDERLINED bit (no style API), so every ratatui underline maps to `Single` |
 /// | hyperlinks (OSC 8) | — | NOT exposed: `Buffer`/`Cell` store no link targets |
 /// | title, bells, modes, palette, clipboard, graphics | — | NOT exposed by `Buffer`/`TestBackend` |
 /// | cursor position + visibility | `Cursor` x/y/visible | preserved (post-draw) |
 /// | cursor style / blink | `Block`, non-blinking | NOT exposed by `TestBackend`; defaults recorded |
+///
+/// # Errors
+///
+/// Returns [`ScreenError`] on buffer gaps, coordinate overflow, row-end wide
+/// glyphs under [`EdgePolicy::Error`], or grid validation failures.
 pub fn screen_from_buffer(
     buf: &Buffer,
     cursor: Option<(Position, bool)>,
@@ -213,6 +223,10 @@ pub fn screen_from_buffer(
 /// Capture the completed state of a `TestBackend` terminal: buffer + cursor
 /// (M05). Reads post-draw cursor position/visibility so cursor-only changes
 /// are gated; buffer origin is preserved like [`screen_from_buffer`].
+///
+/// # Errors
+///
+/// Same failures as [`screen_from_buffer`].
 pub fn screen_from_test_backend(
     term: &mut ratatui::Terminal<TestBackend>,
     policy: EdgePolicy,
@@ -228,10 +242,15 @@ pub fn screen_from_test_backend(
 /// The closure is the real render path (`FnOnce(&mut ratatui::Frame)`):
 /// layouts, stateful widgets, and `set_cursor_position` all work. Cursor
 /// state is captured post-draw, so explicit cursor placement survives.
+///
+/// # Errors
+///
+/// Returns [`ScreenError`] when the test terminal or draw fails, plus
+/// [`screen_from_buffer`] failures.
 pub fn render_screen(
     cols: u16,
     rows: u16,
-    draw: impl FnOnce(&mut ratatui::Frame),
+    draw: impl FnOnce(&mut ratatui::Frame<'_>),
     policy: EdgePolicy,
 ) -> Result<ScreenCapture, ScreenError> {
     let backend = TestBackend::new(cols, rows);
@@ -259,9 +278,13 @@ pub fn render_screen(
 /// assert_eq!((screen.cols(), screen.rows()), (100, 30));
 /// # Ok::<(), tuiscotti_core::screen::ScreenError>(())
 /// ```
+///
+/// # Errors
+///
+/// Same failures as [`render_screen`] under [`EdgePolicy::Error`].
 pub fn render(
     size: (u16, u16),
-    draw: impl FnOnce(&mut ratatui::Frame),
+    draw: impl FnOnce(&mut ratatui::Frame<'_>),
 ) -> Result<Screen, ScreenError> {
     render_screen(size.0, size.1, draw, EdgePolicy::Error).map(ScreenCapture::into_screen)
 }
@@ -270,6 +293,10 @@ pub fn render(
 ///
 /// Cursor state is whatever the draw leaves behind (`TestBackend` defaults
 /// to hidden); nothing is forced, so the capture reflects production.
+///
+/// # Errors
+///
+/// Same failures as [`render_screen`].
 pub fn widget_screen<W>(
     widget: W,
     cols: u16,
@@ -294,6 +321,10 @@ where
 /// No artificial testing trait: the bound is the real
 /// `ratatui::widgets::StatefulWidget`, so actual production render functions
 /// work unchanged.
+///
+/// # Errors
+///
+/// Same failures as [`render_screen`].
 pub fn stateful_screen<W>(
     widget: W,
     state: &mut W::State,

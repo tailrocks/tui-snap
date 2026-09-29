@@ -24,11 +24,13 @@ pub struct Region {
 }
 
 impl Region {
+    /// Cropped grid (region-local coordinates, preserved origin).
     #[must_use]
     pub fn screen(&self) -> &Screen {
         &self.screen
     }
 
+    /// How out-of-region cells were treated.
     #[must_use]
     pub fn policy(&self) -> RegionPolicy {
         self.policy

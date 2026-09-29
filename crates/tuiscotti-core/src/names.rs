@@ -17,6 +17,11 @@ impl std::error::Error for InvalidName {}
 /// Names are relative `/`-separated paths: no absolute paths, no `..` or
 /// `.` segments, no empty segments, no backslashes. Anything else would
 /// escape the store roots or fail to round-trip through recursive listing.
+///
+/// # Errors
+///
+/// Returns [`InvalidName`] when the name is empty, absolute, contains
+/// backslashes, or has an empty/`.`/`..` segment.
 pub fn validate_name(name: &str) -> Result<(), InvalidName> {
     use std::path::Path;
     let bad = |m: &str| InvalidName(format!("{name:?}: {m}"));

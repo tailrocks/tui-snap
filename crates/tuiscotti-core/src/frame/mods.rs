@@ -53,12 +53,22 @@ impl UnderlineStyle {
 /// hidden glyphs are omitted by renderers but their source symbols remain in
 /// canonical data. Concealment is not redaction: never capture real secrets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "v3 canonical JSON shape plus the Debug-fed Frame::digest pin discrete bool fields; grouping or bitflags would change snapshot bytes"
+)]
 pub struct Mods {
+    /// Concealed glyph (renderers omit it; source symbol retained).
     pub hidden: bool,
+    /// Blink intent (stills freeze the phase as visible).
     pub blink: bool,
+    /// Bold intensity.
     pub bold: bool,
+    /// Dim intensity.
     pub dim: bool,
+    /// Italic.
     pub italic: bool,
+    /// Any underline (style refined by `underline_style`).
     pub underline: bool,
     /// Underline style refinement (SGR 4:x). Additive v3 field: missing in
     /// legacy files (defaults to `None`) and omitted from stored JSON when
@@ -68,7 +78,9 @@ pub struct Mods {
     /// [`Mods::effective_underline_style`].
     #[serde(default, skip_serializing_if = "UnderlineStyle::is_none")]
     pub underline_style: UnderlineStyle,
+    /// Strikethrough.
     pub strikethrough: bool,
+    /// Reverse video (fg/bg swapped).
     pub reverse: bool,
 }
 

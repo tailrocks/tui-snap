@@ -9,11 +9,20 @@ use crate::screen::{Observation, Screen};
 
 impl Locator {
     /// Resolve against a screen at a revision (viewport only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::Usage`] for invalid patterns/regions and
+    /// [`LocateError::Unsupported`] for non-ASCII case-insensitive haystacks.
     pub fn resolve(&self, screen: &Screen, revision: u64) -> Result<Vec<Span>, LocateError> {
         self.resolve_with_scrollback(screen, revision, &[])
     }
 
     /// Resolve against an [`Observation`] (viewport only).
+    ///
+    /// # Errors
+    ///
+    /// Same failures as [`Locator::resolve`].
     pub fn resolve_obs(&self, obs: &Observation) -> Result<Vec<Span>, LocateError> {
         self.resolve(&obs.screen, obs.revision)
     }
@@ -21,6 +30,10 @@ impl Locator {
     /// Resolve against a screen plus scrollback lines (plain text, oldest
     /// first). Scrollback matches are flagged `scrollback: true` and are
     /// never clickable.
+    ///
+    /// # Errors
+    ///
+    /// Same failures as [`Locator::resolve`].
     pub fn resolve_with_scrollback(
         &self,
         screen: &Screen,
@@ -34,11 +47,20 @@ impl Locator {
 
     /// Resolve requiring exactly one match: 0 → [`LocateError::NotFound`],
     /// 2+ → [`LocateError::Ambiguous`] listing every match (Q03 strictness).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LocateError::NotFound`] on zero matches,
+    /// [`LocateError::Ambiguous`] on 2+, plus [`Locator::resolve`] failures.
     pub fn resolve_unique(&self, screen: &Screen, revision: u64) -> Result<Span, LocateError> {
         self.resolve_unique_with_scrollback(screen, revision, &[])
     }
 
     /// [`Locator::resolve_unique`] with scrollback lines included.
+    ///
+    /// # Errors
+    ///
+    /// Same failures as [`Locator::resolve_unique`].
     pub fn resolve_unique_with_scrollback(
         &self,
         screen: &Screen,
@@ -100,17 +122,17 @@ impl Locator {
             }
             LocatorKind::Nth { inner, index } => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by_key(|a| a.key());
+                spans.sort_by_key(Span::key);
                 Ok(spans.into_iter().nth(*index).into_iter().collect())
             }
             LocatorKind::First(inner) => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by_key(|a| a.key());
+                spans.sort_by_key(Span::key);
                 Ok(spans.into_iter().next().into_iter().collect())
             }
             LocatorKind::Last(inner) => {
                 let mut spans = inner.resolve_core(screen, revision, scrollback)?;
-                spans.sort_by_key(|a| a.key());
+                spans.sort_by_key(Span::key);
                 Ok(spans.into_iter().last().into_iter().collect())
             }
             LocatorKind::And { a, b } => {

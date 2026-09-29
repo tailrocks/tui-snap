@@ -22,7 +22,11 @@ fn check_dimensions(cols: u16, rows: u16, cell_count: usize) -> Result<(), Scree
 /// or whose width exceeds 2.
 fn check_position(c: &Cell, i: usize, cols: u16) -> Result<(), ScreenError> {
     let bad = |m: String| ScreenError(m);
-    let (ex, ey) = ((i % cols as usize) as u16, (i / cols as usize) as u16);
+    // Validated dims bound both below `MAX_DIM`, so this is infallible.
+    let ex = u16::try_from(i % cols as usize)
+        .map_err(|_| bad("cell index overflows u16".to_string()))?;
+    let ey = u16::try_from(i / cols as usize)
+        .map_err(|_| bad("cell index overflows u16".to_string()))?;
     if c.x != ex || c.y != ey {
         return Err(bad(format!(
             "cell {i} positioned at ({},{}) but stored at ({ex},{ey})",
@@ -92,6 +96,10 @@ fn check_lead(cells: &[Cell], i: usize, c: &Cell, cols: u16) -> Result<(), Scree
 impl Screen {
     /// Fallible validated constructor. `cells` must be row-major over
     /// `cols` x `rows` with grid-local coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ScreenError`] describing the first defect found.
     pub fn validate(
         cols: u16,
         rows: u16,
