@@ -127,3 +127,13 @@ Historical studies (`docs/packets/IMPLEMENTATION-GOAL.md`,
 `docs/packets/REFERENCE-SPEC.md`, frozen 2026-09-29 at `7e8272b`)
 are context only: when they disagree with the tree, the tree wins.
 They are not updated; new decisions land here.
+
+## 12. Name collision check: `tuiscotti` (2026-09-29)
+
+No blocking collision found; nothing reserved; no trademark
+clearance claimed. Checks performed: crates.io API lookup for
+`tuiscotti` → 404; `cargo search` → empty; GitHub
+`tailrocks/tuiscotti` → 404; local `PATH` → absent; web search →
+no software usage of the name. Follow-on constraint: the hosted
+repo rename and crates.io publish need human admin/auth, so they
+stay manual steps outside any agent task.

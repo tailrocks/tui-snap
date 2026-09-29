@@ -1,9 +1,9 @@
 //! M2 vertical slice, part 2: real settings-navigation PTY journey.
 //!
-//! Item 3 (`settings_navigation`): `/bin/sh` runs the committed
-//! `tests/fixtures/journey/menu.sh` fixture (ANSI menu, 3 settings rows,
-//! arrow-key navigation, Space toggles, `q` quits with exit = toggled count)
-//! inside a real PTY ([`tuiscotti::tui::Tui`]). The test snapshots the initial
+//! Item 3 (`settings_navigation`): the Rust `menu_fixture --journey`
+//! binary (ANSI menu, 3 settings rows, arrow-key navigation, Space
+//! toggles, `q` quits with exit = toggled count) runs inside a real PTY
+//! ([`tuiscotti::tui::Tui`]). The test snapshots the initial
 //! grid, drives Down/Space/Down/Space, pins the toggled markers with
 //! [`tuiscotti::locate::Locator`] assertions, screenshots the mid state, quits
 //! with `q` (exit code 2), snapshots the final grid, and verifies journal
@@ -41,20 +41,24 @@ fn deadline(secs: u64) -> Instant {
     Instant::now() + Duration::from_secs(secs)
 }
 
-fn menu_script() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/journey/menu.sh")
+/// Authoritative path of the `menu_fixture` binary: the runtime
+/// environment first (`tuiscotti::runner::resolve_bin`, correct under
+/// nextest archive/remap runs), else the compile-time
+/// `CARGO_BIN_EXE_menu_fixture` cargo bakes into this test target.
+fn menu_bin() -> std::path::PathBuf {
+    if let Ok(path) = tuiscotti::runner::resolve_bin("tuiscotti-fixtures", "menu_fixture") {
+        return path;
+    }
+    std::path::PathBuf::from(env!("CARGO_BIN_EXE_menu_fixture"))
 }
 
-/// Spawn `/bin/sh` on the committed menu fixture; asserts the script ships
-/// and records the child pid in the journal.
+/// Spawn `menu_fixture --journey`; asserts the binary ships and records
+/// the child pid in the journal.
 fn spawn_menu(journal: &mut Journal) -> anyhow::Result<(tuiscotti::tui::Session, u32)> {
-    let script = menu_script();
-    assert!(
-        script.is_file(),
-        "fixture menu script: {}",
-        script.display()
-    );
-    let session = Tui::new(["/bin/sh", &script.to_string_lossy()])
+    let bin = menu_bin();
+    assert!(bin.is_file(), "fixture menu binary: {}", bin.display());
+    let session = Tui::new([bin.to_string_lossy().into_owned()])
+        .arg("--journey")
         .size(48, 12)
         .spawn()?;
     let pid = session.pid().ok_or_else(|| anyhow::anyhow!("child pid"))?;
@@ -104,16 +108,15 @@ fn settings_navigation() {
     let (session, pid) = spawn_menu(&mut journal).expect("spawn menu fixture");
 
     // Initial grid: title + 3 unchecked rows, selection on row 0.
+    // Content wait, not stability wait: a slow first draw is quiet but
+    // blank (freshly linked binary), and `wait_stable` would return rev 0.
+    let mut observe = || session.observe_now().expect("observe");
+    Locator::text("Settings (space toggles, q quits)")
+        .expect_visible(&mut observe, Duration::from_secs(15))
+        .expect("title draws");
     let initial = session
         .wait_stable(deadline(10), &CancelToken::new())
         .expect("menu settles");
-    assert!(
-        Locator::text("Settings (space toggles, q quits)")
-            .present_now(&initial)
-            .expect("locator"),
-        "title visible (rev {})",
-        initial.revision
-    );
     assert_eq!(
         Locator::text("[ ]")
             .resolve_obs(&initial)
@@ -126,7 +129,6 @@ fn settings_navigation() {
     journal.append("snapshotted", "initial").expect("journal");
 
     // Down/Space/Down/Space: toggle rows 1 and 2 (selection ends on row 2).
-    let mut observe = || session.observe_now().expect("observe");
     let mid_obs = drive_toggles(&session, &mut observe, &mut journal).expect("drive toggles");
 
     tuiscotti::assert_screenshot!("journey__settings_mid", &mid_obs.screen, &policy);

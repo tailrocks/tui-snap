@@ -28,8 +28,8 @@ the PTY target and the headless-test source. Three fixture binaries
   `*.frame.json` + `*.png` pairs (classic store).
 - `crates/tuiscotti-fixtures/tests/snapshots/` — Insta snapshots
   (`.snap` + `.snap.png`) for journey/vertical-slice gates.
-- `crates/tuiscotti-fixtures/tests/fixtures/` — consumer, journey,
-  render-baseline, and slice fixtures.
+- `crates/tuiscotti-fixtures/tests/fixtures/` — consumer, data,
+  expected, and slice fixtures.
 - `crates/tuiscotti-fixtures/tests/SHA256SUMS` — pins every
   approval byte; re-record with `cargo xtask fixtures
   --bless-manifest` after a qualified change (a test fails

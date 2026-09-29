@@ -181,4 +181,4 @@ stay removed.
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+MIT OR Apache-2.0 — see [LICENSE](LICENSE).
