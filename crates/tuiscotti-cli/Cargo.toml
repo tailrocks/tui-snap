@@ -1,0 +1,28 @@
+[package]
+name = "tuiscotti-cli"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tuisnap"
+path = "src/main.rs"
+required-features = ["pty"]
+
+[features]
+default = ["pty"]
+pty = ["tuiscotti/pty"]
+
+[dependencies]
+tuiscotti = { path = "../tuiscotti" }
+clap.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+ratatui.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+[package]
+name = "tuiscotti"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["pty"]
+pty = ["tuiscotti-runtime/pty"]
+
+[dependencies]
+tuiscotti-core = { path = "../tuiscotti-core" }
+tuiscotti-render = { path = "../tuiscotti-render" }
+tuiscotti-runtime = { path = "../tuiscotti-runtime" }
+tuiscotti-insta = { path = "../tuiscotti-insta" }
+
+[dev-dependencies]
+base64.workspace = true
+image.workspace = true
+insta.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

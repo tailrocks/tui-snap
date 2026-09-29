@@ -1,43 +1,73 @@
-[package]
-name = "tuisnap"
-version = "0.2.0"
-edition = "2021"
-description = "Rust TUI visual-regression toolkit: Ratatui view dumps + PTY captures sharing one canonical frame, real-glyph PNGs, HTML expected/actual/diff reports"
-license = "Apache-2.0"
+[workspace]
+members = [
+    "crates/tuiscotti-core",
+    "crates/tuiscotti-render",
+    "crates/tuiscotti-runtime",
+    "crates/tuiscotti-insta",
+    "crates/tuiscotti",
+    "crates/tuiscotti-cli",
+    "crates/tuiscotti-fixtures",
+    "crates/xtask",
+]
+resolver = "3"
 
-[[bin]]
-name = "tuisnap"
-path = "src/main.rs"
-required-features = ["pty"]
+[workspace.dependencies]
+# Centralize all actual dependencies here, including dev/build dependencies.
+# Use real compatible released versions; termpane must come from the official registry release.
+# Pins below are the exact resolved versions from the pre-split Cargo.lock.
+anyhow = "=1.0.104"
+base64 = "=0.23.1"
+clap = { version = "=4.6.6", features = ["derive"] }
+crossterm = "=0.29.0"
+fontdue = "=0.9.4"
+image = "=0.25.10"
+image-compare = "=0.5.0"
+insta = { version = "=1.48.0", default-features = false, features = ["json"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha2 = "=0.11.0"
+ratatui = { version = "=0.30.2", default-features = false, features = ["crossterm", "underline-color"] }
+unicode-width = "=0.2.2"
+# PTY runtime backend, temporarily retained under tuiscotti-runtime only (G1 swap later).
+portable-pty = "=0.9.0"
+alacritty_terminal = "=0.26.0"
+libc = "=0.2.189"
+tempfile = "=3.27.0"
 
-[lib]
-name = "tuisnap"
-path = "src/lib.rs"
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
 
-[features]
-default = ["pty"]
-# PTY runtime (`tui` module). Pure view tests build and run with
-# `--no-default-features`.
-pty = ["dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+unexpected_cfgs = "deny"
+unfulfilled_lint_expectations = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
 
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-anyhow = "1"
-insta = { version = "1.48", default-features = false, features = ["json"] }
-image = "0.25"
-image-compare = "0.5"
-fontdue = "0.9"
-base64 = "0.23"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.11"
-ratatui = { version = "0.30", default-features = false, features = ["crossterm", "underline-color"] }
-unicode-width = "0.2"
-portable-pty = { version = "0.9", optional = true }
-alacritty_terminal = { version = "0.26", optional = true }
-libc = { version = "0.2", optional = true }
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+too_many_lines = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+mem_forget = "deny"
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+let_underscore_future = "deny"
+let_underscore_must_use = "deny"
+undocumented_unsafe_blocks = "deny"
+allow_attributes_without_reason = "deny"
+allow_attributes = "warn"
 
-[dev-dependencies]
-ratatui = { version = "0.30", default-features = false, features = ["crossterm", "underline-color"] }
-crossterm = "0.29"
-tempfile = "3"
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"

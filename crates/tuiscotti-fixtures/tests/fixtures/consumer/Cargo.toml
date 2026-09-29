@@ -1,0 +1,11 @@
+[package]
+name = "tuisnap-consumer-proof"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+tuiscotti = { path = "../../../../tuiscotti", default-features = false }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }

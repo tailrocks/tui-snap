@@ -1,0 +1,30 @@
+[package]
+name = "tuiscotti-runtime"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["pty"]
+# PTY runtime (`tui` module). Pure view tests build and run with
+# `--no-default-features`.
+pty = ["dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
+
+[dependencies]
+tuiscotti-core = { path = "../tuiscotti-core" }
+tuiscotti-render = { path = "../tuiscotti-render" }
+tuiscotti-insta = { path = "../tuiscotti-insta" }
+base64.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+portable-pty = { workspace = true, optional = true }
+alacritty_terminal = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+
+[dev-dependencies]
+tuiscotti = { path = "../tuiscotti" }
+
+[lints]
+workspace = true

@@ -1,16 +1,17 @@
 /target/
-tests/fixtures/*/target/
+crates/tuiscotti-fixtures/tests/fixtures/*/target/
 .opencode/
 # Local visual evidence (regenerable): actuals, diffs, reports. Approved
 # frame.json + PNGs are committed and hashed (see docs/APPROVAL-BASELINE.md):
 # the C06 gate fails closed when an approved PNG is missing, so fresh
 # checkouts need them. Approved fidelity sidecars stay ignored — the gate
-# never reads them (they are regenerable renderer output; see src/snapshot.rs
-# check_with / candidate_problem, which only read actual sidecars).
-tests/visual/actual/
-tests/visual/diff/
-tests/visual/report.html
-tests/visual/approved/*.png.fidelity.json
+# never reads them (they are regenerable renderer output; see
+# crates/tuiscotti-runtime/src/snapshot.rs check_with / candidate_problem,
+# which only read actual sidecars).
+crates/tuiscotti-fixtures/tests/visual/actual/
+crates/tuiscotti-fixtures/tests/visual/diff/
+crates/tuiscotti-fixtures/tests/visual/report.html
+crates/tuiscotti-fixtures/tests/visual/approved/*.png.fidelity.json
 vendor/termlens/Cargo.lock
-tests/visual/report-media/
+crates/tuiscotti-fixtures/tests/visual/report-media/
 __pycache__/
