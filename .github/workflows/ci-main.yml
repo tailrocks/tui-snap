@@ -43,6 +43,7 @@ jobs:
       full_units: ${{ steps.plan.outputs.full_units }}
       plan_digest: ${{ steps.plan.outputs.plan_digest }}
       excluded: ${{ steps.plan.outputs.excluded }}
+      docs_matrix: ${{ steps.plan.outputs.docs_matrix }}
       rust_matrix: ${{ steps.plan.outputs.rust_matrix }}
       # Presence-only no-work marker: `planned_no_work` is `true` or absent,
       # never `false`. Consumers MUST branch
@@ -530,7 +531,7 @@ jobs:
       cargo_net_offline: true
       unit_platform: linux-x64
       unit_trust: untrusted-ok
-      unit_dependencies: rust-tuiscotti
+      unit_dependencies: "rust-tuiscotti,rust-tuiscotti-core,rust-tuiscotti-render"
       unit_admission: github-hosted
       validation_phases: "fmt,clippy,test,doctest"
   github-hosted-rust-tuiscotti-insta:
@@ -734,9 +735,9 @@ jobs:
       plan_digest: ${{ needs.plan.outputs.plan_digest }}
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
-      mise_tools: "aqua:nextest-rs/nextest/cargo-nextest"
+      mise_tools: "aqua:nextest-rs/nextest/cargo-nextest cargo:alint"
       mbx_enabled: true
-      mbx_compat: "0190d783ed5a"
+      mbx_compat: "4d0c83a96a28"
       mbx_dependency_files: |
         .cargo/**
         Cargo.lock
@@ -748,6 +749,9 @@ jobs:
         crates/xtask/examples/**
         crates/xtask/src/**
         crates/xtask/tests/**
+        crates/xtask/tests/enforcement/forbidden.py.txt
+        crates/xtask/tests/enforcement/member_no_inherit.toml.txt
+        crates/xtask/tests/enforcement/stray.rs.txt
         mise.lock
       cache_paths: |
         ~/.cargo/registry
@@ -762,11 +766,30 @@ jobs:
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
-      validation_phases: "fmt,clippy,test"
+      validation_phases: "fmt,clippy,test,doctest"
+  github-hosted-repo-shape:
+    name: "Documentation · Repo shape and line gates (alint) · github-hosted — repo-shape"
+    if: ${{ always() && needs.plan.result == 'success' && needs.policy.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"repo-shape"') && (true) }}
+    needs: [plan, policy]
+    uses: ./.github/workflows/ci-unit-docs.yml
+    with:
+      unit: repo-shape
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: "cargo:alint"
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_admission: github-hosted
   ci-required:
     name: ci-required
     if: ${{ always() }}
-    needs: [plan, policy, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask]
+    needs: [plan, policy, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask, github-hosted-repo-shape]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -851,7 +874,7 @@ jobs:
           SELECTED_UNITS: ${{ needs.plan.outputs.units }}
           PLAN_DIGEST: ${{ needs.plan.outputs.plan_digest }}
           EXCLUDED: ${{ needs.plan.outputs.excluded }}
-          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"}]"
+          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"},{\"job_id\":\"github-hosted-repo-shape\",\"provider\":\"github-hosted\",\"unit_id\":\"repo-shape\"}]"
           PROVIDER_ADMITTED_GITHUB_HOSTED: ${{ true }}
         shell: bash
         run: |
@@ -1094,6 +1117,29 @@ jobs:
               skipped) ;;
               success) echo "unexpected CI job github-hosted-rust-xtask succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
               *) echo "unexpected CI job github-hosted-rust-xtask ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "repo-shape" "github-hosted"; then
+            result="$(result_for_job github-hosted-repo-shape)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-repo-shape was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-repo-shape was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-repo-shape did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-repo-shape ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-repo-shape)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-repo-shape succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-repo-shape ran outside the expected set: $result" >&2; exit 1 ;;
             esac
           fi
   required:
