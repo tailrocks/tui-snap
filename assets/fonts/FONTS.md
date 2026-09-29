@@ -19,7 +19,7 @@ reference/override but is no longer the default profile font.
 ## Vendored fallback faces (per-glyph chain)
 
 Glyphs the primary family lacks are served per-glyph by pinned Noto subsets
-(`VENDORED_FALLBACK_FACES` in `src/profile.rs`), tried in this order after
+(`VENDORED_FALLBACK_FACES` in `crates/tuiscotti-render/src/profile/`), tried in this order after
 the primary styled + regular faces:
 
 | File | Source | Subset covers | Size |
@@ -33,10 +33,17 @@ when a `Renderer` loads the chain; a mismatch refuses to render. Fallback
 faces draw single glyphs in their own weight, centered and clipped inside
 the cell box the primary geometry pins — they never move the cell grid, and
 primary-covered frames render byte-identical with or without the chain
-(pinned by `tests/render.rs`).
+(pinned by `crates/tuiscotti/tests/render_qual.rs::fallback_never_shifts_the_grid`).
 
-Upstream sources are commit-pinned and sha256-verified in
-`tools/subset_fonts.py`:
+Committed bytes are hash-pinned in `crates/xtask/fonts.sha256` and
+verified with pure-Rust SHA-256 (no Python/fonttools):
+
+```text
+cargo xtask fonts           # verify every assets/fonts/*.ttf|*.otf (default)
+cargo xtask fonts record    # re-record hashes after a qualified byte change
+```
+
+Subset provenance (upstream sources the committed bytes were cut from):
 
 - `google/fonts@8b0a1d0f` `ofl/notosanssymbols/NotoSansSymbols[wght].ttf`
 - `google/fonts@7b6724ac` `ofl/notosanssymbols2/NotoSansSymbols2-Regular.ttf`
@@ -44,15 +51,10 @@ Upstream sources are commit-pinned and sha256-verified in
 
 ### Rebuilding / extending the subsets
 
-Needs `fonttools` (`pip install --user fonttools`). The script downloads the
-pinned upstreams, instantiates the Symbols variable font at wght=400,
-subsets with pyftsubset, asserts required codepoints survived, and prints
-the output hashes:
-
-```text
-python3 tools/subset_fonts.py           # rebuild assets/fonts/*-subset.*
-python3 tools/subset_fonts.py --check   # verify committed subsets (offline)
-```
+Needs `fonttools` (`pip install --user fonttools`). Instantiate the
+Symbols variable font at wght=400, subset with pyftsubset, assert
+required codepoints survived, then `cargo xtask fonts record` and
+update the in-code pins (see below):
 
 The exact pyftsubset invocation (same flags for all three):
 
@@ -63,10 +65,11 @@ pyftsubset <upstream> --output-file=<subset> --unicodes-file=<ranges> \
 ```
 
 To extend coverage (JIS X 0208 level-2 kanji, Hangul, more symbol blocks):
-widen the ranges in `tools/subset_fonts.py` (`SYMBOLS1_RANGES`,
-`SYMBOLS2_RANGES`, `cjk_unicodes()`), rerun, then update the
-`VENDORED_*_FONT_SHA256` pins in `src/profile.rs`, the literal pins in
-`tests/render.rs`, and the coverage table below. Mind repo size: a full
+widen the pyftsubset unicode ranges, rerun, then update the
+`VENDORED_*_FONT_SHA256` pins in `crates/tuiscotti-render/src/profile/`,
+re-record `crates/xtask/fonts.sha256` (`cargo xtask fonts record`),
+and update the coverage table below (pins are asserted by
+`crates/tuiscotti/tests/render_qual.rs`). Mind repo size: a full
 Noto Sans CJK face is ~16 MB — keep subsets to a few MB max.
 
 ## License (why vendoring is allowed)
@@ -87,12 +90,14 @@ The DejaVu file remains under the Bitstream Vera license
 (`LICENSE-DejaVuSansMono.txt`): redistribution allowed with the license
 text; do not use the names "Bitstream" or "Vera" for modified versions.
 
-The SHA-256 of the vendored regular face is pinned in code
-(`Profile::font_sha256`, asserted by
-`tests/render.rs::font_hash_pinned_and_documented`), and each fallback
-face's SHA-256 is pinned in `src/profile.rs` (asserted by
-`tests/render.rs::vendored_fallback_hashes_pinned_and_documented`). Any font
-change fails gates loudly instead of shifting pixels silently.
+The SHA-256 of each vendored face is pinned in code
+(`VENDORED_*_FONT_SHA256` in `crates/tuiscotti-render/src/profile/`,
+asserted by
+`crates/tuiscotti/tests/render_qual.rs::vendored_pins_match_vendored_bytes`),
+and each fallback face's SHA-256 travels with its bytes in
+`VENDORED_FALLBACK_FACES` (the strict constructor refuses to build on
+any mismatch). Any font change fails gates loudly instead of shifting
+pixels silently.
 
 ## Cell metrics (measured with fontdue, pinned in `Profile`)
 

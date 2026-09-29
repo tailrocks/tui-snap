@@ -109,6 +109,7 @@ Full grammar: [docs/CLI.md](docs/CLI.md) (transcribed from `--help`).
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — crates, dependency graph, data flow
 - [docs/API.md](docs/API.md) — public Rust API design and status labels
 - [docs/CLI.md](docs/CLI.md) — CLI reference (from the implemented Clap grammar)
+- [crates/tuiscotti-cli/SYNTAX.md](crates/tuiscotti-cli/SYNTAX.md) — Rust + CLI syntax matrix (every surface, one table)
 - [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) — snapshot/approval semantics
 - [docs/TESTING.md](docs/TESTING.md) — tests, fixtures, examples lane, CI wiring
 - [docs/COMPARISON.md](docs/COMPARISON.md) — vs tui-test, terminal-control, termlens

@@ -101,19 +101,7 @@ Every relative link in `README.md`, `CONTRIBUTING.md`, and
 `docs/*.md` must resolve to a file in the tree. Check:
 
 ```sh
-python3 - <<'EOF'
-import re, pathlib
-root = pathlib.Path('.')
-ok = True
-for md in [root/'README.md', root/'CONTRIBUTING.md', *sorted((root/'docs').glob('*.md'))]:
-    for m in re.finditer(r'\[[^\]]*\]\(([^)\"#]+)(?:#[^)\"]*)?\)', md.read_text()):
-        target = (m.group(1) or '').strip()
-        if not target or target.startswith(('http://', 'https://', 'mailto:')):
-            continue
-        if not (md.parent / target).exists():
-            print(f'{md}: BROKEN {target}'); ok = False
-raise SystemExit(0 if ok else 1)
-EOF
+cargo run -p xtask -- docs
 ```
 
 `readme_lock.rs` additionally mirrors every README fence and pins
