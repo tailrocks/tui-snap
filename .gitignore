@@ -15,3 +15,4 @@ crates/tuiscotti-fixtures/tests/visual/approved/*.png.fidelity.json
 vendor/termlens/Cargo.lock
 crates/tuiscotti-fixtures/tests/visual/report-media/
 __pycache__/
+.DS_Store
