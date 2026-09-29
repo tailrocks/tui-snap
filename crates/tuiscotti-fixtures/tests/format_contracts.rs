@@ -9,15 +9,22 @@
 #[path = "common/mod.rs"]
 mod common;
 
-use common::{menu_frame, renderer};
+#[path = "common/pure.rs"]
+mod pure;
+
+#[path = "common/capture.rs"]
+mod capture;
+
+use capture::renderer;
+use common::menu_frame;
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
 use tuiscotti_render::formats::capture_all;
 
 /// Capture every format of the menu demo in one bundle.
-fn menu_bundle() -> tuiscotti_render::formats::CaptureBundle {
+fn menu_bundle() -> anyhow::Result<tuiscotti_render::formats::CaptureBundle> {
     let frame = menu_frame(40, 10, Theme::Dark, Scenario::Demo);
-    capture_all(&mut renderer(), &frame, "menu demo").expect("capture")
+    Ok(capture_all(&mut renderer()?, &frame, "menu demo")?)
 }
 
 #[path = "format_contracts/text.rs"]

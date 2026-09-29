@@ -11,11 +11,11 @@ use tuiscotti::VENDORED_FACES;
 
 /// `(interior ink, unique_colors_in_full_cell)`. Hollow tofu is 2 colors
 /// (bg + solid outline); a real antialiased glyph is dozens.
-fn cell_stats(png: &[u8], x: u16, span_cells: u32) -> (usize, usize) {
-    let img = image::load_from_memory(png).unwrap().to_rgb8();
+fn cell_stats(png: &[u8], x: u16, span_cells: u32) -> Result<(usize, usize), image::ImageError> {
+    let img = image::load_from_memory(png)?.to_rgb8();
     let bg = image::Rgb([0u8, 0, 0]);
     let (cw, ch, pad, u) = (10u32, 21u32, 12u32, 2u32);
-    let pen = (pad + x as u32 * cw) * u;
+    let pen = (pad + u32::from(x) * cw) * u;
     let top = pad * u;
     let (span, height) = (span_cells * cw * u, ch * u);
     let mut n = 0;
@@ -32,7 +32,7 @@ fn cell_stats(png: &[u8], x: u16, span_cells: u32) -> (usize, usize) {
             }
         }
     }
-    (n, colors.len())
+    Ok((n, colors.len()))
 }
 
 #[test]
@@ -40,7 +40,8 @@ fn fallback_faces_render_the_previously_missing_set() {
     // The exact codepoints the consumer audit found rasterizing as tofu:
     // 東 京 ☕ ⚷ ◐ ★ (U+6771 U+4EAC U+2615 U+26B7 U+25D0 U+2605).
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ☕ ⚷ ◐ ★"), 30, 4, prov());
-    let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
+    let r =
+        tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).expect("render");
     assert!(
         r.fidelity.missing.is_empty(),
         "missing: {:?}",
@@ -78,7 +79,7 @@ fn fallback_faces_render_the_previously_missing_set() {
         (10, 1, "◐"),
         (12, 1, "★"),
     ] {
-        let (ink, ncolors) = cell_stats(&r.png, x, span);
+        let (ink, ncolors) = cell_stats(&r.png, x, span).expect("decode png");
         assert!(
             ink > 20,
             "{label} at cell {x} rendered as tofu or blank (ink={ink})"
@@ -90,15 +91,15 @@ fn fallback_faces_render_the_previously_missing_set() {
     }
     // Without the fallback chain the same frame is tofu + missing records,
     // and the pixels differ.
-    let mut bare =
-        tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[]).unwrap();
-    let tofu = bare.render(&frame).unwrap();
+    let mut bare = tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[])
+        .expect("renderer");
+    let tofu = bare.render(&frame).expect("render");
     assert_eq!(tofu.fidelity.missing.len(), 6);
     assert!(tofu.fidelity.approximate);
     assert!(tofu.fidelity.fallback_glyphs.is_empty());
     assert_ne!(tofu.png, r.png);
     for (x, span) in [(0u16, 2u32), (2, 2), (5, 2), (8, 1), (10, 1), (12, 1)] {
-        let (ink, ncolors) = cell_stats(&tofu.png, x, span);
+        let (ink, ncolors) = cell_stats(&tofu.png, x, span).expect("decode png");
         assert_eq!(ink, 0, "cell {x} must be hollow tofu");
         assert_eq!(
             ncolors, 2,
@@ -115,26 +116,27 @@ fn cjk_star_coffee_cells_are_not_hollow_tofu() {
     // contract those snapshots must meet after recapture.
     let frame =
         tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ★ ☕\u{fe0f}"), 20, 3, prov());
-    let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
+    let r =
+        tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).expect("render");
     assert!(
         r.fidelity.missing.is_empty(),
         "VS16 must not tofu: {:?}",
         r.fidelity.missing
     );
     for (x, span, label) in [(0u16, 2u32, "東"), (2, 2, "京"), (5, 1, "★"), (7, 2, "☕")] {
-        let (ink, ncolors) = cell_stats(&r.png, x, span);
+        let (ink, ncolors) = cell_stats(&r.png, x, span).expect("decode png");
         assert!(ink > 20, "{label} cell {x} near-empty ink={ink}");
         assert!(ncolors > 8, "{label} cell {x} {ncolors}-color tofu-like");
     }
     let html = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES)
-        .unwrap()
+        .expect("renderer")
         .render_html(&frame, "glyphs")
-        .unwrap();
+        .expect("render html");
     let body = html.split("<body>").nth(1).expect("body");
     let img = body.find("<img ").expect("primary img");
     let details = body.find("<details");
     assert!(
-        details.is_none() || img < details.unwrap(),
+        details.is_none() || img < details.expect("details index"),
         "authoritative PNG must be the primary visual, not hidden in details"
     );
     assert!(body[..img].contains("class=\"shot\""), "{body}");
@@ -146,18 +148,18 @@ fn fallback_render_is_byte_deterministic() {
     let render = || {
         let frame =
             tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ☕ ⚷ ◐ ★ ❤ ●"), 30, 4, prov());
-        tuiscotti::render::render_png(&frame, &profile(), &VENDORED_FACES).unwrap()
+        tuiscotti::render::render_png(&frame, &profile(), &VENDORED_FACES).expect("render")
     };
     assert_eq!(
         render(),
         render(),
         "same frame, fresh renderers: same bytes"
     );
-    let mut r = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES).unwrap();
+    let mut r = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES).expect("renderer");
     let frame =
         tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ☕ ⚷ ◐ ★ ❤ ●"), 30, 4, prov());
-    let a = r.render(&frame).unwrap().png;
-    let b = r.render(&frame).unwrap().png;
+    let a = r.render(&frame).expect("render").png;
+    let b = r.render(&frame).expect("render").png;
     assert_eq!(a, b, "warm cache: same bytes");
 }
 
@@ -202,8 +204,7 @@ fn fallback_hash_mismatch_refuses_to_render() {
         desc: "swapped bytes",
     };
     let err = tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[bad])
-        .err()
-        .expect("a hash mismatch must fail at construction");
+        .expect_err("a hash mismatch must fail at construction");
     assert!(err.to_string().contains("sha256 mismatch"), "{err}");
 }
 
@@ -217,8 +218,7 @@ fn unparsable_fallback_face_fails_loudly() {
         desc: "junk",
     };
     let err = tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[bad])
-        .err()
-        .expect("an unparsable fallback face must fail at construction");
+        .expect_err("an unparsable fallback face must fail at construction");
     assert!(err.to_string().contains("fallback face 'junk'"), "{err}");
 }
 
@@ -234,10 +234,10 @@ fn consumer_registered_fallback_face_serves_glyphs() {
         sha256: &sha,
         desc: "test DejaVuSansM Nerd Font Mono",
     };
-    let mut r =
-        tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[face]).unwrap();
+    let mut r = tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[face])
+        .expect("renderer");
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("◐"), 10, 3, prov());
-    let rendered = r.render(&frame).unwrap();
+    let rendered = r.render(&frame).expect("render");
     assert!(rendered.fidelity.missing.is_empty());
     assert_eq!(rendered.fidelity.fallback_glyphs.len(), 1);
     assert_eq!(
@@ -250,11 +250,11 @@ fn consumer_registered_fallback_face_serves_glyphs() {
 fn primary_covered_frames_are_byte_identical_with_and_without_fallbacks() {
     let frame =
         tuiscotti::ratatui::widget_frame(Paragraph::new("plain ╔═╗ ⠋ \u{f015} → ✓"), 30, 4, prov());
-    let mut with = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES).unwrap();
-    let mut without =
-        tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[]).unwrap();
-    let a = with.render(&frame).unwrap();
-    let b = without.render(&frame).unwrap();
+    let mut with = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES).expect("renderer");
+    let mut without = tuiscotti::render::Renderer::with_fallbacks(&profile(), &VENDORED_FACES, &[])
+        .expect("renderer");
+    let a = with.render(&frame).expect("render");
+    let b = without.render(&frame).expect("render");
     assert_eq!(
         a.png, b.png,
         "fallback chain must not move primary-covered pixels"
@@ -281,10 +281,12 @@ fn approved_pngs_are_exactly_what_the_current_renderer_emits() {
         "table-dark-120x40",
         "dialog-light-80x24",
     ] {
-        let text = std::fs::read_to_string(approved.join(format!("{name}.frame.json"))).unwrap();
-        let frame = tuiscotti::Frame::from_json(&text).unwrap();
-        let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
-        let committed = std::fs::read(approved.join(format!("{name}.png"))).unwrap();
+        let text = std::fs::read_to_string(approved.join(format!("{name}.frame.json")))
+            .expect("approved frame");
+        let frame = tuiscotti::Frame::from_json(&text).expect("parse frame");
+        let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES)
+            .expect("render");
+        let committed = std::fs::read(approved.join(format!("{name}.png"))).expect("approved png");
         assert_eq!(
             r.png, committed,
             "{name}: fresh render drifted from the approved PNG bytes"

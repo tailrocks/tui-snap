@@ -28,6 +28,10 @@ pub enum Scenario {
 
 impl Scenario {
     /// Parse a `--scenario` argument. Unknown values are an explicit error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the unknown value.
     pub fn parse(s: &str) -> Result<Self, String> {
         match s {
             "demo" => Ok(Scenario::Demo),
@@ -53,6 +57,10 @@ pub struct CommonArgs {
 
 /// Parse `argv` (without argv0). Unknown flags and missing values fail
 /// explicitly; binaries exit 2 with the message on stderr.
+///
+/// # Errors
+///
+/// Returns an error for unknown flags, missing values, or invalid values.
 pub fn parse_common(argv: &[String]) -> Result<CommonArgs, String> {
     let mut theme = Theme::Dark;
     let mut scenario = Scenario::Demo;
@@ -62,15 +70,15 @@ pub fn parse_common(argv: &[String]) -> Result<CommonArgs, String> {
     while i < argv.len() {
         match argv[i].as_str() {
             "--theme" => {
-                let v = value_of(&argv, &mut i, "--theme")?;
+                let v = value_of(argv, &mut i, "--theme")?;
                 theme = Theme::parse(&v)?;
             }
             "--scenario" => {
-                let v = value_of(&argv, &mut i, "--scenario")?;
+                let v = value_of(argv, &mut i, "--scenario")?;
                 scenario = Scenario::parse(&v)?;
             }
             "--frames" => {
-                let v = value_of(&argv, &mut i, "--frames")?;
+                let v = value_of(argv, &mut i, "--frames")?;
                 frames =
                     Some(v.parse::<u64>().map_err(|_| {
                         format!("--frames wants a non-negative integer, got {v:?}")
@@ -112,10 +120,15 @@ pub struct DriveOpts {
 /// them with `on_key` until it reports quit or the frame budget runs out.
 /// The terminal (raw mode, alternate screen, protocol modes) is always
 /// restored before returning.
+///
+/// # Errors
+///
+/// Returns an error when terminal setup, input polling, drawing, or terminal
+/// restore fails.
 pub fn drive<M, K>(
     mut model: M,
     opts: &DriveOpts,
-    render: impl Fn(&mut RFrame, &M),
+    render: impl Fn(&mut RFrame<'_>, &M),
     on_key: impl Fn(&mut M, &K) -> bool,
     map: impl Fn(Event) -> Option<K>,
 ) -> anyhow::Result<()> {
@@ -134,7 +147,7 @@ pub fn drive<M, K>(
 fn drive_inner<M, K>(
     model: &mut M,
     opts: &DriveOpts,
-    render: &impl Fn(&mut RFrame, &M),
+    render: &impl Fn(&mut RFrame<'_>, &M),
     on_key: &impl Fn(&mut M, &K) -> bool,
     map: &impl Fn(Event) -> Option<K>,
 ) -> anyhow::Result<()> {

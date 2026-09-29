@@ -1,7 +1,7 @@
 //! Interaction contracts: real PTY journeys plus piped projections.
 //!
 //! The `*_fixture` binaries (built once by the outer build) are resolved
-//! authoritatively ([`common::fixture_bin`]: runtime env, else the
+//! authoritatively ([`live::fixture_bin`]: runtime env, else the
 //! compile-time `CARGO_BIN_EXE_<name>` — no probing, no nested cargo) and
 //! driven over a real PTY through the public `tuiscotti` API. Live screens
 //! project through the same six formats as pure views; piped `--print` /
@@ -12,6 +12,12 @@
 
 #[path = "common/mod.rs"]
 mod common;
+
+#[path = "common/capture.rs"]
+mod capture;
+
+#[path = "common/live.rs"]
+mod live;
 
 use std::time::{Duration, Instant};
 use tuiscotti::locate::Locator;
@@ -25,19 +31,18 @@ fn deadline(secs: u64) -> Instant {
 }
 
 /// Spawn a fixture binary at `cols`×`rows` with `--theme dark`.
-fn spawn_fixture(name: &str, cols: u16, rows: u16) -> tuiscotti::tui::Session {
-    let bin = common::fixture_bin(name);
+fn spawn_fixture(name: &str, cols: u16, rows: u16) -> anyhow::Result<tuiscotti::tui::Session> {
+    let bin = live::fixture_bin(name)?;
     assert!(
         bin.is_file(),
         "authoritative binary present: {}",
         bin.display()
     );
-    Tui::new([bin.to_string_lossy().into_owned()])
+    Ok(Tui::new([bin.to_string_lossy().into_owned()])
         .arg("--theme")
         .arg("dark")
         .size(cols, rows)
-        .spawn()
-        .expect("spawn fixture")
+        .spawn()?)
 }
 
 /// Live [`Screen`](tuiscotti::Screen) → canonical frame under the live profile name.
@@ -46,26 +51,27 @@ fn live_frame(screen: &tuiscotti::Screen) -> tuiscotti::Frame {
 }
 
 /// Assert every format validator passes on a live capture bundle.
-fn assert_live_bundle(bundle: &tuiscotti_render::formats::CaptureBundle) {
+fn assert_live_bundle(bundle: &tuiscotti_render::formats::CaptureBundle) -> anyhow::Result<()> {
     use tuiscotti_render::formats::{
         assert_no_escapes, assert_normalized_sgr, assert_opaque_rgb, assert_seven_bit,
         assert_static_offline,
     };
-    assert_seven_bit(&bundle.ascii.text).expect("live ASCII 7-bit");
-    assert_no_escapes(&bundle.txt).expect("live TXT plain");
-    assert_normalized_sgr(&bundle.ansi).expect("live ANSI normalized");
-    assert_opaque_rgb(&bundle.png).expect("live PNG opaque");
-    assert_static_offline(&bundle.html).expect("live HTML static");
+    assert_seven_bit(&bundle.ascii.text)?;
+    assert_no_escapes(&bundle.txt)?;
+    assert_normalized_sgr(&bundle.ansi)?;
+    assert_opaque_rgb(&bundle.png)?;
+    assert_static_offline(&bundle.html)?;
     assert!(
         !bundle.generation.id.is_empty(),
         "live generation identified"
     );
+    Ok(())
 }
 
 #[test]
 fn fixture_binaries_resolve_authoritatively() {
     for name in ["menu_fixture", "streams_fixture", "protocol_fixture"] {
-        let bin = common::fixture_bin(name);
+        let bin = live::fixture_bin(name).expect("fixture binary resolves");
         assert!(bin.is_file(), "{name} resolves to a built file");
         // The resolved binary is ours and fresh: unknown flags exit 2.
         let out = tuiscotti::command::Command::new(&bin)
@@ -77,7 +83,7 @@ fn fixture_binaries_resolve_authoritatively() {
 
 #[test]
 fn menu_journey_toggle_error_and_quit() {
-    let session = spawn_fixture("menu_fixture", 48, 12);
+    let session = spawn_fixture("menu_fixture", 48, 12).expect("spawn fixture");
     let pid = session.pid().expect("child pid");
     let mut observe = || session.observe_now().expect("observe");
     // Content waits, not stability waits: a slow first draw is quiet but blank.
@@ -133,12 +139,12 @@ fn menu_journey_toggle_error_and_quit() {
         assert!(live_txt.contains(name), "live renders {name}");
     }
     // Live capture exports every format plus one stable generation.
-    let mut renderer = common::renderer();
+    let mut renderer = capture::renderer().expect("renderer");
     let profile_name = renderer.profile().name.clone();
     let bundle =
         tuiscotti_render::formats::capture_all(&mut renderer, &live_frame(&mid), "menu live")
             .expect("capture");
-    assert_live_bundle(&bundle);
+    assert_live_bundle(&bundle).expect("live bundle valid");
     let again = session.snapshot().expect("snapshot");
     let gen2 = tuiscotti_render::formats::generation_for(&live_frame(&again), &profile_name);
     assert_eq!(bundle.generation, gen2, "stable screen, stable generation");
@@ -156,7 +162,7 @@ fn menu_journey_toggle_error_and_quit() {
 
 #[test]
 fn streams_journey_scroll_resize_and_quit() {
-    let session = spawn_fixture("streams_fixture", 60, 12);
+    let session = spawn_fixture("streams_fixture", 60, 12).expect("spawn fixture");
     let pid = session.pid().expect("child pid");
     let mut observe = || session.observe_now().expect("observe");
     Locator::text("Streams")
@@ -181,10 +187,13 @@ fn streams_journey_scroll_resize_and_quit() {
     assert_eq!((resized.screen.cols(), resized.screen.rows()), (80, 20));
     let frame = live_frame(&resized.screen);
     frame.validate().expect("resized frame valid");
-    let bundle =
-        tuiscotti_render::formats::capture_all(&mut common::renderer(), &frame, "streams live")
-            .expect("capture");
-    assert_live_bundle(&bundle);
+    let bundle = tuiscotti_render::formats::capture_all(
+        &mut capture::renderer().expect("renderer"),
+        &frame,
+        "streams live",
+    )
+    .expect("capture");
+    assert_live_bundle(&bundle).expect("live bundle valid");
     assert!(bundle.txt.contains("Streams"), "content survives resize");
     session.press("q").expect("q");
     session
@@ -199,14 +208,15 @@ fn streams_journey_scroll_resize_and_quit() {
 
 #[test]
 fn protocol_journey_paste_focus_resize_and_quit() {
-    let session = spawn_fixture("protocol_fixture", 50, 12);
+    let session = spawn_fixture("protocol_fixture", 50, 12).expect("spawn fixture");
     let pid = session.pid().expect("child pid");
     let mut observe = || session.observe_now().expect("observe");
     Locator::text("paste=on")
         .expect_visible(&mut observe, Duration::from_secs(15))
         .expect("draws");
     // Pastes from the committed data file land in the echo area verbatim.
-    let raw = String::from_utf8(common::read_data("protocol-pastes.txt")).expect("utf8");
+    let raw = String::from_utf8(common::read_data("protocol-pastes.txt").expect("fixture data"))
+        .expect("utf8");
     let payloads: Vec<&str> = raw
         .lines()
         .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
@@ -237,10 +247,13 @@ fn protocol_journey_paste_focus_resize_and_quit() {
         .expect("resize logged");
     let shot = session.snapshot().expect("snapshot");
     let frame = live_frame(&shot);
-    let bundle =
-        tuiscotti_render::formats::capture_all(&mut common::renderer(), &frame, "protocol live")
-            .expect("capture");
-    assert_live_bundle(&bundle);
+    let bundle = tuiscotti_render::formats::capture_all(
+        &mut capture::renderer().expect("renderer"),
+        &frame,
+        "protocol live",
+    )
+    .expect("capture");
+    assert_live_bundle(&bundle).expect("live bundle valid");
     session.press("q").expect("q");
     session
         .expect_exit(deadline(10), &CancelToken::new())
@@ -259,9 +272,11 @@ fn piped_print_projections_are_clean() {
         ("streams_fixture", "streams_fixture summary"),
         ("protocol_fixture", "protocol_fixture summary"),
     ] {
-        let out = tuiscotti::command::Command::new(common::fixture_bin(name))
-            .arg("--print")
-            .run();
+        let out = tuiscotti::command::Command::new(
+            live::fixture_bin(name).expect("fixture binary resolves"),
+        )
+        .arg("--print")
+        .run();
         assert!(out.success(), "{name} --print exits 0: {out:?}");
         let pipe = tuiscotti_render::formats::pipe_projection(&out.stdout, 65536).expect("project");
         assert!(!pipe.truncated, "{name} fits the bound");
@@ -270,9 +285,11 @@ fn piped_print_projections_are_clean() {
         assert!(pipe.text.contains(marker));
     }
     // Menu content rides the pipe: every committed item label present.
-    let out = tuiscotti::command::Command::new(common::fixture_bin("menu_fixture"))
-        .arg("--print")
-        .run();
+    let out = tuiscotti::command::Command::new(
+        live::fixture_bin("menu_fixture").expect("fixture binary resolves"),
+    )
+    .arg("--print")
+    .run();
     let pipe = tuiscotti_render::formats::pipe_projection(&out.stdout, 65536).expect("project");
     for label in [
         "autosave",
@@ -288,9 +305,11 @@ fn piped_print_projections_are_clean() {
 #[test]
 fn piped_raw_invalid_utf8_is_accounted() {
     let run = || {
-        tuiscotti::command::Command::new(common::fixture_bin("streams_fixture"))
-            .arg("--emit-raw")
-            .run()
+        tuiscotti::command::Command::new(
+            live::fixture_bin("streams_fixture").expect("fixture binary resolves"),
+        )
+        .arg("--emit-raw")
+        .run()
     };
     let first = run();
     assert!(first.success());
@@ -309,11 +328,11 @@ fn piped_raw_invalid_utf8_is_accounted() {
 
 #[test]
 fn missing_and_corrupt_approvals_are_explicit() {
-    let scratch = common::scratch_dir("approvals");
+    let scratch = live::scratch_dir("approvals").expect("scratch dir");
     // Missing approval: an explicit IO error, never a panic or a pass.
     assert!(std::fs::read(scratch.join("no-such-baseline.txt")).is_err());
     // Positive control: a faithful copy matches byte for byte.
-    let expected = common::read_expected("menu-demo-40x10.txt");
+    let expected = capture::read_expected("menu-demo-40x10.txt").expect("committed baseline");
     std::fs::write(scratch.join("menu-demo-40x10.txt"), &expected).expect("stage");
     let staged = std::fs::read_to_string(scratch.join("menu-demo-40x10.txt")).expect("read");
     assert_eq!(staged, expected);

@@ -1,7 +1,9 @@
 //! ASCII, TXT, ANSI projections (split from `format_contracts.rs`; shared helpers live in the root).
 
-use super::common::{self, menu_frame, protocol_frame, renderer, streams_frame};
+use super::capture::{self as cap, renderer};
+use super::common::{self, menu_frame, streams_frame};
 use super::menu_bundle;
+use super::pure::protocol_frame;
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
 use tuiscotti_render::formats::{
@@ -30,7 +32,7 @@ fn ascii_is_seven_bit_with_exact_substitution_accounting() {
     assert_eq!(ascii.text.lines().count(), 10);
     assert_eq!(
         ascii.text,
-        common::read_expected("menu-demo-40x10.ascii.txt")
+        cap::read_expected("menu-demo-40x10.ascii.txt").expect("committed baseline")
     );
 }
 
@@ -77,13 +79,22 @@ fn ascii_reports_wide_and_combining_loss_per_cell() {
 fn txt_is_plain_unicode_matching_baselines() {
     let menu = txt_projection(&menu_frame(40, 10, Theme::Dark, Scenario::Demo));
     assert_no_escapes(&menu).expect("no escapes");
-    assert_eq!(menu, common::read_expected("menu-demo-40x10.txt"));
+    assert_eq!(
+        menu,
+        cap::read_expected("menu-demo-40x10.txt").expect("committed baseline")
+    );
     let streams = txt_projection(&streams_frame(60, 12, Theme::Dark, false));
     assert_no_escapes(&streams).expect("no escapes");
-    assert_eq!(streams, common::read_expected("streams-demo-60x12.txt"));
+    assert_eq!(
+        streams,
+        cap::read_expected("streams-demo-60x12.txt").expect("committed baseline")
+    );
     let protocol = txt_projection(&protocol_frame(50, 12, Theme::Dark, false));
     assert_no_escapes(&protocol).expect("no escapes");
-    assert_eq!(protocol, common::read_expected("protocol-demo-50x12.txt"));
+    assert_eq!(
+        protocol,
+        cap::read_expected("protocol-demo-50x12.txt").expect("committed baseline")
+    );
 }
 
 #[test]
@@ -102,7 +113,7 @@ fn txt_whitespace_policy_trims_tails_keeps_interior() {
 
 #[test]
 fn ansi_is_normalized_not_raw_transcript() {
-    let bundle = menu_bundle();
+    let bundle = menu_bundle().expect("capture bundle");
     assert_normalized_sgr(&bundle.ansi).expect("normalized SGR only");
     // Content rides along; style changes the bytes.
     assert!(bundle.ansi.contains("autosave"));
@@ -128,8 +139,9 @@ fn ansi_matches_committed_approvals_for_all_views() {
             protocol_frame(50, 12, Theme::Dark, false),
         ),
     ] {
-        let bundle = capture_all(&mut renderer(), &frame, name).expect("capture");
-        let approved = common::read_expected(&format!("{name}.ansi"));
+        let bundle =
+            capture_all(&mut renderer().expect("renderer"), &frame, name).expect("capture");
+        let approved = cap::read_expected(&format!("{name}.ansi")).expect("committed baseline");
         assert_normalized_sgr(&approved).expect("committed ANSI stays normalized");
         assert_eq!(bundle.ansi, approved, "{name}: ANSI drifted");
     }

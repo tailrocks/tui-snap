@@ -13,24 +13,35 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Ta
 /// Which screen the app shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
+    /// Title bar plus selectable row list.
     Home,
+    /// Identifier/value grid with one reversed selection row.
     Table,
+    /// Home beneath a centered confirmation popup.
     Dialog,
+    /// Unicode coverage sampler plus a hardware cursor.
     Glyphs,
 }
 
 /// Fixture model: everything the view reads. Tests construct this directly.
 #[derive(Debug, Clone)]
 pub struct Model {
+    /// Which screen [`render`](crate::views::matrix::render) shows.
     pub screen: Screen,
+    /// Counter shown in the home title bar.
     pub count: i32,
+    /// Selected row index in the home list and table.
     pub selected: usize,
+    /// Dark theme when true, light theme otherwise.
     pub dark: bool,
+    /// Input line shown on the glyphs screen.
     pub input: String,
+    /// Show the end-of-input cursor glyph when true.
     pub cursor_at_end: bool,
 }
 
 impl Model {
+    /// Build a deterministic model for `screen` with the dark or light theme.
     #[must_use]
     pub fn new(screen: Screen, dark: bool) -> Self {
         Self {
@@ -43,6 +54,8 @@ impl Model {
         }
     }
 
+    /// Theme background color.
+    #[must_use]
     pub fn bg(&self) -> Color {
         if self.dark {
             Color::Black
@@ -51,6 +64,8 @@ impl Model {
         }
     }
 
+    /// Theme foreground color.
+    #[must_use]
     pub fn fg(&self) -> Color {
         if self.dark { Color::Gray } else { Color::Black }
     }
@@ -58,7 +73,7 @@ impl Model {
 
 /// Render one matrix screen. The [`Model::screen`] selects the screen; every
 /// screen paints the theme background first.
-pub fn render(f: &mut RFrame, model: &Model) {
+pub fn render(f: &mut RFrame<'_>, model: &Model) {
     let area = f.area();
     let bg_block = Block::default().style(Style::default().bg(model.bg()).fg(model.fg()));
     f.render_widget(bg_block, area);
@@ -71,7 +86,7 @@ pub fn render(f: &mut RFrame, model: &Model) {
 }
 
 /// Home screen: title bar plus a selectable row list.
-pub fn render_home(f: &mut RFrame, model: &Model, area: Rect) {
+pub fn render_home(f: &mut RFrame<'_>, model: &Model, area: Rect) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -85,7 +100,7 @@ pub fn render_home(f: &mut RFrame, model: &Model, area: Rect) {
     ]))
     .block(Block::default().borders(Borders::ALL).title("Home"));
     f.render_widget(title, rows[0]);
-    let items: Vec<ListItem> = (0..5)
+    let items: Vec<ListItem<'_>> = (0..5)
         .map(|i| {
             let style = if i == model.selected {
                 Style::default()
@@ -103,8 +118,8 @@ pub fn render_home(f: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Table screen: id/value grid with one reversed selection row.
-pub fn render_table(f: &mut RFrame, model: &Model, area: Rect) {
-    let rows: Vec<Row> = (0..8)
+pub fn render_table(f: &mut RFrame<'_>, model: &Model, area: Rect) {
+    let rows: Vec<Row<'_>> = (0..8)
         .map(|i| {
             let mut row = Row::new(vec![format!("id-{i}"), format!("value {}", i * 7)]);
             if i == model.selected {
@@ -134,7 +149,7 @@ fn centered(area: Rect, w: u16, h: u16) -> Rect {
 }
 
 /// Dialog screen: home beneath a centered confirmation popup.
-pub fn render_dialog(f: &mut RFrame, model: &Model, area: Rect) {
+pub fn render_dialog(f: &mut RFrame<'_>, model: &Model, area: Rect) {
     render_home(f, model, area);
     let popup = centered(area, 40, 8);
     f.render_widget(Clear, popup);
@@ -155,7 +170,7 @@ pub fn render_dialog(f: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Glyphs screen: Unicode coverage sampler plus a hardware cursor.
-pub fn render_glyphs(f: &mut RFrame, model: &Model, area: Rect) {
+pub fn render_glyphs(f: &mut RFrame<'_>, model: &Model, area: Rect) {
     let lines = vec![
         Line::from("Box: ╔═╗║╚═╝ ┌─┐│└─┘ ├┤┬┴┼"),
         Line::from("Blocks: █▓▒░ ▀▄■□▪▫"),
@@ -176,7 +191,8 @@ pub fn render_glyphs(f: &mut RFrame, model: &Model, area: Rect) {
     f.render_widget(p, area);
     if model.screen == Screen::Glyphs {
         // Real hardware cursor at end of the input line (last row, col 8+len).
-        let cx = 8u16.saturating_add(model.input.len() as u16);
+        let input_cols = u16::try_from(model.input.len()).unwrap_or(u16::MAX);
+        let cx = 8u16.saturating_add(input_cols);
         let cy = area.y + 8;
         f.set_cursor_position((cx.min(area.right().saturating_sub(1)), cy));
     }

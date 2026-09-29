@@ -45,6 +45,53 @@ fn menu_script() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/journey/menu.sh")
 }
 
+/// Spawn `/bin/sh` on the committed menu fixture; asserts the script ships
+/// and records the child pid in the journal.
+fn spawn_menu(journal: &mut Journal) -> anyhow::Result<(tuiscotti::tui::Session, u32)> {
+    let script = menu_script();
+    assert!(
+        script.is_file(),
+        "fixture menu script: {}",
+        script.display()
+    );
+    let session = Tui::new(["/bin/sh", &script.to_string_lossy()])
+        .size(48, 12)
+        .spawn()?;
+    let pid = session.pid().ok_or_else(|| anyhow::anyhow!("child pid"))?;
+    journal.append("spawned", &format!("pid {pid}"))?;
+    Ok((session, pid))
+}
+
+/// Drive Down/Space/Down/Space through the live menu: pins both toggles plus
+/// row identities, records navigation in the journal, and returns the
+/// mid-journey observation.
+fn drive_toggles(
+    session: &tuiscotti::tui::Session,
+    observe: &mut impl FnMut() -> tuiscotti::Observation,
+    journal: &mut Journal,
+) -> anyhow::Result<tuiscotti::Observation> {
+    session.press("Down")?;
+    session.wait_stable(deadline(10), &CancelToken::new())?;
+    session.press("Space")?;
+    Locator::text("[x]").expect_count(observe, 1, Duration::from_secs(10))?;
+    session.press("Down")?;
+    session.wait_stable(deadline(10), &CancelToken::new())?;
+    session.press("Space")?;
+    let checked = Locator::text("[x]").expect_count(observe, 2, Duration::from_secs(10))?;
+    assert_eq!(checked.len(), 2);
+    let unchecked = Locator::text("[ ]").expect_count(observe, 1, Duration::from_secs(10))?;
+    assert_eq!(unchecked.len(), 1);
+    // Row identities survive the toggles: each name still unique on screen.
+    let mid_obs = session.observe_now()?;
+    for name in ["autosave", "line_numbers", "word_wrap"] {
+        Locator::text(name)
+            .resolve_unique(&mid_obs.screen, mid_obs.revision)
+            .map_err(|e| anyhow::anyhow!("row {name:?} unique: {e}"))?;
+    }
+    journal.append("navigated", "toggled line_numbers + word_wrap")?;
+    Ok(mid_obs)
+}
+
 #[test]
 fn settings_navigation() {
     let policy = policy();
@@ -54,21 +101,7 @@ fn settings_navigation() {
         .append("start", "settings-journey")
         .expect("journal start");
 
-    let script = menu_script();
-    assert!(
-        script.is_file(),
-        "fixture menu script: {}",
-        script.display()
-    );
-
-    let session = Tui::new(["/bin/sh", &script.to_string_lossy()])
-        .size(48, 12)
-        .spawn()
-        .expect("spawn menu fixture");
-    let pid = session.pid().expect("child pid");
-    journal
-        .append("spawned", &format!("pid {pid}"))
-        .expect("journal spawned");
+    let (session, pid) = spawn_menu(&mut journal).expect("spawn menu fixture");
 
     // Initial grid: title + 3 unchecked rows, selection on row 0.
     let initial = session
@@ -94,37 +127,7 @@ fn settings_navigation() {
 
     // Down/Space/Down/Space: toggle rows 1 and 2 (selection ends on row 2).
     let mut observe = || session.observe_now().expect("observe");
-    session.press("Down").expect("send Down");
-    session
-        .wait_stable(deadline(10), &CancelToken::new())
-        .expect("settle after Down");
-    session.press("Space").expect("send Space");
-    Locator::text("[x]")
-        .expect_count(&mut observe, 1, Duration::from_secs(10))
-        .expect("first toggle visible");
-    session.press("Down").expect("send Down");
-    session
-        .wait_stable(deadline(10), &CancelToken::new())
-        .expect("settle after Down");
-    session.press("Space").expect("send Space");
-    let checked = Locator::text("[x]")
-        .expect_count(&mut observe, 2, Duration::from_secs(10))
-        .expect("both toggles visible");
-    assert_eq!(checked.len(), 2);
-    let unchecked = Locator::text("[ ]")
-        .expect_count(&mut observe, 1, Duration::from_secs(10))
-        .expect("one row left unchecked");
-    assert_eq!(unchecked.len(), 1);
-    // Row identities survive the toggles: each name still unique on screen.
-    let mid_obs = session.observe_now().expect("observe mid");
-    for name in ["autosave", "line_numbers", "word_wrap"] {
-        Locator::text(name)
-            .resolve_unique(&mid_obs.screen, mid_obs.revision)
-            .unwrap_or_else(|e| panic!("row {name:?} unique: {e}"));
-    }
-    journal
-        .append("navigated", "toggled line_numbers + word_wrap")
-        .expect("journal");
+    let mid_obs = drive_toggles(&session, &mut observe, &mut journal).expect("drive toggles");
 
     tuiscotti::assert_screenshot!("journey__settings_mid", &mid_obs.screen, &policy);
     journal.append("snapshotted", "mid").expect("journal");

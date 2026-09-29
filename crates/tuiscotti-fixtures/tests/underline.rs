@@ -25,12 +25,20 @@ fn set_ul(cell: &mut Cell, style: UnderlineStyle, color: Color) {
     cell.underline_color = color;
 }
 
-fn screen_from(mut cells: Vec<Cell>, cols: u16, rows: u16) -> Screen {
-    for (i, c) in cells.iter_mut().enumerate() {
-        c.x = (i % cols as usize) as u16;
-        c.y = (i / cols as usize) as u16;
+fn screen_from(mut cells: Vec<Cell>, cols: u16, rows: u16) -> anyhow::Result<Screen> {
+    let stride = usize::from(cols);
+    for (i, cell) in cells.iter_mut().enumerate() {
+        cell.x = u16::try_from(i % stride).map_err(|_| anyhow::anyhow!("cell x exceeds u16"))?;
+        cell.y = u16::try_from(i / stride).map_err(|_| anyhow::anyhow!("cell y exceeds u16"))?;
     }
-    Screen::validate(cols, rows, 0, 0, cells, tuiscotti::frame::Cursor::default()).unwrap()
+    Ok(Screen::validate(
+        cols,
+        rows,
+        0,
+        0,
+        cells,
+        tuiscotti::frame::Cursor::default(),
+    )?)
 }
 
 fn blank_row(cols: u16) -> Vec<Cell> {
@@ -47,17 +55,16 @@ fn sgr_underline_styles_parse_to_model() {
     use tuiscotti::tui_shell::replay_bytes;
     // 4:2 double, 4:3 curly, 4:4 dotted, 4:5 dashed, 4 single, 24 cancel.
     let out = b"\x1b[4:2mA\x1b[4:3mB\x1b[4:4mC\x1b[4:5mD\x1b[4mE\x1b[24mF";
-    let replayed = replay_bytes(out, 6, 1).unwrap();
-    let got: Vec<UnderlineStyle> = (0..6)
-        .map(|x| {
-            replayed
-                .screen
-                .get(x, 0)
-                .unwrap()
-                .mods
-                .effective_underline_style()
-        })
-        .collect();
+    let replayed = replay_bytes(out, 6, 1).expect("replay");
+    let style = |x| {
+        replayed
+            .screen
+            .get(x, 0)
+            .expect("replay cell")
+            .mods
+            .effective_underline_style()
+    };
+    let got: Vec<UnderlineStyle> = (0..6).map(style).collect();
     assert_eq!(
         got,
         vec![
@@ -71,7 +78,7 @@ fn sgr_underline_styles_parse_to_model() {
     );
     // Producer invariant: bool agrees with the style on every cell.
     for x in 0..6 {
-        let m = replayed.screen.get(x, 0).unwrap().mods;
+        let m = replayed.screen.get(x, 0).expect("replay cell").mods;
         assert_eq!(m.underline, m.underline_style.is_some(), "cell {x}");
     }
 }
@@ -81,10 +88,15 @@ fn sgr_underline_styles_parse_to_model() {
 fn sgr_underline_color_forms_parse_to_model() {
     use tuiscotti::tui_shell::replay_bytes;
     let out = b"\x1b[58;5;9mA\x1b[58;2;1;2;3mB\x1b[58:5:4mC\x1b[59mD";
-    let replayed = replay_bytes(out, 4, 1).unwrap();
-    let got: Vec<Color> = (0..4)
-        .map(|x| replayed.screen.get(x, 0).unwrap().underline_color)
-        .collect();
+    let replayed = replay_bytes(out, 4, 1).expect("replay");
+    let color = |x| {
+        replayed
+            .screen
+            .get(x, 0)
+            .expect("replay cell")
+            .underline_color
+    };
+    let got: Vec<Color> = (0..4).map(color).collect();
     assert_eq!(
         got,
         vec![
@@ -101,19 +113,19 @@ fn sgr_underline_color_forms_parse_to_model() {
 fn sgr_cancel_and_reset_clear_style_and_color() {
     use tuiscotti::tui_shell::replay_bytes;
     // 4:0 cancels the style but keeps the color; SGR 0 clears both.
-    let replayed = replay_bytes(b"\x1b[4:2m\x1b[58;5;9mA\x1b[4:0mB\x1b[0mC", 3, 1).unwrap();
-    let s = &replayed.screen;
-    let m0 = s.get(0, 0).unwrap().mods;
+    let replayed = replay_bytes(b"\x1b[4:2m\x1b[58;5;9mA\x1b[4:0mB\x1b[0mC", 3, 1).expect("replay");
+    let cell = |x| replayed.screen.get(x, 0).expect("replay cell");
+    let m0 = cell(0).mods;
     assert_eq!(m0.effective_underline_style(), UnderlineStyle::Double);
     assert!(m0.underline);
-    assert_eq!(s.get(0, 0).unwrap().underline_color, Color::Indexed(9));
-    let m1 = s.get(1, 0).unwrap().mods;
+    assert_eq!(cell(0).underline_color, Color::Indexed(9));
+    let m1 = cell(1).mods;
     assert_eq!(m1.effective_underline_style(), UnderlineStyle::None);
     assert!(!m1.underline);
-    assert_eq!(s.get(1, 0).unwrap().underline_color, Color::Indexed(9));
-    let m2 = s.get(2, 0).unwrap().mods;
+    assert_eq!(cell(1).underline_color, Color::Indexed(9));
+    let m2 = cell(2).mods;
     assert_eq!(m2.effective_underline_style(), UnderlineStyle::None);
-    assert_eq!(s.get(2, 0).unwrap().underline_color, Color::Default);
+    assert_eq!(cell(2).underline_color, Color::Default);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,18 +140,21 @@ fn ratatui_underlined_maps_to_single_with_color() {
     use tuiscotti::ratatui::{EdgePolicy, screen_from_buffer};
 
     let mut buf = Buffer::empty(Rect::new(0, 0, 2, 1));
-    buf.cell_mut((0, 0)).unwrap().set_symbol("A").set_style(
-        Style::default()
-            .add_modifier(Modifier::UNDERLINED)
-            .underline_color(RColor::Red),
-    );
-    buf.cell_mut((1, 0)).unwrap().set_symbol("B");
-    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).unwrap();
-    let a = cap.screen.get(0, 0).unwrap();
+    buf.cell_mut((0, 0))
+        .expect("buffer cell")
+        .set_symbol("A")
+        .set_style(
+            Style::default()
+                .add_modifier(Modifier::UNDERLINED)
+                .underline_color(RColor::Red),
+        );
+    buf.cell_mut((1, 0)).expect("buffer cell").set_symbol("B");
+    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).expect("capture");
+    let a = cap.screen.get(0, 0).expect("captured cell");
     assert!(a.mods.underline);
     assert_eq!(a.mods.effective_underline_style(), UnderlineStyle::Single);
     assert_eq!(a.underline_color, Color::Indexed(1));
-    let b = cap.screen.get(1, 0).unwrap();
+    let b = cap.screen.get(1, 0).expect("captured cell");
     assert!(!b.mods.underline);
     assert_eq!(b.mods.effective_underline_style(), UnderlineStyle::None);
     assert_eq!(b.underline_color, Color::Default);
@@ -154,7 +169,7 @@ fn canonical_text_carries_style_and_color_sparsely() {
     let mut cells = blank_row(2);
     cells[0].symbol = "A".to_string();
     set_ul(&mut cells[0], UnderlineStyle::Double, Color::Indexed(9));
-    let text = insta_string(&screen_from(cells, 2, 1));
+    let text = insta_string(&screen_from(cells, 2, 1).expect("valid screen"));
     assert!(
         text.contains("mods=double-underline uc=index=9"),
         "styled cell must carry style + color:\n{text}"
@@ -165,7 +180,7 @@ fn canonical_text_carries_style_and_color_sparsely() {
         "default cell line must be unchanged:\n{text}"
     );
 
-    let plain = insta_string(&screen_from(blank_row(2), 2, 1));
+    let plain = insta_string(&screen_from(blank_row(2), 2, 1).expect("valid screen"));
     assert!(
         !plain.contains("uc="),
         "no color keys when default:\n{plain}"
@@ -185,7 +200,7 @@ fn canonical_json_carries_style_and_color_sparsely() {
         UnderlineStyle::Curly,
         Color::Rgb(Rgb::new(1, 2, 3)),
     );
-    let v = insta_value(&screen_from(cells, 2, 1));
+    let v = insta_value(&screen_from(cells, 2, 1).expect("valid screen"));
     assert_eq!(v["cells"][0]["mods"]["underline"], serde_json::json!(true));
     assert_eq!(
         v["cells"][0]["mods"]["underline_style"],
@@ -209,7 +224,7 @@ fn canonical_json_carries_style_and_color_sparsely() {
 fn assert_helper_accepts_exact_match() {
     let mut cells = blank_row(1);
     set_ul(&mut cells[0], UnderlineStyle::Dotted, Color::Indexed(4));
-    let screen = screen_from(cells, 1, 1);
+    let screen = screen_from(cells, 1, 1).expect("valid screen");
     assert_underline_at(&screen, 0, 0, UnderlineStyle::Dotted, Color::Indexed(4));
 }
 
@@ -217,9 +232,9 @@ fn assert_helper_accepts_exact_match() {
 fn assert_helper_rejects_style_drift() {
     let mut cells = blank_row(1);
     set_ul(&mut cells[0], UnderlineStyle::Single, Color::Default);
-    let screen = screen_from(cells, 1, 1);
-    let err =
-        check_underline_at(&screen, 0, 0, UnderlineStyle::Double, Color::Default).unwrap_err();
+    let screen = screen_from(cells, 1, 1).expect("valid screen");
+    let err = check_underline_at(&screen, 0, 0, UnderlineStyle::Double, Color::Default)
+        .expect_err("style drift must fail");
     assert!(err.contains("Double"), "must name want: {err}");
     assert!(err.contains("Single"), "must name got: {err}");
 }
@@ -228,9 +243,9 @@ fn assert_helper_rejects_style_drift() {
 fn assert_helper_rejects_color_drift_and_missing_cells() {
     let mut cells = blank_row(1);
     set_ul(&mut cells[0], UnderlineStyle::Single, Color::Indexed(1));
-    let screen = screen_from(cells, 1, 1);
-    let err =
-        check_underline_at(&screen, 0, 0, UnderlineStyle::Single, Color::Indexed(2)).unwrap_err();
+    let screen = screen_from(cells, 1, 1).expect("valid screen");
+    let err = check_underline_at(&screen, 0, 0, UnderlineStyle::Single, Color::Indexed(2))
+        .expect_err("color drift must fail");
     assert!(
         err.contains("Indexed(2)") && err.contains("Indexed(1)"),
         "{err}"
@@ -248,20 +263,17 @@ fn style_query_matches_style_and_color() {
     let mut cells = blank_row(3);
     set_ul(&mut cells[0], UnderlineStyle::Dashed, Color::Indexed(9));
     set_ul(&mut cells[1], UnderlineStyle::Single, Color::Default);
-    let screen = screen_from(cells, 3, 1);
-    let spans = Locator::style(
-        StyleQuery::new()
-            .underline_style(UnderlineStyle::Dashed)
-            .underline_color(Color::Indexed(9)),
-    )
-    .resolve(&screen, 0)
-    .unwrap();
+    let screen = screen_from(cells, 3, 1).expect("valid screen");
+    let query = StyleQuery::new()
+        .underline_style(UnderlineStyle::Dashed)
+        .underline_color(Color::Indexed(9));
+    let spans = Locator::style(query).resolve(&screen, 0).expect("resolve");
     assert_eq!(spans.len(), 1);
     assert_eq!((spans[0].x, spans[0].end_x), (0, 1));
     // Coarse bool still works (negative: no underline on cell 2).
     let spans = Locator::style(StyleQuery::new().underline(false))
         .resolve(&screen, 0)
-        .unwrap();
+        .expect("resolve");
     assert_eq!(spans.len(), 1);
     assert_eq!((spans[0].x, spans[0].end_x), (2, 3));
 }
@@ -281,11 +293,11 @@ fn diff_and_digest_see_style_and_color() {
     let mut b = a.clone();
     b.cells[0].mods.underline = true;
     b.cells[0].mods.underline_style = UnderlineStyle::Double;
-    assert_eq!(a.diff_cells(&b).unwrap(), vec![(0, 0)]);
+    assert_eq!(a.diff_cells(&b).expect("diff"), vec![(0, 0)]);
     assert_ne!(a.digest(), b.digest());
     let mut c = a.clone();
     c.cells[1].underline_color = Color::Indexed(5);
-    assert_eq!(a.diff_cells(&c).unwrap(), vec![(1, 0)]);
+    assert_eq!(a.diff_cells(&c).expect("diff"), vec![(1, 0)]);
     assert_ne!(a.digest(), c.digest());
 }
 
@@ -313,7 +325,7 @@ fn frame_json_omits_new_keys_when_default_and_round_trips_styled() {
         UnderlineStyle::Curly,
         Color::Indexed(9),
     );
-    let back = Frame::from_json(&styled.to_json()).unwrap();
+    let back = Frame::from_json(&styled.to_json()).expect("round-trip");
     assert_eq!(
         back.cells[0].mods.effective_underline_style(),
         UnderlineStyle::Curly
@@ -326,7 +338,7 @@ fn legacy_v3_bool_only_json_reads_as_single() {
     use tuiscotti::frame::Frame;
     // Hand-written v3 shape: bool present, new keys absent.
     let json = r#"{"version":3,"cols":1,"rows":1,"cells":[{"x":0,"y":0,"symbol":"A","width":1,"continuation":false,"fg":"Default","bg":"Default","mods":{"hidden":false,"blink":false,"bold":false,"dim":false,"italic":false,"underline":true,"strikethrough":false,"reverse":false}}],"cursor":{"x":0,"y":0,"visible":false,"style":"Block","blinking":false},"provenance":{"tool":"t","tool_version":"t","profile":"t","source":"t","argv":[],"created_unix":0}}"#;
-    let frame = Frame::from_json(json).unwrap();
+    let frame = Frame::from_json(json).expect("parse legacy frame");
     assert!(frame.cells[0].mods.underline);
     // Import normalizes legacy bool-only cells to the producer form.
     assert_eq!(frame.cells[0].mods.underline_style, UnderlineStyle::Single);
@@ -344,8 +356,8 @@ fn all_approved_frames_verify_unchanged() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual/approved");
     let mut count = 0;
     let mut entries: Vec<_> = std::fs::read_dir(&root)
-        .unwrap()
-        .map(|e| e.unwrap().path())
+        .expect("approved dir")
+        .map(|e| e.expect("dir entry").path())
         .filter(|p| {
             p.file_name()
                 .is_some_and(|n| n.to_string_lossy().ends_with(".frame.json"))
@@ -353,7 +365,7 @@ fn all_approved_frames_verify_unchanged() {
         .collect();
     entries.sort();
     for path in entries {
-        let text = std::fs::read_to_string(&path).unwrap();
+        let text = std::fs::read_to_string(&path).expect("approved frame");
         Frame::from_json(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         count += 1;
     }

@@ -1,7 +1,9 @@
 //! PNG pixels + HTML static offline (split from `format_contracts.rs`; shared helpers live in the root).
 
-use super::common::{self, menu_frame, protocol_frame, renderer, streams_frame};
+use super::capture::{self as cap, renderer};
+use super::common::{self, menu_frame, streams_frame};
 use super::menu_bundle;
+use super::pure::protocol_frame;
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
 use tuiscotti_render::formats::{
@@ -14,14 +16,11 @@ use tuiscotti_render::formats::{
 #[test]
 fn png_is_opaque_rgb_and_deterministic() {
     let frame = menu_frame(40, 10, Theme::Dark, Scenario::Demo);
-    let mut first = renderer();
+    let mut first = renderer().expect("renderer");
     let a = first.render_png(&frame).expect("render");
     let info = assert_opaque_rgb(&a).expect("opaque RGB evidence");
-    assert_eq!(
-        (info.width, info.height),
-        common::profile().image_size(40, 10)
-    );
-    let mut second = renderer();
+    assert_eq!((info.width, info.height), cap::profile().image_size(40, 10));
+    let mut second = renderer().expect("renderer");
     let b = second.render_png(&frame).expect("render");
     assert_eq!(a, b, "deterministic bytes for identical frame + profile");
 }
@@ -34,23 +33,34 @@ fn changed_pixels_beats_reencode_assumptions() {
     let b = tuiscotti::ratatui::draw_frame(40, 10, common::prov("menu-view"), |f| {
         tuiscotti_fixtures::views::menu::render(f, &model_b);
     });
-    let pa = renderer().render_png(&a).expect("render");
-    let pa2 = renderer().render_png(&a).expect("render");
+    let pa = renderer()
+        .expect("renderer")
+        .render_png(&a)
+        .expect("render");
+    let pa2 = renderer()
+        .expect("renderer")
+        .render_png(&a)
+        .expect("render");
     assert!(
         changed_pixels(&pa, &pa2).expect("diff").is_empty(),
         "re-encode of identical pixels: zero changed pixels"
     );
-    let pb = renderer().render_png(&b).expect("render");
+    let pb = renderer()
+        .expect("renderer")
+        .render_png(&b)
+        .expect("render");
     let changed = changed_pixels(&pa, &pb).expect("diff");
     assert!(!changed.is_empty(), "selection move changes decoded pixels");
-    let total = common::profile().image_size(40, 10);
+    let total = cap::profile().image_size(40, 10);
+    let half = usize::try_from(total.0 * total.1).expect("pixel count fits") / 2;
     assert!(
-        changed.len() < (total.0 * total.1) as usize / 2,
+        changed.len() < half,
         "change is localized, not a full repaint: {} px",
         changed.len()
     );
     // Dimension mismatch is an error, never a diff.
     let tiny = renderer()
+        .expect("renderer")
         .render_png(&menu_frame(10, 4, Theme::Dark, Scenario::Empty))
         .expect("render");
     assert!(changed_pixels(&pa, &tiny).is_err());
@@ -60,7 +70,7 @@ fn changed_pixels_beats_reencode_assumptions() {
 
 #[test]
 fn html_is_static_offline_with_png_embed() {
-    let bundle = menu_bundle();
+    let bundle = menu_bundle().expect("capture bundle");
     assert_static_offline(&bundle.html).expect("static offline");
     assert!(
         !bundle.html.to_lowercase().contains("<script"),
@@ -93,8 +103,9 @@ fn html_matches_committed_approvals_for_all_views() {
             protocol_frame(50, 12, Theme::Dark, false),
         ),
     ] {
-        let bundle = capture_all(&mut renderer(), &frame, name).expect("capture");
-        let approved = common::read_expected(&format!("{name}.html"));
+        let bundle =
+            capture_all(&mut renderer().expect("renderer"), &frame, name).expect("capture");
+        let approved = cap::read_expected(&format!("{name}.html")).expect("committed baseline");
         assert_static_offline(&approved).expect("committed HTML stays static offline");
         assert_eq!(bundle.html, approved, "{name}: HTML drifted");
     }
@@ -110,7 +121,7 @@ fn html_injection_is_escaped_not_executed() {
     let generation = generation_for(&frame, "test").id;
     let html = html_static(
         &frame,
-        &common::profile(),
+        &cap::profile(),
         "\"><img src=x onerror=alert(1)>",
         None,
         &generation,

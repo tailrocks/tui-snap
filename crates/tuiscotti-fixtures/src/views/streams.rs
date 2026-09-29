@@ -84,7 +84,7 @@ impl Model {
                 },
                 LogLine {
                     level: Level::Trace,
-                    text: "combining: é ä õ".to_string(),
+                    text: "combining: e\u{301} a\u{308} o\u{303}".to_string(),
                 },
                 LogLine {
                     level: Level::Warn,
@@ -202,7 +202,7 @@ fn level_style(level: Level) -> Style {
 }
 
 /// Render the streams view. Shared by pure-view tests and the live binary.
-pub fn render(frame: &mut RFrame, model: &Model) {
+pub fn render(frame: &mut RFrame<'_>, model: &Model) {
     let area = frame.area();
     let root = Block::default().style(Style::default().bg(model.theme.bg()));
     frame.render_widget(root, area);
@@ -220,7 +220,7 @@ pub fn render(frame: &mut RFrame, model: &Model) {
 }
 
 /// Render the header with per-level counts.
-fn render_header(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_header(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let header = Paragraph::new(Line::from(vec![
         Span::styled("Streams ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(format!(
@@ -236,7 +236,7 @@ fn render_header(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the visible log window with level styles and selection.
-fn render_log(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_log(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let inner_rows = usize::from(area.height.saturating_sub(2));
     if model.lines.is_empty() || inner_rows == 0 {
         let empty = Paragraph::new("No log lines.")
@@ -251,7 +251,7 @@ fn render_log(frame: &mut RFrame, model: &Model, area: Rect) {
     } else {
         model.scroll.min(max_scroll)
     };
-    let lines: Vec<Line> = model
+    let lines: Vec<Line<'_>> = model
         .lines
         .iter()
         .enumerate()
@@ -280,7 +280,7 @@ fn style_line(model: &Model, index: usize, line: &LogLine) -> Line<'static> {
 }
 
 /// Render the footer with scroll/follow state.
-fn render_footer(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_footer(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let footer = Paragraph::new(format!(
         "scroll={} follow={} selected={:?} (End follows, q quits)",
         model.scroll, model.autoscroll, model.selected

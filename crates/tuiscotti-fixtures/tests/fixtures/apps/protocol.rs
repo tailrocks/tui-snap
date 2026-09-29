@@ -1,4 +1,4 @@
-//! protocol_fixture: live modes/echo TUI over `views::protocol`.
+//! `protocol_fixture`: live modes/echo TUI over `views::protocol`.
 //!
 //! Pure-view tests and this binary call the same `render`; PTY journeys
 //! spawn this binary. Printable keys echo, Backspace deletes, pastes append
@@ -25,7 +25,7 @@ fn map(event: Event) -> Option<ProtocolKey> {
         Event::Resize(cols, rows) => Some(ProtocolKey::Resize(cols, rows)),
         Event::FocusGained => Some(ProtocolKey::FocusIn),
         Event::FocusLost => Some(ProtocolKey::FocusOut),
-        _ => None,
+        Event::Mouse(_) => None,
     }
 }
 
@@ -40,8 +40,8 @@ fn print_summary(model: &Model) {
 }
 
 fn main() -> anyhow::Result<()> {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
-    let args = match driver::parse_common(&argv) {
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    let args = match driver::parse_common(&raw) {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
@@ -65,11 +65,5 @@ fn main() -> anyhow::Result<()> {
         frames: args.frames,
         protocol_modes: true,
     };
-    driver::drive(
-        model,
-        &opts,
-        protocol::render,
-        |m, k| protocol::step(m, k),
-        map,
-    )
+    driver::drive(model, &opts, protocol::render, protocol::step, map)
 }

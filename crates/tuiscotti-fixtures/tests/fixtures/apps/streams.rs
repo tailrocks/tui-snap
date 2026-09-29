@@ -1,4 +1,4 @@
-//! streams_fixture: live scrollable-log TUI over `views::streams`.
+//! `streams_fixture`: live scrollable-log TUI over `views::streams`.
 //!
 //! Pure-view tests and this binary call the same `render`; PTY journeys
 //! spawn this binary. Keys: Up/Down/PgUp/PgDn/Home/End scroll, `f` toggles
@@ -17,7 +17,7 @@ const RAW_PAYLOAD: &[u8] =
     b"streams-raw v1\nline-ok\n\xff\xfe bad-bytes\n\xe6\x97\xa5 valid-cjk\n\x80lone-continuation\n";
 
 /// Map one terminal event to a controller key.
-fn map(event: Event) -> Option<StreamsKey> {
+fn map(event: &Event) -> Option<StreamsKey> {
     let Event::Key(key) = event else {
         return None;
     };
@@ -43,12 +43,12 @@ fn print_summary(model: &Model) {
 }
 
 fn main() -> anyhow::Result<()> {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
-    if argv.iter().any(|a| a == "--emit-raw") {
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    if raw.iter().any(|a| a == "--emit-raw") {
         std::io::stdout().write_all(RAW_PAYLOAD)?;
         return Ok(());
     }
-    let args = match driver::parse_common(&argv) {
+    let args = match driver::parse_common(&raw) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("streams_fixture: {e}\n{}", driver::usage("streams_fixture"));
@@ -76,6 +76,6 @@ fn main() -> anyhow::Result<()> {
         &opts,
         streams::render,
         |m, k| streams::step(m, k, view_rows),
-        map,
+        |event| map(&event),
     )
 }

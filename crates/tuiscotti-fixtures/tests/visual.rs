@@ -30,7 +30,7 @@ fn fixture_visual_gates() {
     let st = store();
     let profile = Profile::default_profile();
     // One renderer for the whole matrix: faces parsed once, glyphs cached.
-    let mut renderer = profile.renderer(&VENDORED_FACES).unwrap();
+    let mut renderer = profile.renderer(&VENDORED_FACES).expect("renderer");
     let screens = [Screen::Home, Screen::Table, Screen::Dialog, Screen::Glyphs];
     let themes = [(true, "dark"), (false, "light")];
     let sizes = [(80u16, 24u16), (120, 40), (160, 50)];
@@ -42,7 +42,9 @@ fn fixture_visual_gates() {
                 let model = Model::new(screen, dark);
                 let frame =
                     tuiscotti::ratatui::draw_frame(cols, rows, prov(), |f| render(f, &model));
-                let outcome = st.check_with(&mut renderer, &name, &frame, 1.0).unwrap();
+                let outcome = st
+                    .check_with(&mut renderer, &name, &frame, 1.0)
+                    .expect("snapshot check");
                 outcomes.push((name, outcome));
             }
         }
@@ -50,9 +52,9 @@ fn fixture_visual_gates() {
     // Report always written (reviewable even on failure).
     let entries: Vec<_> = outcomes
         .iter()
-        .map(|(_, o)| st.report_entry(o, &profile).unwrap())
+        .map(|(_, o)| st.report_entry(o, &profile).expect("report entry"))
         .collect();
-    tuiscotti::snapshot::write_report(&st, "fixture visual gates", &entries).unwrap();
+    tuiscotti::snapshot::write_report(&st, "fixture visual gates", &entries).expect("report");
     let mut failures = Vec::new();
     for (name, o) in &outcomes {
         if let Err(e) = o.ensure_matched() {
@@ -83,11 +85,11 @@ fn corrupt_approvals_are_rejected_not_matched() {
     ));
     let st = Store::new(&scratch);
     let profile = Profile::default_profile();
-    let mut renderer = profile.renderer(&VENDORED_FACES).unwrap();
+    let mut renderer = profile.renderer(&VENDORED_FACES).expect("renderer");
     let model = Model::new(Screen::Home, true);
     let frame = tuiscotti::ratatui::draw_frame(40, 10, prov(), |f| render(f, &model));
     let approved = scratch.join("approved");
-    std::fs::create_dir_all(&approved).unwrap();
+    std::fs::create_dir_all(&approved).expect("approved dir");
 
     // Garbage and truncated approved frames: explicit CorruptApproval.
     let json = frame.to_json();
@@ -99,8 +101,11 @@ fn corrupt_approvals_are_rejected_not_matched() {
         ("garbage", "{not json".to_string()),
         ("truncated", json[..cut].to_string()),
     ] {
-        std::fs::write(approved.join(format!("{name}.frame.json")), bytes).unwrap();
-        let outcome = st.check_with(&mut renderer, name, &frame, 1.0).unwrap();
+        std::fs::write(approved.join(format!("{name}.frame.json")), bytes)
+            .expect("stage corrupt approval");
+        let outcome = st
+            .check_with(&mut renderer, name, &frame, 1.0)
+            .expect("snapshot check");
         assert_eq!(outcome.status, Status::CorruptApproval, "{name}");
         let err = outcome.ensure_matched().expect_err("must not match");
         assert!(err.to_string().contains("corrupt-approval"), "{err}");
@@ -111,8 +116,8 @@ fn corrupt_approvals_are_rejected_not_matched() {
         approved.join("badpng.frame.json"),
         frame.to_json().as_bytes(),
     )
-    .unwrap();
-    std::fs::write(approved.join("badpng.png"), b"definitely not a png").unwrap();
+    .expect("stage frame");
+    std::fs::write(approved.join("badpng.png"), b"definitely not a png").expect("stage png");
     let err = st
         .check_with(&mut renderer, "badpng", &frame, 1.0)
         .expect_err("undecodable approved PNG must fail the check");

@@ -22,14 +22,18 @@ fn profile() -> Profile {
     Profile::default_profile()
 }
 
-fn widget_png(text: &str, cols: u16, rows: u16) -> Vec<u8> {
+fn widget_png(text: &str, cols: u16, rows: u16) -> anyhow::Result<Vec<u8>> {
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new(text), cols, rows, prov());
-    tuiscotti::render::render_png(&frame, &profile(), &VENDORED_FACES).unwrap()
+    Ok(tuiscotti::render::render_png(
+        &frame,
+        &profile(),
+        &VENDORED_FACES,
+    )?)
 }
 fn frame_with_mods(symbol: &str, mods: tuiscotti::Mods) -> tuiscotti::Frame {
     let mut f = tuiscotti::ratatui::widget_frame(Paragraph::new(symbol), 10, 3, prov());
     // Apply mods to the non-blank lead cells only.
-    for cell in f.cells.iter_mut() {
+    for cell in &mut f.cells {
         if !cell.continuation && !cell.symbol.trim().is_empty() {
             cell.mods = mods;
         }

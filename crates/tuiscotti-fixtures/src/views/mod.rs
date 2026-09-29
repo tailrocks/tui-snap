@@ -27,6 +27,10 @@ pub enum Theme {
 
 impl Theme {
     /// Parse a `--theme` argument. Unknown values are an explicit error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the unknown value.
     pub fn parse(s: &str) -> Result<Self, String> {
         match s {
             "dark" => Ok(Theme::Dark),

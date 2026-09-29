@@ -1,6 +1,7 @@
 //! Canonical JSON, hidden data, generations, manifest, pipes (split from `format_contracts.rs`; shared helpers live in the root).
 
-use super::common::{self, menu_frame, renderer, streams_frame};
+use super::capture::{self as cap, renderer};
+use super::common::{self, menu_frame, streams_frame};
 use super::menu_bundle;
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
@@ -9,13 +10,33 @@ use tuiscotti_render::formats::{
     parse_canonical, pipe_projection, pipe_strict, require_same_generation, txt_projection,
 };
 
+/// Collect `dir`'s files as `root`-relative strings for manifest coverage.
+fn collect(
+    dir: &std::path::Path,
+    root: &std::path::Path,
+    out: &mut Vec<String>,
+) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect(&path, root, out)?;
+        } else {
+            out.push(path.strip_prefix(root)?.to_string_lossy().into_owned());
+        }
+    }
+    Ok(())
+}
+
 // --- Canonical JSON ---------------------------------------------------------
 
 #[test]
 fn canonical_json_round_trips_with_version_and_provenance() {
     let frame = menu_frame(10, 4, Theme::Dark, Scenario::Empty);
     let json = canonical_json(&frame).expect("serialize");
-    assert_eq!(json, common::read_expected("menu-empty-10x4.json"));
+    assert_eq!(
+        json,
+        cap::read_expected("menu-empty-10x4.json").expect("committed baseline")
+    );
     let back = parse_canonical(&json).expect("parse");
     assert_eq!(back.to_json(), json, "lossless round-trip");
     tuiscotti_render::formats::json::assert_provenance_complete(&back).expect("provenance");
@@ -64,8 +85,14 @@ fn hidden_cells_hide_pixels_but_keep_source_text() {
     assert!(ansi_normalized(&frame).contains('X'));
     assert!(canonical_json(&frame).expect("json").contains("\"X\""));
     // Pixels match the blank cell exactly.
-    let px_hidden = renderer().render_png(&frame).expect("render");
-    let px_shown = renderer().render_png(&shown).expect("render");
+    let px_hidden = renderer()
+        .expect("renderer")
+        .render_png(&frame)
+        .expect("render");
+    let px_shown = renderer()
+        .expect("renderer")
+        .render_png(&shown)
+        .expect("render");
     assert!(
         changed_pixels(&px_hidden, &px_shown)
             .expect("diff")
@@ -78,10 +105,10 @@ fn hidden_cells_hide_pixels_but_keep_source_text() {
 
 #[test]
 fn every_capture_exports_one_identifiable_generation() {
-    let bundle = menu_bundle();
+    let bundle = menu_bundle().expect("capture bundle");
     let other = {
         let frame = streams_frame(60, 12, Theme::Dark, false);
-        capture_all(&mut renderer(), &frame, "streams").expect("capture")
+        capture_all(&mut renderer().expect("renderer"), &frame, "streams").expect("capture")
     };
     assert_eq!(
         bundle.generation.frame_digest,
@@ -92,7 +119,7 @@ fn every_capture_exports_one_identifiable_generation() {
     assert!(!generations_match(&bundle.generation, &other.generation));
     require_same_generation(&bundle.generation, &other.generation).expect_err("mixed generations");
     // Deterministic: same frame + profile always yields the same id.
-    let again = menu_bundle();
+    let again = menu_bundle().expect("capture bundle");
     assert_eq!(bundle.generation, again.generation);
 }
 
@@ -128,24 +155,9 @@ fn sha256sums_manifest_pins_every_approval() {
     sorted.sort_unstable();
     assert_eq!(paths, sorted, "manifest entries are sorted");
     // Exact coverage: every approval pinned, nothing extra pinned.
-    fn collect(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<String>) {
-        for entry in std::fs::read_dir(dir).expect("approvals dir") {
-            let path = entry.expect("dir entry").path();
-            if path.is_dir() {
-                collect(&path, root, out);
-            } else {
-                out.push(
-                    path.strip_prefix(root)
-                        .expect("under tests/")
-                        .to_string_lossy()
-                        .into_owned(),
-                );
-            }
-        }
-    }
     let mut actual = Vec::new();
-    collect(&root.join("fixtures/expected"), &root, &mut actual);
-    collect(&root.join("visual/approved"), &root, &mut actual);
+    collect(&root.join("fixtures/expected"), &root, &mut actual).expect("collect expected");
+    collect(&root.join("visual/approved"), &root, &mut actual).expect("collect approved");
     actual.sort_unstable();
     paths.sort_unstable();
     assert_eq!(paths, actual, "manifest covers exactly the approvals dirs");
@@ -155,9 +167,12 @@ fn sha256sums_manifest_pins_every_approval() {
 
 #[test]
 fn pipe_projection_accounts_invalid_utf8_and_truncation() {
-    let raw = common::read_data("invalid-utf8.bin");
+    let raw = common::read_data("invalid-utf8.bin").expect("fixture data");
     let full = pipe_projection(&raw, 1024).expect("project");
-    assert_eq!(full.text, common::read_expected("pipe-invalid-utf8.txt"));
+    assert_eq!(
+        full.text,
+        cap::read_expected("pipe-invalid-utf8.txt").expect("committed baseline")
+    );
     assert_eq!(full.input_bytes, raw.len());
     assert!(!full.truncated);
     assert!(full.replacements > 0, "invalid sequences counted");
@@ -170,9 +185,10 @@ fn pipe_projection_accounts_invalid_utf8_and_truncation() {
     let cut = pipe_projection(&raw, 20).expect("project");
     assert!(cut.truncated);
     assert!(cut.kept_bytes <= 20);
-    assert!(cut.text != full.text);
+    assert_ne!(cut.text, full.text);
     // Empty input is clean, not an error.
-    let empty = pipe_projection(&common::read_data("empty.txt"), 1024).expect("project");
+    let empty = pipe_projection(&common::read_data("empty.txt").expect("fixture data"), 1024)
+        .expect("project");
     assert!(!empty.lossy());
     assert_eq!(empty.text, "");
 }

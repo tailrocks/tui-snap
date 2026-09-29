@@ -8,7 +8,11 @@
 #[path = "common/mod.rs"]
 mod common;
 
-use common::{menu_frame, protocol_frame, streams_frame};
+#[path = "common/pure.rs"]
+mod pure;
+
+use common::{menu_frame, streams_frame};
+use pure::protocol_frame;
 use tuiscotti::frame::Color;
 use tuiscotti_fixtures::driver::Scenario;
 use tuiscotti_fixtures::views::Theme;
@@ -224,7 +228,8 @@ fn error_empty_focus_selection() {
 
 #[test]
 fn data_files_mirror_models() {
-    let raw = String::from_utf8(common::read_data("menu-items.txt")).expect("utf8");
+    let raw = String::from_utf8(common::read_data("menu-items.txt").expect("fixture data"))
+        .expect("utf8");
     let rows: Vec<Vec<&str>> = raw
         .lines()
         .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
@@ -237,7 +242,8 @@ fn data_files_mirror_models() {
         assert_eq!(row[1] == "1", item.toggled);
         assert_eq!(row[2] == "1", item.disabled);
     }
-    let raw = String::from_utf8(common::read_data("streams-log.txt")).expect("utf8");
+    let raw = String::from_utf8(common::read_data("streams-log.txt").expect("fixture data"))
+        .expect("utf8");
     let rows: Vec<&str> = raw
         .lines()
         .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))

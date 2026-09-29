@@ -213,7 +213,7 @@ fn toggle_selected(model: &mut Model) {
 }
 
 /// Render the menu. Shared by pure-view tests and the live binary.
-pub fn render(frame: &mut RFrame, model: &Model) {
+pub fn render(frame: &mut RFrame<'_>, model: &Model) {
     let area = frame.area();
     let root = Block::default().style(Style::default().bg(model.theme.bg()));
     frame.render_widget(root, area);
@@ -236,7 +236,7 @@ pub fn render(frame: &mut RFrame, model: &Model) {
 }
 
 /// Render the title bar with the toggled count.
-fn render_title(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_title(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let toggled = model.items.iter().filter(|i| i.toggled).count();
     let title = Paragraph::new(Line::from(vec![
         Span::styled("Settings ", Style::default().add_modifier(Modifier::BOLD)),
@@ -247,7 +247,7 @@ fn render_title(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the filter input with a hardware cursor when focused.
-fn render_filter(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_filter(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let border = if model.focus == Focus::Filter {
         Style::default().fg(Color::Yellow)
     } else {
@@ -264,7 +264,8 @@ fn render_filter(frame: &mut RFrame, model: &Model, area: Rect) {
         // Degenerate viewports (fewer rows than panes) can push the input
         // line outside the grid: place the cursor only when it lands inside.
         let grid = frame.area();
-        let x = (area.x + 1 + model.filter.len() as u16).min(area.right().saturating_sub(1));
+        let filter_cols = u16::try_from(model.filter.len()).unwrap_or(u16::MAX);
+        let x = (area.x + 1 + filter_cols).min(area.right().saturating_sub(1));
         let y = area.y + 1;
         if x >= grid.x && x < grid.right() && y >= grid.y && y < grid.bottom() {
             frame.set_cursor_position((x, y));
@@ -273,7 +274,7 @@ fn render_filter(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the visible rows with selection, markers, and disabled styling.
-fn render_list(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_list(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let visible = model.visible();
     if visible.is_empty() {
         let empty = Paragraph::new("No rows match.")
@@ -282,7 +283,7 @@ fn render_list(frame: &mut RFrame, model: &Model, area: Rect) {
         frame.render_widget(empty, area);
         return;
     }
-    let items: Vec<ListItem> = visible
+    let items: Vec<ListItem<'_>> = visible
         .iter()
         .enumerate()
         .map(|(i, (_, item))| {
@@ -305,7 +306,7 @@ fn render_list(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the one-line status bar with focus and selection state.
-fn render_status(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_status(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let focus = match model.focus {
         Focus::List => "list",
         Focus::Filter => "filter",
@@ -319,7 +320,7 @@ fn render_status(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the centered error popup over the list.
-fn render_error(frame: &mut RFrame, area: Rect, error: &str) {
+fn render_error(frame: &mut RFrame<'_>, area: Rect, error: &str) {
     let popup = centered(area, 44, 7);
     frame.render_widget(Clear, popup);
     let text = Paragraph::new(vec![

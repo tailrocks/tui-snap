@@ -7,22 +7,22 @@ use tuiscotti::{VENDORED_FACES, VENDORED_FONT};
 #[test]
 fn glyph_change_changes_pixels() {
     // THE regression test the old block renderer failed by construction.
-    let a = widget_png("A", 20, 5);
-    let b = widget_png("B", 20, 5);
+    let a = widget_png("A", 20, 5).expect("render");
+    let b = widget_png("B", 20, 5).expect("render");
     assert_ne!(a, b, "A vs B must differ at the pixel level");
 }
 
 #[test]
 fn deterministic_reruns_are_byte_identical() {
-    let a = widget_png("hello determinism ╔═╗ ⠋", 30, 6);
-    let b = widget_png("hello determinism ╔═╗ ⠋", 30, 6);
+    let a = widget_png("hello determinism ╔═╗ ⠋", 30, 6).expect("render");
+    let b = widget_png("hello determinism ╔═╗ ⠋", 30, 6).expect("render");
     assert_eq!(a, b);
 }
 
 #[test]
 fn box_braille_icons_render_ink() {
-    let png = widget_png("╔═╗ █ ⠋ \u{f015}", 20, 5);
-    let img = image::load_from_memory(&png).unwrap().to_rgb8();
+    let png = widget_png("╔═╗ █ ⠋ \u{f015}", 20, 5).expect("render");
+    let img = image::load_from_memory(&png).expect("decode png").to_rgb8();
     let bg = image::Rgb([0u8, 0, 0]);
     let ink = img.pixels().filter(|p| **p != bg).count();
     assert!(ink > 200, "expected real glyph ink, got {ink} pixels");
@@ -31,14 +31,14 @@ fn box_braille_icons_render_ink() {
 #[test]
 fn cjk_keeps_two_cell_geometry() {
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("日本"), 20, 5, prov());
-    frame.validate().unwrap();
-    let lead = frame.get(0, 0).unwrap();
+    frame.validate().expect("valid frame");
+    let lead = frame.get(0, 0).expect("lead cell");
     assert_eq!(lead.width, 2, "CJK lead must be width 2");
-    let cont = frame.get(1, 0).unwrap();
+    let cont = frame.get(1, 0).expect("continuation cell");
     assert!(cont.continuation && cont.width == 0);
     // Renders without error regardless of font coverage: 日本 is served by
     // the vendored CJK fallback face; uncovered codepoints would draw tofu.
-    let png = tuiscotti::render::render_png(&frame, &profile(), &VENDORED_FACES).unwrap();
+    let png = tuiscotti::render::render_png(&frame, &profile(), &VENDORED_FACES).expect("render");
     assert!(!png.is_empty());
 }
 
@@ -46,19 +46,21 @@ fn cjk_keeps_two_cell_geometry() {
 fn clipping_and_wrapping_match_terminal() {
     // Ratatui clips overlong lines; the adapter must preserve the clip.
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("0123456789ABCDEF"), 10, 3, prov());
-    assert_eq!(frame.get(9, 0).unwrap().symbol, "9");
+    assert_eq!(frame.get(9, 0).expect("last visible cell").symbol, "9");
     assert!(frame.get(10, 0).is_none());
 }
 
 #[test]
 fn themes_change_pixels_and_sizes_change_dims() {
-    let dark = widget_png("theme", 20, 5);
+    let dark = widget_png("theme", 20, 5).expect("render");
     assert!(!dark.is_empty());
-    let small = widget_png("theme", 20, 5);
-    let wide = widget_png("theme", 40, 5);
+    let small = widget_png("theme", 20, 5).expect("render");
+    let wide = widget_png("theme", 40, 5).expect("render");
     assert_ne!(small.len(), wide.len());
     let (w1, _) = profile().image_size(20, 5);
-    let img = image::load_from_memory(&wide).unwrap().to_rgb8();
+    let img = image::load_from_memory(&wide)
+        .expect("decode png")
+        .to_rgb8();
     assert_eq!(img.width(), (40 * 10 + 24) * 2);
     assert_eq!(w1, (20 * 10 + 24) * 2);
 }
@@ -68,7 +70,8 @@ fn geometry_pin_fails_loudly() {
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("x"), 10, 3, prov());
     let mut bad = profile();
     bad.cell_w = 11;
-    let err = tuiscotti::render::render_png(&frame, &bad, &VENDORED_FACES).unwrap_err();
+    let err = tuiscotti::render::render_png(&frame, &bad, &VENDORED_FACES)
+        .expect_err("broken geometry pin must fail");
     assert!(err.to_string().contains("geometry pin broken"), "{err}");
 }
 
@@ -106,7 +109,7 @@ fn bold_and_italic_use_real_faces_not_faux() {
     };
     let real =
         tuiscotti::render::render_png(&frame_with_mods("real", bold), &profile(), &VENDORED_FACES)
-            .unwrap();
+            .expect("render");
     // Single-face chain: bold falls back to the faux double-strike, which
     // must differ from the real Bold face.
     let faux = tuiscotti::render::render_png(
@@ -114,20 +117,20 @@ fn bold_and_italic_use_real_faces_not_faux() {
         &profile(),
         &tuiscotti::FontFaces::single(VENDORED_FONT),
     )
-    .unwrap();
+    .expect("render");
     assert_ne!(real, faux, "real Bold face must differ from faux bold");
     let real_it = tuiscotti::render::render_png(
         &frame_with_mods("real", italic),
         &profile(),
         &VENDORED_FACES,
     )
-    .unwrap();
+    .expect("render");
     let faux_it = tuiscotti::render::render_png(
         &frame_with_mods("real", italic),
         &profile(),
         &tuiscotti::FontFaces::single(VENDORED_FONT),
     )
-    .unwrap();
+    .expect("render");
     assert_ne!(real_it, faux_it, "real Italic face must differ from faux");
 }
 
@@ -135,7 +138,8 @@ fn bold_and_italic_use_real_faces_not_faux() {
 fn fidelity_reports_missing_glyphs_exactly() {
     // 🦀 (U+1F980) is not covered by the vendored family (see FONTS.md).
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("ok 🦀"), 20, 5, prov());
-    let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
+    let r =
+        tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).expect("render");
     assert!(
         r.fidelity.approximate,
         "uncovered glyph must mark approximate"
@@ -148,7 +152,8 @@ fn fidelity_reports_missing_glyphs_exactly() {
     assert!(r.fidelity.to_json().contains("U+1F980"));
     // Fully covered text: exact, nothing missing, no fallback faces engaged.
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("plain ╔═╗ ⠋"), 20, 5, prov());
-    let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
+    let r =
+        tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).expect("render");
     assert!(!r.fidelity.approximate);
     assert!(r.fidelity.missing.is_empty());
     assert!(r.fidelity.faces_fell_back.is_empty());
@@ -164,7 +169,7 @@ fn broken_styled_face_falls_back_and_is_recorded() {
         bold_italic: VENDORED_FONT,
     };
     let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("fallback"), 20, 5, prov());
-    let r = tuiscotti::render::render_png_report(&frame, &profile(), &faces).unwrap();
+    let r = tuiscotti::render::render_png_report(&frame, &profile(), &faces).expect("render");
     assert_eq!(r.fidelity.faces_fell_back, vec!["bold".to_string()]);
     assert!(r.fidelity.approximate);
 }

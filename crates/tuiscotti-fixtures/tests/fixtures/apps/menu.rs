@@ -1,4 +1,4 @@
-//! menu_fixture: live settings-menu TUI over `views::menu`.
+//! `menu_fixture`: live settings-menu TUI over `views::menu`.
 //!
 //! Pure-view tests and this binary call the same `render`; PTY journeys
 //! spawn this binary. Keys: Up/Down move, Space/Enter toggles, `/` focuses
@@ -10,7 +10,7 @@ use tuiscotti_fixtures::driver::{self, DriveOpts, Scenario};
 use tuiscotti_fixtures::views::menu::{self, MenuKey, Model};
 
 /// Map one terminal event to a controller key.
-fn map(event: Event) -> Option<MenuKey> {
+fn map(event: &Event) -> Option<MenuKey> {
     let Event::Key(key) = event else {
         return None;
     };
@@ -39,8 +39,8 @@ fn print_summary(model: &Model) {
 }
 
 fn main() -> anyhow::Result<()> {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
-    let args = match driver::parse_common(&argv) {
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    let args = match driver::parse_common(&raw) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("menu_fixture: {e}\n{}", driver::usage("menu_fixture"));
@@ -61,5 +61,5 @@ fn main() -> anyhow::Result<()> {
         frames: args.frames,
         protocol_modes: false,
     };
-    driver::drive(model, &opts, menu::render, |m, k| menu::step(m, k), map)
+    driver::drive(model, &opts, menu::render, menu::step, |event| map(&event))
 }

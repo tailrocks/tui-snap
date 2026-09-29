@@ -180,7 +180,7 @@ pub fn step(model: &mut Model, key: &ProtocolKey) -> bool {
 }
 
 /// Render the protocol view. Shared by pure-view tests and the live binary.
-pub fn render(frame: &mut RFrame, model: &Model) {
+pub fn render(frame: &mut RFrame<'_>, model: &Model) {
     let area = frame.area();
     let root = Block::default().style(Style::default().bg(model.theme.bg()));
     frame.render_widget(root, area);
@@ -200,7 +200,7 @@ pub fn render(frame: &mut RFrame, model: &Model) {
 }
 
 /// Render the negotiated-modes row.
-fn render_modes(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_modes(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let flag = |on: bool| {
         if on {
             Span::styled(
@@ -223,7 +223,7 @@ fn render_modes(frame: &mut RFrame, model: &Model, area: Rect) {
     } else {
         Span::styled("blurred", Style::default().add_modifier(Modifier::DIM))
     };
-    let modes = Paragraph::new(Line::from(vec![
+    let modes_widget = Paragraph::new(Line::from(vec![
         Span::raw("paste="),
         flag(model.modes.bracketed_paste),
         Span::raw(" focus-track="),
@@ -232,11 +232,11 @@ fn render_modes(frame: &mut RFrame, model: &Model, area: Rect) {
         focus,
     ]))
     .block(Block::default().borders(Borders::ALL).title("Modes"));
-    frame.render_widget(modes, area);
+    frame.render_widget(modes_widget, area);
 }
 
 /// Render the echo area with its cursor presentation.
-fn render_echo(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_echo(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let cursor_glyph = match model.cursor {
         CursorState::Block => "▌",
         CursorState::Underline => "▁",
@@ -253,7 +253,8 @@ fn render_echo(frame: &mut RFrame, model: &Model, area: Rect) {
         // Degenerate viewports can push the echo line outside the grid:
         // place the cursor only when it lands inside.
         let grid = frame.area();
-        let x = (area.x + 1 + model.echo.len() as u16).min(area.right().saturating_sub(1));
+        let echo_cols = u16::try_from(model.echo.len()).unwrap_or(u16::MAX);
+        let x = (area.x + 1 + echo_cols).min(area.right().saturating_sub(1));
         let y = area.y + 1;
         if x >= grid.x && x < grid.right() && y >= grid.y && y < grid.bottom() {
             frame.set_cursor_position((x, y));
@@ -262,7 +263,7 @@ fn render_echo(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the bounded event log (newest visible at the bottom).
-fn render_log(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_log(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     if model.log.is_empty() {
         let empty = Paragraph::new("No events yet.")
             .style(Style::default().add_modifier(Modifier::DIM))
@@ -271,7 +272,7 @@ fn render_log(frame: &mut RFrame, model: &Model, area: Rect) {
         return;
     }
     let inner = usize::from(area.height.saturating_sub(2));
-    let lines: Vec<Line> = model
+    let lines: Vec<Line<'_>> = model
         .log
         .iter()
         .rev()
@@ -285,7 +286,7 @@ fn render_log(frame: &mut RFrame, model: &Model, area: Rect) {
 }
 
 /// Render the footer with size and error state.
-fn render_footer(frame: &mut RFrame, model: &Model, area: Rect) {
+fn render_footer(frame: &mut RFrame<'_>, model: &Model, area: Rect) {
     let (cols, rows) = model.size;
     let text = match &model.error {
         Some(error) => format!("ERROR: {error}"),

@@ -73,17 +73,16 @@ struct SettingRow {
 }
 
 impl Settings {
-    fn load() -> Self {
-        let text =
-            std::fs::read_to_string(fixture_path("settings.json")).expect("read settings fixture");
-        serde_json::from_str(&text).expect("parse settings fixture")
+    fn load() -> anyhow::Result<Self> {
+        let text = std::fs::read_to_string(fixture_path("settings.json"))?;
+        Ok(serde_json::from_str(&text)?)
     }
 }
 
 /// Real draw closure for [`Settings`]: styled header, stateful table with a
 /// highlighted selected row, dim footer hint, and an explicit cursor parked on
 /// the selected row's value cell.
-fn draw_settings(frame: &mut ratatui::Frame, model: &Settings) {
+fn draw_settings(frame: &mut ratatui::Frame<'_>, model: &Settings) {
     let area = frame.area();
     let header = Rect::new(0, 0, area.width, 3);
     let table_rect = Rect::new(1, 4, area.width.saturating_sub(2), 11);
@@ -104,7 +103,7 @@ fn draw_settings(frame: &mut ratatui::Frame, model: &Settings) {
         TCell::from("status"),
     ])
     .style(Style::default().add_modifier(Modifier::UNDERLINED));
-    let rows: Vec<Row> = model
+    let rows: Vec<Row<'_>> = model
         .rows
         .iter()
         .map(|r| {
@@ -145,7 +144,8 @@ fn draw_settings(frame: &mut ratatui::Frame, model: &Settings) {
     // key column (16) + column spacing (1); y = table y + top border (1) +
     // header row (1) + selected index.
     let cursor_x = table_rect.x + 1 + 16 + 1;
-    let cursor_y = table_rect.y + 1 + 1 + model.selected as u16;
+    let selected = u16::try_from(model.selected).unwrap_or(u16::MAX);
+    let cursor_y = table_rect.y + 1 + 1 + selected;
     frame.set_cursor_position((cursor_x, cursor_y));
 }
 
@@ -155,9 +155,10 @@ fn screen_text(screen: &tuiscotti::Screen) -> String {
     let mut out = String::new();
     for y in 0..screen.rows() {
         for x in 0..screen.cols() {
-            match screen.get(x, y) {
-                Some(c) if !c.continuation => out.push_str(&c.symbol),
-                _ => {}
+            if let Some(cell) = screen.get(x, y)
+                && !cell.continuation
+            {
+                out.push_str(&cell.symbol);
             }
         }
         out.push('\n');
@@ -174,7 +175,7 @@ fn settings_view() {
         .append("start", "settings-view")
         .expect("journal start");
 
-    let model = Settings::load();
+    let model = Settings::load().expect("load settings fixture");
     assert_eq!(model.rows.len(), 4, "fixture row count");
     assert!(
         model.selected < model.rows.len(),
@@ -232,12 +233,16 @@ fn settings_view() {
 /// across machines and runners (the binary under test prints no paths for a
 /// flag-parse error).
 fn cli_projection(argv: &[&str], out: &tuiscotti::command::ProcessOutput) -> String {
+    let exit_code = match out.code() {
+        Some(code) => code.to_string(),
+        None => "none".to_string(),
+    };
     format!(
         "argv: tuisnap {}\ntermination: {:?}\nexit_code: {}\ntruncated: {}\n\
          --- stdout ({} bytes) ---\n{}\n--- stderr ({} bytes) ---\n{}",
         argv.join(" "),
         out.status,
-        out.code().map_or("none".to_string(), |c| c.to_string()),
+        exit_code,
         out.truncated,
         out.stdout.len(),
         out.stdout_lossy(),
