@@ -204,16 +204,22 @@ fn readme_api_map_resolves() {
         .resolve_unique(&screen, 7)
         .unwrap();
     assert_eq!(span.text, "needle");
-    assert!(tuiscotti::locate::Locator::text("needle")
-        .present_now(&obs)
-        .unwrap());
-    assert!(tuiscotti::locate::Locator::text("no-such-text")
-        .not_present_now(&obs)
-        .unwrap());
-    assert!(tuiscotti::locate::Locator::regex("n.edle")
-        .unwrap()
-        .present_now(&obs)
-        .unwrap());
+    assert!(
+        tuiscotti::locate::Locator::text("needle")
+            .present_now(&obs)
+            .unwrap()
+    );
+    assert!(
+        tuiscotti::locate::Locator::text("no-such-text")
+            .not_present_now(&obs)
+            .unwrap()
+    );
+    assert!(
+        tuiscotti::locate::Locator::regex("n.edle")
+            .unwrap()
+            .present_now(&obs)
+            .unwrap()
+    );
 
     // command::Command piped run.
     let out = tuiscotti::command::Command::new("/bin/sh")
@@ -254,7 +260,10 @@ fn readme_api_map_resolves() {
     let sample = tuiscotti::assert::render_sample(&screen).unwrap();
     let generation = tuiscotti::assert::generation_id(&sample.canonical);
     assert_eq!(
-        tuiscotti::assert::png_generation(&tuiscotti::assert::png_tag_generation(&sample.png, &generation)),
+        tuiscotti::assert::png_generation(&tuiscotti::assert::png_tag_generation(
+            &sample.png,
+            &generation
+        )),
         Some(generation)
     );
     let paths = tuiscotti::assert::emit_four(&screen, &tmp.path().join("four")).unwrap();
@@ -272,10 +281,11 @@ fn readme_api_map_resolves() {
     assert!(cast.is_file());
     assert!(!tuiscotti::mcp::tools().is_empty());
     let list = tuiscotti::mcp::tools_list_json();
-    assert!(list
-        .get("tools")
-        .and_then(|t| t.as_array())
-        .is_some_and(|t| !t.is_empty()));
+    assert!(
+        list.get("tools")
+            .and_then(|t| t.as_array())
+            .is_some_and(|t| !t.is_empty())
+    );
 
     // Rendering pins.
     assert_eq!(tuiscotti::VENDORED_FALLBACK_FACES.len(), 3);
@@ -302,9 +312,9 @@ fn readme_api_map_resolves() {
 
 #[test]
 fn readme_macro_gates_pass_preapproved() {
-    use tuiscotti::assert::{generation_id, png_tag_generation, render_sample, Policy};
+    use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
     use tuiscotti::insta_proto::insta_string;
-    use tuiscotti::ratatui::{render_screen, EdgePolicy};
+    use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
     let tmp = tempfile::tempdir().unwrap();
     let snaps = tmp.path().join("snaps");
@@ -647,12 +657,14 @@ fn readme_cli_machine_and_offline_commands() {
     assert!(report.is_file());
 
     // doctor / schema run clean.
-    assert!(Command::new(bin())
-        .arg("doctor")
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new(bin())
+            .arg("doctor")
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     let schema = Command::new(bin()).arg("schema").output().unwrap();
     assert!(schema.status.success());
     let schema_text = String::from_utf8_lossy(&schema.stdout).into_owned();
@@ -691,7 +703,10 @@ fn readme_pinned_facts() {
                 "agent-workflow",
             ][n as usize - 1]
         );
-        assert!(root.join("crates/tuiscotti").join(&name).is_file(), "missing {name}");
+        assert!(
+            root.join("crates/tuiscotti").join(&name).is_file(),
+            "missing {name}"
+        );
     }
     // The fidelity section cites this exact test name.
     let render_tests =

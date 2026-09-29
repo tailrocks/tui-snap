@@ -67,7 +67,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use tuiscotti::diff::AlphaPolicy;
-use tuiscotti::insta_proto::{insta_string, insta_value, PngPixelComparator};
+use tuiscotti::insta_proto::{PngPixelComparator, insta_string, insta_value};
 use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen, UnderlineStyle};
 
 // ---------------------------------------------------------------------------
@@ -251,8 +251,8 @@ fn encode_png(
     compression: image::codecs::png::CompressionType,
     filter: image::codecs::png::FilterType,
 ) -> Vec<u8> {
-    use image::codecs::png::PngEncoder;
     use image::ImageEncoder;
+    use image::codecs::png::PngEncoder;
     let mut buf = Vec::new();
     PngEncoder::new_with_quality(&mut buf, compression, filter)
         .write_image(

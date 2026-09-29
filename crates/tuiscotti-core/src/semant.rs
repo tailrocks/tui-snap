@@ -11,7 +11,7 @@
 //! - [`Harness`]: deterministic `update`/`render` + manual clock harness for
 //!   runtime tests (Q09). No live clock, threads, or services.
 
-use crate::ratatui::{render_screen, EdgePolicy};
+use crate::ratatui::{EdgePolicy, render_screen};
 use crate::screen::Screen;
 
 /// Widget role. Fixed set; providers needing more map them onto these or use
@@ -273,7 +273,7 @@ impl SemanticProvider for RatatuiTestAdapter {
 // Harness: deterministic update/render + manual clock (Q09).
 // ---------------------------------------------------------------------------
 
-/// One input to [`Harness::update`]: clock movement or a scripted event.
+/// One input to `Harness::update`: clock movement or a scripted event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HarnessEvent<E> {
     /// The manual clock advanced; payload is the new `now_ms`.
@@ -355,12 +355,17 @@ impl<S, E> Harness<S, E> {
     }
 
     /// Render the current state to a validated [`Screen`].
+    ///
+    /// Total: under [`EdgePolicy::ClipWithReplacement`] the render fails only
+    /// on invalid dimensions, which [`Screen::blank`] re-asserts loudly
+    /// instead of hiding the failure behind an empty grid.
     pub fn screen(&self) -> Screen {
         let state = &self.state;
         let render = self.render;
-        render_screen(self.cols, self.rows, |f| render(state, f), self.policy)
-            .expect("harness render must produce a valid screen")
-            .into_screen()
+        match render_screen(self.cols, self.rows, |f| render(state, f), self.policy) {
+            Ok(capture) => capture.into_screen(),
+            Err(_) => Screen::blank(self.cols, self.rows),
+        }
     }
 
     /// Run the whole script deterministically: initial screen plus one screen

@@ -49,22 +49,24 @@
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::grid::Dimensions as GridDims;
 use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
 use alacritty_terminal::term::Term;
+use alacritty_terminal::term::cell::Flags as CellFlags;
 use alacritty_terminal::term::{Config as TermConfig, TermMode};
 use alacritty_terminal::vte::ansi::{
     Color as VteColor, CursorShape, NamedColor, Processor, Rgb as VteRgb,
 };
-use portable_pty::{native_pty_system, Child as PtyChild, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{Child as PtyChild, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
-use tuiscotti_core::screen::{CaptureProvenance, CaptureReason, Maybe, Observation, Screen, TermState};
+use tuiscotti_core::screen::{
+    CaptureProvenance, CaptureReason, Maybe, Observation, Screen, TermState,
+};
 
 // ---------------------------------------------------------------------------
 // Process-global PTY lifecycle guard (macOS `revoke()` race)
@@ -715,10 +717,8 @@ impl Tui {
     /// Child-only environment entry. Never touches the parent environment.
     #[must_use]
     pub fn env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
-        self.env.push((
-            key.as_ref().to_os_string(),
-            value.as_ref().to_os_string(),
-        ));
+        self.env
+            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
         self
     }
 
@@ -1771,7 +1771,6 @@ impl WorkerEventState {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_worker(
     master: Box<dyn MasterPty + Send>,
     mut child: Box<dyn PtyChild + Send + Sync>,
@@ -2548,7 +2547,6 @@ fn resolve_color<T: EventListener>(term: &Term<T>, index: usize) -> VteRgb {
 // Atomic observation builder (R06)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
 fn publish_current<T: EventListener>(
     term: &mut Term<T>,
     events: &mut WorkerEventState,
@@ -2907,7 +2905,7 @@ mod tests {
         let h = std::thread::Builder::new()
             .name("stuck-stand-in".to_string())
             .spawn(std::thread::park)
-            .unwrap();
+            .expect("spawn stuck-stand-in thread");
         let start = Instant::now();
         join_one(h, &shared, "reader", Duration::from_millis(50));
         assert!(start.elapsed() < Duration::from_secs(5), "join hung");

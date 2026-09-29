@@ -110,10 +110,12 @@ fn text_case_insensitive_folds_ascii() {
     assert_eq!(spans.len(), 1);
     assert_eq!(spans[0].text, "Hello");
     // Sensitive default does not match.
-    assert!(Locator::text("hello")
-        .resolve(&screen, 0)
-        .unwrap()
-        .is_empty());
+    assert!(
+        Locator::text("hello")
+            .resolve(&screen, 0)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -422,7 +424,8 @@ fn scrollback_target_is_never_clickable() {
         .resolve_unique_with_scrollback(&screen, 1, &scrollback)
         .unwrap();
     assert!(span.scrollback);
-    let err = tuiscotti::locate::PendingAction::from_span(Locator::text("hit"), span, 1).unwrap_err();
+    let err =
+        tuiscotti::locate::PendingAction::from_span(Locator::text("hit"), span, 1).unwrap_err();
     assert!(matches!(err, LocateError::ViewportOnly { .. }), "{err:?}");
 }
 
@@ -451,10 +454,12 @@ fn wrapped_rows_join_into_one_logical_span() {
 
     // Non-full rows do not join even by default.
     let screen = screen_with(&["abc", "def"], 5);
-    assert!(Locator::text("cdef")
-        .resolve(&screen, 0)
-        .unwrap()
-        .is_empty());
+    assert!(
+        Locator::text("cdef")
+            .resolve(&screen, 0)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]

@@ -28,9 +28,9 @@ crossterm.workspace = true
 ratatui.workspace = true
 
 [dev-dependencies]
-tuiscotti = { path = "../tuiscotti" }
-tuiscotti-core = { path = "../tuiscotti-core" }
-tuiscotti-render = { path = "../tuiscotti-render" }
+tuiscotti = { version = "0.2.0", path = "../tuiscotti" }
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
 image.workspace = true
 insta.workspace = true
 serde.workspace = true

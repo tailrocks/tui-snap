@@ -521,7 +521,8 @@ fn cjk_star_coffee_cells_are_not_hollow_tofu() {
     // even after the fallback faces were vendored, because coverage was
     // cmap-index-only and HTML showed viewer-font SVG. This is the ink
     // contract those snapshots must meet after recapture.
-    let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ★ ☕\u{fe0f}"), 20, 3, prov());
+    let frame =
+        tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ★ ☕\u{fe0f}"), 20, 3, prov());
     let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
     assert!(
         r.fidelity.missing.is_empty(),
@@ -561,7 +562,8 @@ fn fallback_render_is_byte_deterministic() {
         "same frame, fresh renderers: same bytes"
     );
     let mut r = tuiscotti::render::Renderer::new(&profile(), &VENDORED_FACES).unwrap();
-    let frame = tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ☕ ⚷ ◐ ★ ❤ ●"), 30, 4, prov());
+    let frame =
+        tuiscotti::ratatui::widget_frame(Paragraph::new("東京 ☕ ⚷ ◐ ★ ❤ ●"), 30, 4, prov());
     let a = r.render(&frame).unwrap().png;
     let b = r.render(&frame).unwrap().png;
     assert_eq!(a, b, "warm cache: same bytes");
@@ -632,7 +634,8 @@ fn unparsable_fallback_face_fails_loudly() {
 fn consumer_registered_fallback_face_serves_glyphs() {
     // DejaVuSansMNerdFontMono (vendored for reference) covers U+25D0 ◐, the
     // primary family does not: a consumer-registered chain serves it.
-    static DEJAVU: &[u8] = include_bytes!("../../../assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf");
+    static DEJAVU: &[u8] =
+        include_bytes!("../../../assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf");
     let sha = tuiscotti::profile::font_sha256(DEJAVU);
     let face = tuiscotti::FallbackFace {
         bytes: DEJAVU,

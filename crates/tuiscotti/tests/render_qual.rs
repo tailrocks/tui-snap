@@ -5,17 +5,17 @@
 //! assumptions. Source widths in the test data control layout; fallback
 //! faces must never shift the grid (V04).
 
-use tuiscotti::frame::{Frame, FRAME_VERSION};
+use tuiscotti::frame::{FRAME_VERSION, Frame};
 use tuiscotti::profile::{
-    font_sha256, BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RenderProfile,
-    RENDERER_VERSION, VENDORED_FACES, VENDORED_FALLBACK_FACES, VENDORED_FONT_BOLD,
-    VENDORED_FONT_BOLD_ITALIC, VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256,
-    VENDORED_FONT_ITALIC, VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256,
+    BlinkPhase, CursorPolicy, MissingGlyphPolicy, PalettePolicy, RENDERER_VERSION, RenderProfile,
+    VENDORED_FACES, VENDORED_FALLBACK_FACES, VENDORED_FONT_BOLD, VENDORED_FONT_BOLD_ITALIC,
+    VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC,
+    VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256, font_sha256,
 };
 use tuiscotti::render::{
-    check_contract_bytes, escape_html, escape_html_attr, escape_json_for_script, frame_from_screen,
-    redact_frame, redact_screen, render_cache_disabled, render_frame_strict, render_screen,
-    render_screen_png, screen_content_hash, BundleManifest, RenderCache, Renderer,
+    BundleManifest, RenderCache, Renderer, check_contract_bytes, escape_html, escape_html_attr,
+    escape_json_for_script, frame_from_screen, redact_frame, redact_screen, render_cache_disabled,
+    render_frame_strict, render_screen, render_screen_png, screen_content_hash,
 };
 use tuiscotti::{Cell, Color, Cursor, Mods, Provenance, Screen, VENDORED_FONT};
 

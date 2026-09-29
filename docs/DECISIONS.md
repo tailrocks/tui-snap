@@ -63,7 +63,7 @@ scrollback reflow) are documented in LIMITATIONS.md, not hidden.
 
 ## 7. Typed op protocol over stdio, no daemon
 
-Agents drive `proto::{Op, execute}` / `tuisnap --machine`: 17 typed
+Agents drive `proto::{Op, execute}` / `tuisnap machine`: 17 typed
 ops, JSON envelopes, versioned protocol (`1.0.0`) with a printed
 schema (`tuisnap schema`). Named sessions use versioned endpoint
 files in an owner-only runtime dir — no daemon process, no sockets
@@ -102,7 +102,7 @@ retired with the crates/ restructure; full text survives in git history
 
 - SUPERSEDED — A09 (thin JS/TS + Python clients): foreign-language SDKs
   are out of scope. Clients, manifests, and client tests were removed;
-  transport stays Rust-only (`tuiscotti` + `tuisnap --machine`).
+  transport stays Rust-only (`tuiscotti` + `tuisnap machine`).
 - SUPERSEDED — R04 (registry portable-pty + alacritty_terminal backend):
   replaced by the termpane-only backend boundary (G1). No direct,
   renamed, or target-specific dependency on portable-pty,

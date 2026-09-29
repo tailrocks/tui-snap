@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use tuiscotti::proto::{
-    self, Capabilities, Envelope, Op, OpResult, SessionStatus, EXIT_OP_ERROR, EXIT_VERIFY_FAIL,
+    self, Capabilities, EXIT_OP_ERROR, EXIT_VERIFY_FAIL, Envelope, Op, OpResult, SessionStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -945,11 +945,7 @@ fn cli_machine_mode() {
         let env: Envelope = serde_json::from_str(line).expect("envelope json");
         assert!(env.ok);
     }
-    let out = run_cli(
-        &["machine"],
-        &[],
-        Some("{\"type\":\"version\"}\ngarbage\n"),
-    );
+    let out = run_cli(&["machine"], &[], Some("{\"type\":\"version\"}\ngarbage\n"));
     assert_eq!(code(&out), EXIT_OP_ERROR);
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();
@@ -988,7 +984,15 @@ fn child_receives_double_dash_machine() {
     let out2 = tmp.path().join("cap2");
     let out2_arg = out2.to_str().expect("utf8 tempdir").to_string();
     let res = run_cli(
-        &["capture", "--out", &out2_arg, "--", "/bin/echo", "--", "--machine"],
+        &[
+            "capture",
+            "--out",
+            &out2_arg,
+            "--",
+            "/bin/echo",
+            "--",
+            "--machine",
+        ],
         &[],
         None,
     );
@@ -1162,7 +1166,8 @@ fn cli_accept_rejects_frozen() {
         tuiscotti::insta_proto::insta_string(&screen),
     )
     .expect("canonical");
-    tuiscotti::assert::check_frozen_snapshot(&frozen, "home", &screen).expect("genuine frozen root");
+    tuiscotti::assert::check_frozen_snapshot(&frozen, "home", &screen)
+        .expect("genuine frozen root");
     // Decoy actuals: even with blessings available, a frozen root must refuse.
     let scratch = tuiscotti::snapshot::Store::new(&tmp.path().join("scratch"));
     let profile = tuiscotti::Profile::default_profile();

@@ -6,8 +6,8 @@ binary. `crates/tuiscotti-cli/tests/readme_lock.rs` pins every
 subcommand and flag below against live `--help` output; removed
 commands (`check`, `run`) are pinned as exit-2 usage errors.
 
-Global shape: `tuisnap <COMMAND>`. No global flags — `--machine` is
-pre-scanned out of argv before Clap sees it, so usage text stays
+Global shape: `tuisnap <COMMAND>`. No global flags — `machine` is
+a regular subcommand, so usage text stays
 exactly `Usage: tuisnap <COMMAND>`.
 
 Exit statuses: `0` ok; `2` CLI usage error; `3` op error
@@ -32,7 +32,7 @@ tuisnap import --dir frozen           # read-only frozen-tree import
 tuisnap session start --name demo -- ./my-tui
 tuisnap record --out trace.jsonl -- ./my-tui
 tuisnap trace --input trace.jsonl
-tuisnap --machine < ops.jsonl         # typed op protocol over stdio
+tuisnap machine < ops.jsonl           # typed op protocol over stdio
 ```
 
 ### `init [--dir <DIR>] [--force]`
@@ -130,15 +130,15 @@ events, 10 000 000 bytes). Preserves the child's exit code.
 
 Offline journal view. Never executes the recorded command.
 
-### `--machine` (stdio mode)
+### `machine` (stdio mode)
 
-`tuisnap --machine < ops.jsonl`: one Op JSON object per stdin line,
+`tuisnap machine < ops.jsonl`: one Op JSON object per stdin line,
 one envelope JSON object per stdout line (`{"ok":true,…}` /
 `{"ok":false,"error":{"code","message"}}`). Blank lines skipped.
 Exit 0 when every op succeeded, else 3. Example:
 
 ```sh
-echo '{"type":"capabilities"}' | tuisnap --machine
+echo '{"type":"capabilities"}' | tuisnap machine
 # {"ok":true,"result":{"type":"capabilities","capabilities":{"protocol":"1.0.0",…}}}
 ```
 
@@ -146,5 +146,5 @@ echo '{"type":"capabilities"}' | tuisnap --machine
 
 `check`, `run`, `digest`, `accept --all`, `report --store`, and
 `render` of raw `*.ansi` do not exist. There are no shims: unknown
-subcommands exit 2. The op protocol (`--machine`, `proto::execute`)
+subcommands exit 2. The op protocol (`machine`, `proto::execute`)
 is the scriptable surface — there are no `tools/*.py` helpers.

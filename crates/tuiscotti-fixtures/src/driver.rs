@@ -71,9 +71,10 @@ pub fn parse_common(argv: &[String]) -> Result<CommonArgs, String> {
             }
             "--frames" => {
                 let v = value_of(&argv, &mut i, "--frames")?;
-                frames = Some(v.parse::<u64>().map_err(|_| {
-                    format!("--frames wants a non-negative integer, got {v:?}")
-                })?);
+                frames =
+                    Some(v.parse::<u64>().map_err(|_| {
+                        format!("--frames wants a non-negative integer, got {v:?}")
+                    })?);
             }
             "--print" => print_only = true,
             other => return Err(format!("unknown argument {other:?}")),
@@ -120,8 +121,13 @@ pub fn drive<M, K>(
 ) -> anyhow::Result<()> {
     enable_raw_mode().context("enable raw mode")?;
     let result = drive_inner(&mut model, opts, &render, &on_key, &map);
-    let _ = disable_raw_mode();
-    result
+    // Raw mode is always restored; the interactive-loop error wins when both
+    // fail (matches `drive_inner`, which surfaces its own restore errors).
+    let restore = disable_raw_mode().context("disable raw mode");
+    match result {
+        Ok(()) => restore,
+        err => err,
+    }
 }
 
 /// [`drive`] with the terminal already in raw mode.
@@ -186,5 +192,7 @@ fn drive_inner<M, K>(
 /// Usage line shared by every `*_fixture --help` failure path.
 #[must_use]
 pub fn usage(name: &str) -> String {
-    format!("usage: {name} [--theme dark|light] [--scenario demo|empty|error] [--frames N] [--print]")
+    format!(
+        "usage: {name} [--theme dark|light] [--scenario demo|empty|error] [--frames N] [--print]"
+    )
 }

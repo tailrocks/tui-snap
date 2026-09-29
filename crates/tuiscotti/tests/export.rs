@@ -406,10 +406,11 @@ fn kitty_transmit_then_display_by_id() {
     // Dangling reference: loud diagnostic + decode error.
     let scan = scan_graphics_default(&kitty("a=p,i=99", ""));
     assert_eq!(scan.payloads.len(), 1);
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::UnknownReference));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::UnknownReference)
+    );
     assert_eq!(
         scan.payloads[0].decode_bounded(&GraphicsPolicy::default()),
         Err(GraphicsDecodeError::UnknownReference(99))
@@ -450,10 +451,11 @@ fn graphics_truncation_is_explicit_and_never_decodes() {
     let scan = scan_graphics(&kitty("a=T,f=32,s=2,v=1", &b64(&raw)), &policy);
     assert_eq!(scan.payloads.len(), 1);
     assert!(scan.payloads[0].truncated);
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Truncated));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Truncated)
+    );
     assert_eq!(
         scan.payloads[0].decode_bounded(&policy),
         Err(GraphicsDecodeError::Truncated)
@@ -497,31 +499,35 @@ fn graphics_malformed_kitty_is_loud_but_lenient() {
     let scan = scan_graphics_default(&kitty("a=T,f=32,s=1,v=1", "***"));
     assert_eq!(scan.payloads.len(), 1);
     assert!(scan.payloads[0].data.is_empty());
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Malformed));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Malformed)
+    );
     // Key without '='.
     let scan = scan_graphics_default(&kitty("a=T,zzz,f=32,s=1,v=1", &b64(&[1, 2, 3, 4])));
     assert_eq!(scan.payloads.len(), 1);
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Malformed));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Malformed)
+    );
     // Command without ';'.
     let scan = scan_graphics_default(b"\x1b_Ga=T,f=32\x1b\\");
     assert!(scan.payloads.is_empty());
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Malformed));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Malformed)
+    );
     // Abandoned m=1 chain.
     let scan = scan_graphics_default(&kitty("a=T,f=32,s=1,v=1,m=1", &b64(&[1, 2])));
     assert!(scan.payloads.is_empty());
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Malformed));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Malformed)
+    );
 }
 
 #[test]
@@ -534,10 +540,11 @@ fn graphics_payload_count_bound() {
     stream.extend(sixel("", "\"1;1;1;6#0;2;0;100;0~"));
     let scan = scan_graphics(&stream, &policy);
     assert_eq!(scan.payloads.len(), 1);
-    assert!(scan
-        .diagnostics
-        .iter()
-        .any(|d| d.kind == GraphicsDiagKind::Truncated));
+    assert!(
+        scan.diagnostics
+            .iter()
+            .any(|d| d.kind == GraphicsDiagKind::Truncated)
+    );
 }
 
 // ---------------------------------------------------------------------------

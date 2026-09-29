@@ -97,7 +97,7 @@ tuisnap inspect --dir shots/demo                     # offline view; never execu
 tuisnap render --input shot.frame.json --format png --out shot
 tuisnap diff --expected a.png --actual b.png         # exit 4 on mismatch
 tuisnap accept home --store shots                    # one reviewed snapshot, explicit
-echo '{"type":"capabilities"}' | tuisnap --machine   # typed op protocol over stdio
+echo '{"type":"capabilities"}' | tuisnap machine     # typed op protocol over stdio
 ```
 
 Exit statuses: 0 ok; 2 CLI usage error; 3 op error; 4 verification

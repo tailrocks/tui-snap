@@ -40,7 +40,7 @@ Eight small programs, each one idea, each exiting 0 with an
 | 05 | `05-locators-waits` | `Locator::text` + `expect_visible` to one deadline |
 | 06 | `06-artifacts-review` | `emit_four` + frozen root: pin artifacts, reject acceptance |
 | 07 | `07-advanced-profiles` | Strict `RenderProfile`, `Strict` vs `Placeholder` missing policy |
-| 08 | `08-agent-workflow` | `proto::execute` + `--machine` JSON envelopes, no PTY |
+| 08 | `08-agent-workflow` | `proto::execute` + `machine` JSON envelopes, no PTY |
 
 ```sh
 cargo run -p tuiscotti --example 01-pure-view   # any single step

@@ -19,7 +19,7 @@ pty = ["tuiscotti/pty"]
 [dependencies]
 # default-features = false: without the CLI `pty` feature this must not
 # compile the terminal runtime (offline render/diff/report/import only).
-tuiscotti = { path = "../tuiscotti", default-features = false }
+tuiscotti = { version = "0.2.0", path = "../tuiscotti", default-features = false }
 clap.workspace = true
 serde_json.workspace = true
 

@@ -1,7 +1,7 @@
 //! tuiscotti-insta: snapshot/screenshot assertion facade over Insta.
 //!
 //! [`assert_snapshot!`] and [`assert_screenshot!`] expand Insta assertions at
-//! the CALLER, plus the frozen-policy helpers ([`assert`]) and the compound
+//! the CALLER, plus the frozen-policy helpers ([`mod@assert`]) and the compound
 //! canonical-plus-PNG snapshot lifecycle ([`insta_proto`]).
 //!
 //! Only public Insta APIs are used; there is no Insta fork or private clone.

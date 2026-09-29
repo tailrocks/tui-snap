@@ -12,9 +12,9 @@ default = ["pty"]
 pty = ["dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
 
 [dependencies]
-tuiscotti-core = { path = "../tuiscotti-core" }
-tuiscotti-render = { path = "../tuiscotti-render" }
-tuiscotti-insta = { path = "../tuiscotti-insta" }
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+tuiscotti-insta = { version = "0.2.0", path = "../tuiscotti-insta" }
 base64.workspace = true
 serde.workspace = true
 serde_json.workspace = true

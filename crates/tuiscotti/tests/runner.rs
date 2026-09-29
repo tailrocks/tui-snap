@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tuiscotti::runner::{
-    child_command, is_nextest, is_nextest_map, resolve_bin, resolve_bin_with_map, AttemptId,
-    BaselineId, Journal, JournalStatus, JunitKey, ManifestVerdict, ResolveError, ScenarioManifest,
-    TestContext,
+    AttemptId, BaselineId, Journal, JournalStatus, JunitKey, ManifestVerdict, ResolveError,
+    ScenarioManifest, TestContext, child_command, is_nextest, is_nextest_map, resolve_bin,
+    resolve_bin_with_map,
 };
 
 fn env(pairs: &[(&str, &str)]) -> HashMap<String, String> {

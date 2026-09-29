@@ -38,7 +38,7 @@ binary name, `tui-snap.toml`, and CLI grammar are unchanged.
 | Removed | Replacement |
 |---|---|
 | `BLESS=1` / `UPDATE_SNAPSHOT=1` ambient approval | Explicit `Store::accept` / `GroupedStore::accept` / `tuisnap accept` / `cargo insta review` |
-| CLI `check`, `run`, `digest`; `accept --all`; `report --store`; `render` of raw `*.ansi` | Current grammar in [CLI.md](CLI.md); scriptable surface is `tuisnap --machine` + `proto::execute` |
+| CLI `check`, `run`, `digest`; `accept --all`; `report --store`; `render` of raw `*.ansi` | Current grammar in [CLI.md](CLI.md); scriptable surface is `tuisnap machine` + `proto::execute` |
 | `tuisnap::ratatui_shot::{widget_frame, draw_frame}` | `tuiscotti::ratatui::{widget_frame, draw_frame, capture}` (signatures take `Provenance`) |
 | `tuisnap::Baseline` | `tuiscotti::snapshot::Store` / `grouped::GroupedStore` |
 | `PtySession` / `run_once(argv, opts, sends)` | `tui::{Tui, Session}`; waits fail on timeout instead of returning `false` |

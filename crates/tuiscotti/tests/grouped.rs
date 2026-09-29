@@ -3,7 +3,7 @@
 //! report, name validation, determinism.
 
 use ratatui::widgets::Paragraph;
-use tuiscotti::grouped::{validate_name, GroupedStore};
+use tuiscotti::grouped::{GroupedStore, validate_name};
 use tuiscotti::snapshot::Status;
 use tuiscotti::{Profile, Provenance, VENDORED_FACES};
 
@@ -170,10 +170,12 @@ fn check_seals_manifest_and_verdict_that_report_reuses_verbatim() {
     .unwrap();
     assert_eq!(verdict["status"], "matched");
     assert_eq!(verdict["pixel_threshold"], 1.0);
-    assert!(verdict["checks_performed"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::Value::String("png-pixel-gate".into())));
+    assert!(
+        verdict["checks_performed"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::Value::String("png-pixel-gate".into()))
+    );
 
     // C05: report on the same inputs reuses the verdict — same status.
     let report = st
@@ -509,10 +511,12 @@ fn custom_actual_and_diff_roots_are_honored() {
     let outcome = st
         .check(name, &frame_with("roots"), &profile(), &VENDORED_FACES, 1.0)
         .unwrap();
-    assert!(outcome
-        .actual
-        .ansi
-        .starts_with(dir.path().join("scratch/actual")));
+    assert!(
+        outcome
+            .actual
+            .ansi
+            .starts_with(dir.path().join("scratch/actual"))
+    );
     assert_eq!(outcome.status(), Status::MissingApproval);
     st.accept(name).unwrap();
     assert!(approved.join(format!("{name}.ansi")).exists());

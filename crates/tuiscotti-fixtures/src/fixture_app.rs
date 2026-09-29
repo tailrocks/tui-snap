@@ -1,24 +1,15 @@
-//! Fixture application: the executable target for PTY tests AND the
-//! model/view source for headless tests.
+//! Fixture application model/view source for headless tests.
 //!
-//! ```text
-//! cargo build --example fixture_app                     # PTY target
-//! ./target/debug/examples/fixture_app --screen home     # run it
-//! ```
-//!
-//! Headless tests reuse [`Model`] + [`render_model`] directly (no subprocess):
-//! ```rust,no_run
-//! use ratatui::{backend::TestBackend, Terminal};
-//! // in tests: #[path = "../examples/fixture_app.rs"] mod fixture_app;
-//! ```
+//! Tests reuse [`Model`] + [`render_model`] directly (no subprocess).
+//! PTY targets are the `*_fixture` binaries driven by [`crate::driver`].
 //!
 //! Keys (PTY): `Up/Down` move selection, `Enter` increments, `q` quits.
 
+use ratatui::Frame as RFrame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table};
-use ratatui::Frame as RFrame;
 
 /// Which screen the app shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,11 +53,7 @@ impl Model {
     }
 
     pub fn fg(&self) -> Color {
-        if self.dark {
-            Color::Gray
-        } else {
-            Color::Black
-        }
+        if self.dark { Color::Gray } else { Color::Black }
     }
 }
 
@@ -189,68 +176,4 @@ fn render_glyphs(f: &mut RFrame, model: &Model, area: Rect) {
         let cy = area.y + 8;
         f.set_cursor_position((cx.min(area.right().saturating_sub(1)), cy));
     }
-}
-
-// Binary-only CLI parsing (unused when tests include this file as a module).
-#[allow(dead_code)]
-fn parse_screen(s: &str) -> Screen {
-    match s {
-        "table" => Screen::Table,
-        "dialog" => Screen::Dialog,
-        "glyphs" => Screen::Glyphs,
-        _ => Screen::Home,
-    }
-}
-
-// Entry point when built as an example binary (unused when tests include
-// this file as a module).
-#[allow(dead_code)]
-fn main() -> anyhow::Result<()> {
-    use crossterm::event::{self, Event, KeyCode};
-    use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-    use ratatui::backend::CrosstermBackend;
-    use ratatui::Terminal;
-    use std::time::Duration;
-
-    let mut screen = Screen::Home;
-    let mut dark = true;
-    let mut args = std::env::args().skip(1);
-    while let Some(a) = args.next() {
-        match a.as_str() {
-            "--screen" => {
-                if let Some(s) = args.next() {
-                    screen = parse_screen(&s);
-                }
-            }
-            "--theme" => {
-                if let Some(t) = args.next() {
-                    dark = t != "light";
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut model = Model::new(screen, dark);
-    enable_raw_mode()?;
-    let mut term = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
-    loop {
-        term.draw(|f| render_model(f, &model))?;
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(k) = event::read()? {
-                match k.code {
-                    KeyCode::Char('q') | KeyCode::Esc => break,
-                    KeyCode::Up => model.selected = model.selected.saturating_sub(1),
-                    KeyCode::Down => model.selected = model.selected.saturating_add(1),
-                    KeyCode::Enter => model.count += 1,
-                    KeyCode::Char(c) => model.input.push(c),
-                    KeyCode::Backspace => {
-                        model.input.pop();
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-    disable_raw_mode()?;
-    Ok(())
 }

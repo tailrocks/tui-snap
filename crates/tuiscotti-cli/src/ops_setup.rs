@@ -88,35 +88,24 @@ fn probe(program: &str, args: &[&str]) -> String {
 pub fn cmd_doctor() -> i32 {
     let profile = tuiscotti::Profile::default_profile();
     let caps = tuiscotti::proto::capabilities();
-    println!("tuisnap {}", env!("CARGO_PKG_VERSION"));
-    println!("protocol v{}", tuiscotti::proto::PROTOCOL_VERSION);
-    println!();
-    println!("[toolchain]");
-    println!("  rustc: {}", probe("rustc", &["--version"]));
-    println!("  cargo: {}", probe("cargo", &["--version"]));
-    println!("  nextest: {}", probe("cargo", &["nextest", "--version"]));
-    println!();
-    println!("[fonts]");
-    println!(
-        "  regular sha256: {}",
-        tuiscotti::profile::font_sha256(tuiscotti::VENDORED_FONT)
+    let mut buf = format!(
+        "tuisnap {}\nprotocol v{}\n\n[toolchain]\n  rustc: {}\n  cargo: {}\n  nextest: {}\n\n[fonts]\n  regular sha256: {}\n  fallback faces: {}\n\n[profile]\n  {}: cell {}x{} font_px {} scale {} pad {}\n\n[platform]\n  os: {}\n  pty: {}\n\n[env]\n",
+        env!("CARGO_PKG_VERSION"),
+        tuiscotti::proto::PROTOCOL_VERSION,
+        probe("rustc", &["--version"]),
+        probe("cargo", &["--version"]),
+        probe("cargo", &["nextest", "--version"]),
+        tuiscotti::profile::font_sha256(tuiscotti::VENDORED_FONT),
+        tuiscotti::VENDORED_FALLBACK_FACES.len(),
+        profile.name,
+        profile.cell_w,
+        profile.cell_h,
+        profile.font_px,
+        profile.scale,
+        profile.pad,
+        caps.platform,
+        caps.pty,
     );
-    println!(
-        "  fallback faces: {}",
-        tuiscotti::VENDORED_FALLBACK_FACES.len()
-    );
-    println!();
-    println!("[profile]");
-    println!(
-        "  {}: cell {}x{} font_px {} scale {} pad {}",
-        profile.name, profile.cell_w, profile.cell_h, profile.font_px, profile.scale, profile.pad
-    );
-    println!();
-    println!("[platform]");
-    println!("  os: {}", caps.platform);
-    println!("  pty: {}", caps.pty);
-    println!();
-    println!("[env]");
     for key in [
         "TERM",
         "CI",
@@ -126,14 +115,13 @@ pub fn cmd_doctor() -> i32 {
         "TUISNAP_SNAPSHOT_DIR",
     ] {
         match std::env::var(key) {
-            Ok(v) => println!("  {key}={v}"),
-            Err(_) => println!("  {key}=(unset)"),
+            Ok(v) => buf.push_str(&format!("  {key}={v}\n")),
+            Err(_) => buf.push_str(&format!("  {key}=(unset)\n")),
         }
     }
-    0
+    crate::write_stdout(&buf)
 }
 
 pub fn cmd_schema() -> i32 {
-    println!("{}", tuiscotti::proto::PROTOCOL_SCHEMA_JSON);
-    0
+    crate::write_stdout(&format!("{}\n", tuiscotti::proto::PROTOCOL_SCHEMA_JSON))
 }

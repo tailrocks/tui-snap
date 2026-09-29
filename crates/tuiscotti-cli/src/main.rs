@@ -31,6 +31,26 @@ mod ops_setup;
 
 use clap::Parser;
 
+/// Write a complete report to stdout without panicking on a closed pipe.
+///
+/// `println!` panics with EPIPE (`tuisnap doctor | head -c0` exits 101), so
+/// pure-report commands buffer their output and flush once here: a broken
+/// pipe is a clean exit 0 (the reader went away; nothing is lost), any other
+/// error is reported on stderr with an op-error status.
+pub(crate) fn write_stdout(text: &str) -> i32 {
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    let res = out.write_all(text.as_bytes()).and_then(|()| out.flush());
+    match res {
+        Ok(()) => 0,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => 0,
+        Err(e) => {
+            eprintln!("error: stdout: {e}");
+            tuiscotti::proto::EXIT_OP_ERROR
+        }
+    }
+}
+
 fn main() {
     // Native args_os parsing: child argv stays OsString end-to-end, and the
     // parser never sees values after `--` as its own flags.

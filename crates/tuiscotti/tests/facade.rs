@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use tuiscotti::assert::{
-    assert_frozen_screenshot, assert_frozen_snapshot, check_consistent, check_frozen_screenshot,
-    check_frozen_snapshot, emit_four, frozen_accept, generation_id, import_frozen_v1,
-    png_generation, png_tag_generation, render_sample, FrozenError, ImportError, Policy,
+    FrozenError, ImportError, Policy, assert_frozen_screenshot, assert_frozen_snapshot,
+    check_consistent, check_frozen_screenshot, check_frozen_snapshot, emit_four, frozen_accept,
+    generation_id, import_frozen_v1, png_generation, png_tag_generation, render_sample,
 };
 use tuiscotti::insta_proto::insta_string;
 use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen};
@@ -320,14 +320,18 @@ fn frozen_missing_fails() {
     assert!(matches!(err, FrozenError::Missing { .. }), "{err}");
     let err = check_frozen_screenshot(root.path(), "shot", &screen).unwrap_err();
     assert!(matches!(err, FrozenError::Missing { .. }), "{err}");
-    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        assert_frozen_snapshot(root.path(), "shot", &screen);
-    }))
-    .is_err());
-    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        assert_frozen_screenshot(root.path(), "shot", &screen);
-    }))
-    .is_err());
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assert_frozen_snapshot(root.path(), "shot", &screen);
+        }))
+        .is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assert_frozen_screenshot(root.path(), "shot", &screen);
+        }))
+        .is_err()
+    );
 }
 
 #[test]
@@ -539,11 +543,12 @@ fn screenshot_rejects_unsafe_names_before_evidence() {
         assert!(msg.contains("invalid snapshot name"), "{bad:?}: {msg}");
     }
     // Nothing written: no fac_evil evidence, no escape above the evidence root.
-    assert!(list_files(&ws.evidence).iter().all(|p| !p
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .contains("fac_evil")));
+    assert!(list_files(&ws.evidence).iter().all(|p| {
+        !p.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .contains("fac_evil")
+    }));
     let mut top: Vec<PathBuf> = list_files(ws.evidence.parent().unwrap());
     top.sort();
     assert_eq!(top, vec![ws.evidence.clone(), ws.snaps.clone()]);

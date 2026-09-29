@@ -86,7 +86,7 @@ INTERACTIVE PATH (feature pty):
 
 AGENT PATH (no PTY required):
   JSON ops ─▶ proto::execute / run_machine_line ─▶ envelopes
-  tuisnap --machine │ mcp::serve │ proto session start/stop/list/prune
+  tuisnap machine │ mcp::serve │ proto session start/stop/list/prune
 ```
 
 ## Key types

@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tuiscotti-core = { path = "../tuiscotti-core" }
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
 base64.workspace = true
 fontdue.workspace = true
 image.workspace = true

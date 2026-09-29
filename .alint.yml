@@ -104,6 +104,43 @@ rules:
     level: error
     message: "src/lib.rs and src/main.rs MUST stay under 150 physical lines"
 
+  # G7 inheritance gate (goal probe: "missing lint inheritance" must fail).
+  # The appendix .alint.yml carries no inheritance rule, so these four
+  # toml_path_equals rules enforce it: every member manifest inherits
+  # edition/rust-version/license/lints from the workspace. Zero JSONPath
+  # matches and unparseable TOML both count as violations (no silent skip).
+  - id: member-inherit-edition
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.package.edition.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit edition.workspace = true"
+
+  - id: member-inherit-rust-version
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$['package']['rust-version']['workspace']"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit rust-version.workspace = true"
+
+  - id: member-inherit-license
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.package.license.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit license.workspace = true"
+
+  - id: member-inherit-lints
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.lints.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit lints.workspace = true"
+
   - id: no-python-javascript-typescript
     kind: file_absent
     paths:

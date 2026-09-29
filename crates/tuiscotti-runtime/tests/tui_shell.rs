@@ -7,13 +7,13 @@ use std::time::{Duration, Instant};
 
 use tuiscotti_core::frame::Rgb;
 use tuiscotti_core::screen::{Maybe, Screen};
-use tuiscotti_runtime::tui::{process_exists, CancelToken, Tui};
+use tuiscotti_runtime::tui::{CancelToken, Tui, process_exists};
 use tuiscotti_runtime::tui_shell::{
-    assert_bells_eq, assert_clipboard_empty, assert_clipboard_latest_eq, assert_default_colors,
-    assert_hyperlink_present, assert_mode_set, assert_mode_unset, assert_palette_entry,
-    assert_scrollback_contains, assert_title_eq, replay_bytes, replay_chunks, replay_recording,
-    Containment, Guardian, GuardianReport, Markers, Recording, ReplayError, Shell, ShellError,
-    TermSnapshot, MAX_REPLAY_BYTES,
+    Containment, Guardian, GuardianReport, MAX_REPLAY_BYTES, Markers, Recording, ReplayError,
+    Shell, ShellError, TermSnapshot, assert_bells_eq, assert_clipboard_empty,
+    assert_clipboard_latest_eq, assert_default_colors, assert_hyperlink_present, assert_mode_set,
+    assert_mode_unset, assert_palette_entry, assert_scrollback_contains, assert_title_eq,
+    replay_bytes, replay_chunks, replay_recording,
 };
 
 fn deadline(secs: u64) -> Instant {
@@ -50,7 +50,7 @@ fn pgrep(token: &str) -> Vec<u32> {
     let out = std::process::Command::new("pgrep")
         .args(["-f", token])
         .output()
-        .unwrap();
+        .expect("output succeeds");
     String::from_utf8_lossy(&out.stdout)
         .split_whitespace()
         .filter_map(|p| p.parse::<u32>().ok())
@@ -103,35 +103,39 @@ fn wait_found(token: &str, secs: u64) -> Vec<u32> {
 
 #[test]
 fn shell_run_echo() {
-    let shell = Shell::sh().unwrap();
+    let shell = Shell::sh().expect("sh succeeds");
     assert_eq!(shell.markers(), Markers::Available);
-    let r = shell.run("echo hello-42", deadline(10)).unwrap();
+    let r = shell
+        .run("echo hello-42", deadline(10))
+        .expect("run succeeds");
     assert_eq!(r.exit_code, 0);
     assert_eq!(r.markers, Markers::Available);
     assert!(!r.truncated);
     assert!(r.output_span.iter().any(|l| l.contains("hello-42")));
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 #[test]
 fn shell_cmd_exit_is_not_child_exit() {
-    let shell = Shell::sh().unwrap();
-    let r = shell.run("(exit 3)", deadline(10)).unwrap();
+    let shell = Shell::sh().expect("sh succeeds");
+    let r = shell.run("(exit 3)", deadline(10)).expect("run succeeds");
     assert_eq!(r.exit_code, 3);
     // The shell (direct child) is still alive: exit 3 was the command's.
     assert!(shell.session().poll_exit().is_none());
-    let r = shell.run("false", deadline(10)).unwrap();
+    let r = shell.run("false", deadline(10)).expect("run succeeds");
     assert_eq!(r.exit_code, 1);
-    let r = shell.run("printf 'a\\nb\\nc\\n'", deadline(10)).unwrap();
+    let r = shell
+        .run("printf 'a\\nb\\nc\\n'", deadline(10))
+        .expect("run succeeds");
     assert_eq!(r.exit_code, 0);
     assert_eq!(r.output_span, vec!["a", "b", "c"]);
     assert!(!r.truncated);
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 #[test]
 fn shell_rejects_bad_commands() {
-    let shell = Shell::sh().unwrap();
+    let shell = Shell::sh().expect("sh succeeds");
     assert!(matches!(
         shell.run("", deadline(5)),
         Err(ShellError::BadCommand(_))
@@ -140,12 +144,15 @@ fn shell_rejects_bad_commands() {
         shell.run("echo a\necho b", deadline(5)),
         Err(ShellError::BadCommand(_))
     ));
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 #[test]
 fn shell_unavailable_refuses_to_guess() {
-    let session = Tui::new(["/bin/cat"]).size(40, 10).spawn().unwrap();
+    let session = Tui::new(["/bin/cat"])
+        .size(40, 10)
+        .spawn()
+        .expect("spawn succeeds");
     let mut shell = Shell::wrap(session);
     assert_eq!(shell.markers(), Markers::Unavailable);
     // No integration: run refuses instead of inferring spans from echo text.
@@ -156,35 +163,37 @@ fn shell_unavailable_refuses_to_guess() {
     // Handshake against cat echoes but never confirms: bounded failure.
     assert!(shell.setup(deadline(2)).is_err());
     assert_eq!(shell.markers(), Markers::Unavailable);
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 #[test]
 fn shell_truncation_flag() {
-    let shell = Shell::sh_sized(80, 6).unwrap();
+    let shell = Shell::sh_sized(80, 6).expect("sh_sized succeeds");
     let r = shell
         .run(
             "awk 'BEGIN{for(i=1;i<=30;i++)print \"line\"i}'",
             deadline(10),
         )
-        .unwrap();
+        .expect("run succeeds");
     assert_eq!(r.exit_code, 0);
     assert!(r.truncated, "start marker scrolled off: {r:?}");
     assert!(r.output_span.len() <= 6, "span: {:?}", r.output_span);
     assert_eq!(r.output_span.last().map(String::as_str), Some("line30"));
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 #[test]
 fn shell_final_state_preserved_after_exit() {
-    let shell = Shell::sh().unwrap();
+    let shell = Shell::sh().expect("sh succeeds");
     // `exit` kills the shell before the end attestation: the run times out.
     assert!(shell.run("exit 0", deadline(3)).is_err());
-    let waited = shell.wait_shell_exit(deadline(10), &cancel()).unwrap();
+    let waited = shell
+        .wait_shell_exit(deadline(10), &cancel())
+        .expect("wait_shell_exit succeeds");
     assert!(waited.status.success());
     // Final grid + state survive the child.
     assert!(contains(&waited.observation.screen, "__TUISNAP_C__"));
-    shell.into_session().close().unwrap();
+    shell.into_session().close().expect("close succeeds");
 }
 
 // ---------------------------------------------------------------------------
@@ -193,37 +202,42 @@ fn shell_final_state_preserved_after_exit() {
 
 #[test]
 fn live_title_bells_modes_palette() {
-    let mut s = Tui::new(["/bin/cat"]).size(60, 12).spawn().unwrap();
+    let mut s = Tui::new(["/bin/cat"])
+        .size(60, 12)
+        .spawn()
+        .expect("spawn succeeds");
     // Trailing newline: cat only echoes full lines.
-    s.send_text("\x1b]2;HelloTitle\x07\n").unwrap();
+    s.send_text("\x1b]2;HelloTitle\x07\n")
+        .expect("send_text succeeds");
     let obs = s
         .wait_predicate(
             |o| o.state.title == Maybe::Known("HelloTitle".to_string()),
             deadline(10),
             &cancel(),
         )
-        .unwrap();
+        .expect("to_string succeeds");
     let snap = TermSnapshot::from_observation(&obs);
-    assert_title_eq(&snap, "HelloTitle").unwrap();
+    assert_title_eq(&snap, "HelloTitle").expect("assert_title_eq succeeds");
     assert!(assert_title_eq(&snap, "Nope").is_err());
 
-    s.send_text("\x07\n").unwrap();
+    s.send_text("\x07\n").expect("send_text succeeds");
     let obs = s
         .wait_predicate(
             |o| matches!(o.state.bells, Maybe::Known(n) if n == 1),
             deadline(10),
             &cancel(),
         )
-        .unwrap();
+        .expect("wait_predicate succeeds");
     let snap = TermSnapshot::from_observation(&obs);
-    assert_bells_eq(&snap, 1).unwrap();
+    assert_bells_eq(&snap, 1).expect("assert_bells_eq succeeds");
     assert!(assert_bells_eq(&snap, 2).is_err());
 
-    assert_mode_unset(&snap, 1049).unwrap();
+    assert_mode_unset(&snap, 1049).expect("assert_mode_unset succeeds");
     assert!(assert_mode_set(&snap, 1049).is_err());
 
-    assert_palette_entry(&snap, 1, Rgb::from_indexed(1)).unwrap();
-    s.send_text("\x1b]4;1;rgb:ff/00/00\x1b\\\n").unwrap();
+    assert_palette_entry(&snap, 1, Rgb::from_indexed(1)).expect("from_indexed succeeds");
+    s.send_text("\x1b]4;1;rgb:ff/00/00\x1b\\\n")
+        .expect("send_text succeeds");
     let obs = s
         .wait_predicate(
             |o| match &o.state.palette {
@@ -235,16 +249,20 @@ fn live_title_bells_modes_palette() {
             deadline(10),
             &cancel(),
         )
-        .unwrap();
+        .expect("any succeeds");
     let snap = TermSnapshot::from_observation(&obs);
-    assert_palette_entry(&snap, 1, Rgb { r: 255, g: 0, b: 0 }).unwrap();
-    s.close().unwrap();
+    assert_palette_entry(&snap, 1, Rgb { r: 255, g: 0, b: 0 })
+        .expect("assert_palette_entry succeeds");
+    s.close().expect("close succeeds");
 }
 
 #[test]
 fn live_unsupported_state_reported_not_fabricated() {
-    let mut s = Tui::new(["/bin/cat"]).size(40, 10).spawn().unwrap();
-    let obs = s.observe_now().unwrap();
+    let mut s = Tui::new(["/bin/cat"])
+        .size(40, 10)
+        .spawn()
+        .expect("spawn succeeds");
+    let obs = s.observe_now().expect("observe_now succeeds");
     let snap = TermSnapshot::from_observation(&obs);
     assert_eq!(snap.defaults, Maybe::Unsupported);
     assert_eq!(snap.clipboard, Maybe::Unsupported);
@@ -256,10 +274,12 @@ fn live_unsupported_state_reported_not_fabricated() {
         assert_default_colors(&snap, None, None),
         assert_clipboard_latest_eq(&snap, "x"),
     ] {
-        let msg = err.unwrap_err().to_string();
+        let msg = err
+            .expect_err("assert_clipboard_latest_eq must fail")
+            .to_string();
         assert!(msg.contains("unsupported"), "message: {msg}");
     }
-    s.close().unwrap();
+    s.close().expect("close succeeds");
 }
 
 #[test]
@@ -271,36 +291,40 @@ fn replay_full_state_asserts() {
     for i in 1..=15 {
         bytes.extend_from_slice(format!("line{i:02}\r\n").as_bytes());
     }
-    let r = replay_bytes(&bytes, 40, 10).unwrap();
+    let r = replay_bytes(&bytes, 40, 10).expect("replay_bytes succeeds");
     assert_eq!(r.bytes_fed, bytes.len());
-    assert_title_eq(&r.state, "ReTitle").unwrap();
+    assert_title_eq(&r.state, "ReTitle").expect("assert_title_eq succeeds");
     assert!(assert_title_eq(&r.state, "Nope").is_err());
-    assert_bells_eq(&r.state, 1).unwrap();
-    assert_palette_entry(&r.state, 2, Rgb { r: 0, g: 255, b: 0 }).unwrap();
+    assert_bells_eq(&r.state, 1).expect("assert_bells_eq succeeds");
+    assert_palette_entry(&r.state, 2, Rgb { r: 0, g: 255, b: 0 })
+        .expect("assert_palette_entry succeeds");
     assert_default_colors(
         &r.state,
         Some(Rgb { r: 255, g: 0, b: 0 }),
         Some(Rgb { r: 0, g: 0, b: 255 }),
     )
-    .unwrap();
-    assert_clipboard_latest_eq(&r.state, "hello").unwrap();
+    .expect("Some succeeds");
+    assert_clipboard_latest_eq(&r.state, "hello").expect("assert_clipboard_latest_eq succeeds");
     assert!(assert_clipboard_empty(&r.state).is_err());
-    assert_hyperlink_present(&r.state, "https://example.test/x").unwrap();
+    assert_hyperlink_present(&r.state, "https://example.test/x")
+        .expect("assert_hyperlink_present succeeds");
     assert!(assert_hyperlink_present(&r.state, "https://other.test/").is_err());
-    assert_scrollback_contains(&r.state, "line01").unwrap();
+    assert_scrollback_contains(&r.state, "line01").expect("assert_scrollback_contains succeeds");
     assert!(assert_scrollback_contains(&r.state, "missing-needle").is_err());
-    assert_mode_unset(&r.state, 1049).unwrap();
+    assert_mode_unset(&r.state, 1049).expect("assert_mode_unset succeeds");
 }
 
 #[test]
 fn replay_empty_state_known_not_guessed() {
-    let r = replay_bytes(b"hi", 20, 5).unwrap();
-    assert_default_colors(&r.state, None, None).unwrap();
-    assert_clipboard_empty(&r.state).unwrap();
-    let err = assert_title_eq(&r.state, "x").unwrap_err().to_string();
+    let r = replay_bytes(b"hi", 20, 5).expect("replay_bytes succeeds");
+    assert_default_colors(&r.state, None, None).expect("assert_default_colors succeeds");
+    assert_clipboard_empty(&r.state).expect("assert_clipboard_empty succeeds");
+    let err = assert_title_eq(&r.state, "x")
+        .expect_err("assert_title_eq must fail")
+        .to_string();
     assert!(err.contains("unknown"), "message: {err}");
     let err = assert_hyperlink_present(&r.state, "x")
-        .unwrap_err()
+        .expect_err("assert_hyperlink_present must fail")
         .to_string();
     assert!(err.contains("not present"), "message: {err}");
 }
@@ -319,11 +343,12 @@ fn tricky_bytes() -> Vec<u8> {
 #[test]
 fn replay_chunk_invariance_all_split_points() {
     let bytes = tricky_bytes();
-    let whole = replay_bytes(&bytes, 30, 8).unwrap();
+    let whole = replay_bytes(&bytes, 30, 8).expect("replay_bytes succeeds");
     assert_eq!(whole.chunks, 1);
     // Every 2-way split, including mid-UTF-8 and mid-escape.
     for i in 1..bytes.len() {
-        let split = replay_chunks([&bytes[..i], &bytes[i..]], 30, 8).unwrap();
+        let split =
+            replay_chunks([&bytes[..i], &bytes[i..]], 30, 8).expect("replay_chunks succeeds");
         assert_eq!(split.chunks, 2);
         assert_eq!(split.bytes_fed, bytes.len());
         assert_eq!(split.screen, whole.screen, "split at byte {i}");
@@ -331,7 +356,7 @@ fn replay_chunk_invariance_all_split_points() {
     }
     // One-byte chunks: maximal fragmentation.
     let ones: Vec<&[u8]> = bytes.chunks(1).collect();
-    let frag = replay_chunks(ones, 30, 8).unwrap();
+    let frag = replay_chunks(ones, 30, 8).expect("replay_chunks succeeds");
     assert_eq!(frag.chunks, bytes.len());
     assert_eq!(frag.screen, whole.screen);
     assert_eq!(frag.state, whole.state);
@@ -339,7 +364,7 @@ fn replay_chunk_invariance_all_split_points() {
 
 /// Capture real PTY output bytes (own minimal reader, bounded).
 fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
-    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::Read;
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -349,18 +374,24 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
             pixel_width: 0,
             pixel_height: 0,
         })
-        .unwrap();
+        .expect("openpty succeeds");
     let mut cmd = CommandBuilder::new(argv0);
     for a in args {
         cmd.arg(a);
     }
     cmd.env("ENV", "/dev/null");
-    let mut child = pair.slave.spawn_command(cmd).unwrap();
+    let mut child = pair
+        .slave
+        .spawn_command(cmd)
+        .expect("spawn_command succeeds");
     // Drop our slave handle before reading: a parent-held slave fd
     // suppresses master EOF/EIO on Linux, blocking the reader forever
     // after child exit (macOS returns regardless; Linux hung CI here).
     drop(pair.slave);
-    let mut reader = pair.master.try_clone_reader().unwrap();
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .expect("try_clone_reader succeeds");
     // Drain on a thread: a blocking PTY read cannot be preempted, so the
     // deadline lives on this thread, never behind a read that may not return.
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
@@ -378,7 +409,7 @@ fn capture_raw(argv0: &str, args: &[&str]) -> Vec<u8> {
     });
     let dl = deadline(10);
     loop {
-        if child.try_wait().unwrap().is_some() {
+        if child.try_wait().expect("try_wait succeeds").is_some() {
             break;
         }
         // Kill before failing: a timed-out capture must not leak the child.
@@ -413,13 +444,19 @@ fn replay_recorded_pty_bytes_chunk_invariant() {
     );
     assert!(!bytes.is_empty());
     assert!(bytes.windows(3).any(|w| w == b"\xe2\x82\xac"));
-    let whole = replay_bytes(&bytes, 80, 24).unwrap();
+    let whole = replay_bytes(&bytes, 80, 24).expect("replay_bytes succeeds");
     for i in 1..bytes.len() {
-        let split = replay_chunks([&bytes[..i], &bytes[i..]], 80, 24).unwrap();
+        let split =
+            replay_chunks([&bytes[..i], &bytes[i..]], 80, 24).expect("replay_chunks succeeds");
         assert_eq!(split.screen, whole.screen, "split at byte {i}");
     }
     let ones: Vec<&[u8]> = bytes.chunks(1).collect();
-    assert_eq!(replay_chunks(ones, 80, 24).unwrap().screen, whole.screen);
+    assert_eq!(
+        replay_chunks(ones, 80, 24)
+            .expect("replay_chunks succeeds")
+            .screen,
+        whole.screen
+    );
 }
 
 #[test]
@@ -442,18 +479,21 @@ fn capture_raw_bounded_when_child_exits_silently() {
 #[test]
 fn replay_input_never_fed_as_output() {
     let mut rec = Recording::new(40, 10);
-    rec.push_output(b"KEEP").unwrap();
+    rec.push_output(b"KEEP").expect("push_output succeeds");
     // A clear-screen + text: if fed, "KEEP" would vanish.
-    rec.push_input(b"\x1b[2J\x1b[HRED").unwrap();
-    rec.push_output(b"VISIBLE").unwrap();
-    let via_rec = replay_recording(&rec, None).unwrap();
-    let direct = replay_bytes(b"KEEPVISIBLE", 40, 10).unwrap();
+    rec.push_input(b"\x1b[2J\x1b[HRED")
+        .expect("push_input succeeds");
+    rec.push_output(b"VISIBLE").expect("push_output succeeds");
+    let via_rec = replay_recording(&rec, None).expect("replay_recording succeeds");
+    let direct = replay_bytes(b"KEEPVISIBLE", 40, 10).expect("replay_bytes succeeds");
     assert_eq!(via_rec.screen, direct.screen);
     assert_eq!(via_rec.bytes_fed, b"KEEPVISIBLE".len());
     assert!(contains(&via_rec.screen, "KEEPVISIBLE"));
     // Re-chunked replay agrees too.
     assert_eq!(
-        replay_recording(&rec, Some(2)).unwrap().screen,
+        replay_recording(&rec, Some(2))
+            .expect("Some succeeds")
+            .screen,
         direct.screen
     );
 }
@@ -494,14 +534,16 @@ fn replay_matches_live_session() {
     .env("ENV", "/dev/null")
     .size(40, 10)
     .spawn()
-    .unwrap();
-    let waited = s.wait_exit(deadline(10), &cancel()).unwrap();
+    .expect("spawn succeeds");
+    let waited = s
+        .wait_exit(deadline(10), &cancel())
+        .expect("wait_exit succeeds");
     assert!(waited.status.success());
     // PTY ONLCR translates \n to \r\n.
     let expected = b"A\x1b[31mB\x1b[0m\r\nEND\r\n";
-    let replayed = replay_bytes(expected, 40, 10).unwrap();
+    let replayed = replay_bytes(expected, 40, 10).expect("replay_bytes succeeds");
     assert_eq!(replayed.screen, waited.observation.screen);
-    s.close().unwrap();
+    s.close().expect("close succeeds");
 }
 
 // ---------------------------------------------------------------------------
@@ -514,11 +556,11 @@ fn guardian_contains_group() {
         .env("ENV", "/dev/null")
         .size(40, 10)
         .spawn()
-        .unwrap();
-    let child_pid = session.pid().unwrap();
+        .expect("spawn succeeds");
+    let child_pid = session.pid().expect("pid succeeds");
     assert!(!wait_found("29371", 5).is_empty());
     let guardian = Guardian::wrap(session);
-    let report: GuardianReport = guardian.finish(deadline(10)).unwrap();
+    let report: GuardianReport = guardian.finish(deadline(10)).expect("finish succeeds");
     assert_eq!(report.child_pid, Some(child_pid));
     assert_eq!(report.containment, Containment::Full);
     assert!(report.teardown_error.is_none());
@@ -537,8 +579,8 @@ fn guardian_escape_boundary_setsid_outlives() {
         .env("ENV", "/dev/null")
         .size(40, 10)
         .spawn()
-        .unwrap();
-    let child_pgid = pgid_of(session.pid().unwrap()).expect("child pgid resolvable");
+        .expect("spawn succeeds");
+    let child_pgid = pgid_of(session.pid().expect("pid succeeds")).expect("child pgid resolvable");
     let found = wait_found("29372", 10);
     assert!(!found.is_empty(), "escapee never started");
     assert!(!wait_found("29373", 5).is_empty());
@@ -561,7 +603,9 @@ fn guardian_escape_boundary_setsid_outlives() {
         std::thread::sleep(Duration::from_millis(20));
     };
     assert!(!escaped.is_empty(), "escapee never left the process group");
-    let report = Guardian::wrap(session).finish(deadline(10)).unwrap();
+    let report = Guardian::wrap(session)
+        .finish(deadline(10))
+        .expect("finish succeeds");
     // Same-group child contained...
     assert!(pgrep("29373").is_empty());
     // ...but the new-group grandchild outlives: the documented boundary.
@@ -569,7 +613,7 @@ fn guardian_escape_boundary_setsid_outlives() {
     assert_eq!(still, escaped);
     assert!(!GuardianReport::escape_boundary_note().is_empty());
     // Prove the mechanism: the escapee is in a different process group.
-    let escapee_pgid = pgid_of(still[0]).unwrap();
+    let escapee_pgid = pgid_of(still[0]).expect("pgid_of succeeds");
     assert_ne!(Some(escapee_pgid), report.pgid);
     // Bounded cleanup of the deliberate escapee.
     pkill("29372");
@@ -583,7 +627,7 @@ fn guardian_drop_contains() {
             .env("ENV", "/dev/null")
             .size(40, 10)
             .spawn()
-            .unwrap();
+            .expect("spawn succeeds");
         assert!(!wait_found("29374", 5).is_empty());
         let _guardian = Guardian::wrap(session);
     }
@@ -597,9 +641,13 @@ fn guardian_exited_child_degrades_without_killing() {
         .env("ENV", "/dev/null")
         .size(40, 10)
         .spawn()
-        .unwrap();
-    session.wait_exit(deadline(10), &cancel()).unwrap();
-    let report = Guardian::wrap(session).finish(deadline(5)).unwrap();
+        .expect("spawn succeeds");
+    session
+        .wait_exit(deadline(10), &cancel())
+        .expect("wait_exit succeeds");
+    let report = Guardian::wrap(session)
+        .finish(deadline(5))
+        .expect("finish succeeds");
     assert!(report.signalled.is_empty());
     assert!(matches!(
         report.containment,
