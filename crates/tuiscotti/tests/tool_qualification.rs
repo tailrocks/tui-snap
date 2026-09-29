@@ -26,7 +26,8 @@ fn dim_blending_uses_full_precision_before_narrowing() {
             c.bg = Color::Rgb(Rgb::new(bg, bg, bg));
             c.mods.dim = true;
             let (actual, _) = Frame::resolve_cell(&c, Rgb::new(0, 0, 0), Rgb::new(0, 0, 0));
-            let expected = ((u16::from(fg) * 6 + u16::from(bg) * 4) / 10) as u8;
+            let expected = u8::try_from((u16::from(fg) * 6 + u16::from(bg) * 4) / 10)
+                .expect("dim blend fits u8");
             assert_eq!(actual, Rgb::new(expected, expected, expected));
         }
     }
@@ -38,14 +39,17 @@ fn hidden_and_blink_are_canonical_and_hidden_does_not_paint() {
     hidden.cells[0].symbol = "H".into();
     hidden.cells[0].mods.hidden = true;
     hidden.cells[0].mods.blink = true;
-    let copy = Frame::from_json(&hidden.to_json()).unwrap();
+    let copy =
+        Frame::from_json(&hidden.to_json()).expect("Frame::from_json(&hidden.to_json()) succeeds");
     assert!(copy.cells[0].mods.hidden && copy.cells[0].mods.blink);
     let blank = Frame::blank(4, 2, prov());
     assert_ne!(blank.digest(), hidden.digest());
     let profile = Profile::default_profile();
     assert_eq!(
-        tuiscotti::render::render_png(&hidden, &profile, &VENDORED_FACES).unwrap(),
-        tuiscotti::render::render_png(&blank, &profile, &VENDORED_FACES).unwrap()
+        tuiscotti::render::render_png(&hidden, &profile, &VENDORED_FACES)
+            .expect("tuiscotti::render::render_png(&hidden, &profile, &VENDORED_FACES) succeeds"),
+        tuiscotti::render::render_png(&blank, &profile, &VENDORED_FACES)
+            .expect("tuiscotti::render::render_png(&blank, &profile, &VENDORED_FACES) succeeds")
     );
     assert!(!tuiscotti::render::render_svg(&hidden, &profile).contains('H'));
 }
@@ -65,7 +69,7 @@ fn ratatui_preserves_combined_flags_and_wide_styles() {
     b.set_string(0, 0, "界", style);
     let f = tuiscotti::ratatui::from_buffer(&b, 8, 2, None, prov());
     for x in [0, 1] {
-        let c = f.get(x, 0).unwrap();
+        let c = f.get(x, 0).expect("f.get(x, 0) is some");
         assert_eq!(c.fg, Color::Rgb(Rgb::new(1, 2, 3)));
         assert_eq!(c.bg, Color::Rgb(Rgb::new(4, 5, 6)));
         assert!(c.mods.bold && c.mods.dim && c.mods.hidden && c.mods.blink);

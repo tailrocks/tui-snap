@@ -29,7 +29,7 @@ pub(crate) fn settings_for(dir: &Path, generation: &str) -> insta::Settings {
     s
 }
 
-pub(crate) fn payload_to_string(p: Box<dyn Any + Send>) -> String {
+pub(crate) fn payload_to_string(p: &(dyn Any + Send)) -> String {
     if let Some(s) = p.downcast_ref::<String>() {
         s.clone()
     } else if let Some(s) = p.downcast_ref::<&str>() {
@@ -55,7 +55,7 @@ pub(crate) fn run_canonical(
         });
     })) {
         Ok(()) => Ok(()),
-        Err(p) => Err(payload_to_string(p)),
+        Err(p) => Err(payload_to_string(&*p)),
     }
 }
 
@@ -76,23 +76,33 @@ pub(crate) fn run_png(
         });
     })) {
         Ok(()) => Ok(()),
-        Err(p) => Err(payload_to_string(p)),
+        Err(p) => Err(payload_to_string(&*p)),
     }
 }
 
-pub(crate) fn write_text_snap(dir: &Path, name: &str, generation: &str, body: &str) {
+pub(crate) fn write_text_snap(
+    dir: &Path,
+    name: &str,
+    generation: &str,
+    body: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
         "---\nsource: tests/insta_spike.rs\ndescription: tuisnap generation {generation}\nexpression: insta_string\n---\n{body}"
     );
-    fs::write(dir.join(format!("{name}.snap")), content).unwrap();
+    Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }
 
-pub(crate) fn write_binary_snap(dir: &Path, name: &str, generation: &str, sidecar: &[u8]) {
+pub(crate) fn write_binary_snap(
+    dir: &Path,
+    name: &str,
+    generation: &str,
+    sidecar: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
     let meta = format!(
         "---\nsource: tests/insta_spike.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
-    fs::write(dir.join(format!("{name}.snap")), meta).unwrap();
-    fs::write(dir.join(format!("{name}.snap.png")), sidecar).unwrap();
+    fs::write(dir.join(format!("{name}.snap")), meta)?;
+    Ok(fs::write(dir.join(format!("{name}.snap.png")), sidecar)?)
 }
 
 pub(crate) fn snap_description(snap_path: &Path) -> Option<String> {
@@ -107,7 +117,9 @@ pub(crate) fn snap_description(snap_path: &Path) -> Option<String> {
         }
         if let Some(v) = line.trim().strip_prefix("description:") {
             let v = v.trim().trim_matches('"');
-            return v.strip_prefix("tuisnap generation ").map(|g| g.to_string());
+            return v
+                .strip_prefix("tuisnap generation ")
+                .map(ToString::to_string);
         }
     }
     None
@@ -160,29 +172,34 @@ pub(crate) fn accept_sim(dir: &Path, base: &str) -> Result<(), String> {
 
 /// Simulate `cargo insta reject` for ONE artifact.
 pub(crate) fn reject_sim(dir: &Path, base: &str) {
-    let _ = fs::remove_file(dir.join(format!("{base}.snap.new")));
-    let _ = fs::remove_file(dir.join(format!("{base}.snap.new.png")));
+    drop(fs::remove_file(dir.join(format!("{base}.snap.new"))));
+    drop(fs::remove_file(dir.join(format!("{base}.snap.new.png"))));
 }
 
 /// Copy approved state to fresh names (re-run phases; see header).
-pub(crate) fn copy_approved(dir: &Path, from: &str, to: &str) {
+pub(crate) fn copy_approved(
+    dir: &Path,
+    from: &str,
+    to: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     fs::copy(
         dir.join(format!("{from}.snap")),
         dir.join(format!("{to}.snap")),
-    )
-    .unwrap();
+    )?;
     let sidecar = dir.join(format!("{from}.snap.png"));
     if sidecar.exists() {
-        fs::copy(sidecar, dir.join(format!("{to}.snap.png"))).unwrap();
+        fs::copy(sidecar, dir.join(format!("{to}.snap.png")))?;
     }
+    Ok(())
 }
 
-pub(crate) fn fresh_dir(test: &str) -> (tempfile::TempDir, PathBuf) {
+pub(crate) fn fresh_dir(
+    test: &str,
+) -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
     let tmp = tempfile::Builder::new()
         .prefix(&format!("spike-{test}-"))
-        .tempdir()
-        .unwrap();
+        .tempdir()?;
     let dir = tmp.path().join("snaps");
-    fs::create_dir(&dir).unwrap();
-    (tmp, dir)
+    fs::create_dir(&dir)?;
+    Ok((tmp, dir))
 }

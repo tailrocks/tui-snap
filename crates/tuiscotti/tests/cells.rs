@@ -31,7 +31,7 @@ fn styled_frame(symbol: &str, mods: Mods, cursor: Cursor) -> Frame {
 fn text_change_detected() {
     let a = styled_frame("A", Mods::default(), Cursor::default());
     let b = styled_frame("B", Mods::default(), Cursor::default());
-    let diffs = a.diff_cells(&b).unwrap();
+    let diffs = a.diff_cells(&b).expect("a.diff_cells(&b) succeeds");
     assert_eq!(diffs, vec![(0, 0)]);
     assert_ne!(a.digest(), b.digest());
 }
@@ -46,7 +46,10 @@ fn style_only_change_detected() {
     let b = styled_frame("A", mods, Cursor::default());
     // Same text, different style: text equal, cells differ, digest differs.
     assert_eq!(a.text(), b.text());
-    assert_eq!(a.diff_cells(&b).unwrap(), vec![(0, 0)]);
+    assert_eq!(
+        a.diff_cells(&b).expect("a.diff_cells(&b) succeeds"),
+        vec![(0, 0)]
+    );
     assert_ne!(a.digest(), b.digest());
 }
 
@@ -65,7 +68,10 @@ fn cursor_only_change_detected() {
         },
     );
     assert_eq!(a.text(), b.text());
-    assert_eq!(a.diff_cells(&b).unwrap(), vec![(1, 0)]);
+    assert_eq!(
+        a.diff_cells(&b).expect("a.diff_cells(&b) succeeds"),
+        vec![(1, 0)]
+    );
     assert_ne!(a.digest(), b.digest());
 }
 
@@ -73,7 +79,11 @@ fn cursor_only_change_detected() {
 fn identical_frames_match_and_digest_is_stable() {
     let a = styled_frame("A", Mods::default(), Cursor::default());
     let b = styled_frame("A", Mods::default(), Cursor::default());
-    assert!(a.diff_cells(&b).unwrap().is_empty());
+    assert!(
+        a.diff_cells(&b)
+            .expect("a.diff_cells(&b) succeeds")
+            .is_empty()
+    );
     assert_eq!(a.digest(), b.digest());
     assert_eq!(a.to_json_pretty(), b.to_json_pretty());
 }
@@ -113,8 +123,9 @@ fn json_round_trip_preserves_everything() {
     cont.width = 0;
     cont.continuation = true;
     f.set(cont);
-    f.validate().unwrap();
-    let back = Frame::from_json(&f.to_json_pretty()).unwrap();
+    f.validate().expect("f.validate() succeeds");
+    let back = Frame::from_json(&f.to_json_pretty())
+        .expect("Frame::from_json(&f.to_json_pretty()) succeeds");
     assert_eq!(back.digest(), f.digest());
     assert_eq!(back.text(), f.text());
 }
@@ -170,7 +181,7 @@ fn corrupt_imports_rejected_explicitly() {
     assert!(Frame::from_json("{not json").is_err());
     assert!(Frame::from_json("[1,2,3]").is_err());
     // Valid frame passes.
-    good.validate().unwrap();
+    good.validate().expect("good.validate() succeeds");
 }
 
 #[test]

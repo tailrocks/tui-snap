@@ -1,4 +1,4 @@
-//! 07: advanced profiles — strict RenderProfile + missing-glyph policies.
+//! 07: advanced profiles — strict `RenderProfile` + missing-glyph policies.
 //!
 //! Run: `cargo run --example 07-advanced-profiles`
 //!
@@ -15,7 +15,9 @@ use tuiscotti::profile::{
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::render::Renderer;
 
-fn strict(missing: MissingGlyphPolicy) -> RenderProfile<'static> {
+fn strict(
+    missing: MissingGlyphPolicy,
+) -> Result<RenderProfile<'static>, Box<dyn std::error::Error>> {
     RenderProfile::strict(
         "learn".to_string(),
         VENDORED_FACES,
@@ -37,10 +39,10 @@ fn strict(missing: MissingGlyphPolicy) -> RenderProfile<'static> {
         missing,
         RENDERER_VERSION,
     )
-    .unwrap()
+    .map_err(Box::<dyn std::error::Error>::from)
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let screen = render_screen(
         16,
         3,
@@ -48,22 +50,21 @@ fn main() {
             f.render_widget(ratatui::widgets::Paragraph::new("plain ascii"), f.area());
         },
         EdgePolicy::default(),
-    )
-    .unwrap()
+    )?
     .into_screen();
 
     // Strict policy: plain-ASCII frame renders, fidelity is exact.
-    let strict_rp = strict(MissingGlyphPolicy::Strict);
-    let mut r = Renderer::for_render_profile(&strict_rp).unwrap();
-    let rendered = r.render_screen(&screen).unwrap();
+    let strict_rp = strict(MissingGlyphPolicy::Strict)?;
+    let mut r = Renderer::for_render_profile(&strict_rp)?;
+    let rendered = r.render_screen(&screen)?;
     assert!(!rendered.png.is_empty());
     assert!(!rendered.fidelity.approximate);
     assert!(rendered.fidelity.missing.is_empty());
 
     // Placeholder policy: same frame, same engine, explicit opt-in.
-    let placeholder_rp = strict(MissingGlyphPolicy::Placeholder);
-    let mut r2 = Renderer::for_render_profile(&placeholder_rp).unwrap();
-    let rendered2 = r2.render_screen(&screen).unwrap();
+    let placeholder_rp = strict(MissingGlyphPolicy::Placeholder)?;
+    let mut r2 = Renderer::for_render_profile(&placeholder_rp)?;
+    let rendered2 = r2.render_screen(&screen)?;
     assert_eq!(rendered.png.len(), rendered2.png.len());
 
     // A wrong pin fails construction — never a quiet fallback.
@@ -96,4 +97,5 @@ fn main() {
         &strict_rp.hash()[..12],
         rendered.png.len()
     );
+    Ok(())
 }

@@ -13,7 +13,7 @@ use tuiscotti::assert::{
 use tuiscotti::insta_proto::insta_string;
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let screen = render_screen(
         20,
         4,
@@ -24,45 +24,44 @@ fn main() {
             );
         },
         EdgePolicy::default(),
-    )
-    .unwrap()
+    )?
     .into_screen();
 
     // One sample pass → four review artifacts, byte-deterministic.
-    let tmp = tempfile::tempdir().unwrap();
-    let paths = emit_four(&screen, &tmp.path().join("four")).unwrap();
+    let tmp = tempfile::tempdir()?;
+    let paths = emit_four(&screen, &tmp.path().join("four"))?;
     assert!(paths.ansi.exists() && paths.txt.exists());
     assert!(paths.png.exists() && paths.html.exists());
-    image::load_from_memory(&std::fs::read(&paths.png).unwrap()).unwrap();
+    image::load_from_memory(&std::fs::read(&paths.png)?)?;
 
     // The four-tree round-trips through the read-only importer: 1 scenario.
-    let tree = import_frozen_v1(&paths.dir).unwrap();
+    let tree = import_frozen_v1(&paths.dir)?;
     assert_eq!(tree.scenarios.len(), 1);
     assert_eq!(tree.scenarios[0].name, "snapshot");
 
     // Frozen root: approved canonical + tagged PNG, then the read-only gates.
     let root = tmp.path().join("frozen");
-    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir(&root)?;
     let canonical = insta_string(&screen);
-    let sample = render_sample(&screen).unwrap();
+    let sample = render_sample(&screen)?;
     let generation = generation_id(&canonical);
-    std::fs::write(root.join("review-demo.canonical.txt"), &canonical).unwrap();
+    std::fs::write(root.join("review-demo.canonical.txt"), &canonical)?;
     std::fs::write(
         root.join("review-demo.png"),
         png_tag_generation(&sample.png, &generation),
-    )
-    .unwrap();
-    check_frozen_screenshot(&root, "review-demo", &screen).unwrap();
+    )?;
+    check_frozen_screenshot(&root, "review-demo", &screen)?;
     assert_frozen_snapshot(&root, "review-demo", &screen);
 
     // Frozen roots never bless: acceptance is rejected, nothing is written.
     match frozen_accept(&root, "review-demo") {
         Err(FrozenError::AcceptRejected { .. }) => {}
-        other => panic!("frozen_accept must reject, got {other:?}"),
+        other => return Err(format!("frozen_accept must reject, got {other:?}").into()),
     }
     println!(
         "EXAMPLE-06-OK scenarios={} gen={}",
         tree.scenarios.len(),
         &generation[..12]
     );
+    Ok(())
 }

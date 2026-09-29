@@ -1,136 +1,58 @@
 use super::*;
-use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen, UnderlineStyle};
+use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen};
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn cell(
-    x: u16,
-    y: u16,
-    sym: &str,
-    width: u8,
-    continuation: bool,
-    fg: Color,
-    bg: Color,
-    mods: Mods,
-) -> Cell {
-    Cell {
-        x,
-        y,
-        symbol: sym.to_string(),
-        width,
-        continuation,
-        fg,
-        bg,
-        mods,
-        underline_color: Color::Default,
+pub(crate) fn mods_bold() -> Mods {
+    Mods {
+        bold: true,
+        ..Mods::default()
     }
 }
 
-pub(crate) fn mods_of(
-    bold: bool,
-    underline: bool,
-    hidden: bool,
-    blink: bool,
-    reverse: bool,
-) -> Mods {
+pub(crate) fn mods_underline() -> Mods {
     Mods {
-        hidden,
-        blink,
-        bold,
-        dim: false,
-        italic: false,
-        underline,
-        underline_style: UnderlineStyle::None,
-        strikethrough: false,
-        reverse,
+        underline: true,
+        ..Mods::default()
+    }
+}
+
+pub(crate) fn mods_hidden_blink() -> Mods {
+    Mods {
+        hidden: true,
+        blink: true,
+        ..Mods::default()
+    }
+}
+
+pub(crate) fn mods_reverse() -> Mods {
+    Mods {
+        reverse: true,
+        ..Mods::default()
     }
 }
 
 /// 4x2 screen: indexed color, wide char + continuation, styled blank,
 /// hidden+blink cell, visible blinking cursor. Nonzero origin.
-pub(crate) fn screen_gen1() -> Screen {
-    let cells = vec![
-        cell(
-            0,
-            0,
-            "A",
-            1,
-            false,
-            Color::Indexed(1),
-            Color::Default,
-            mods_of(true, false, false, false, false),
-        ),
-        cell(
-            1,
-            0,
-            "中",
-            2,
-            false,
-            Color::Default,
-            Color::Default,
-            Mods::default(),
-        ),
-        cell(
-            2,
-            0,
-            "",
-            0,
-            true,
-            Color::Default,
-            Color::Default,
-            Mods::default(),
-        ),
-        cell(
-            3,
-            0,
-            " ",
-            1,
-            false,
-            Color::Default,
-            Color::Indexed(4),
-            Mods::default(),
-        ),
-        cell(
-            0,
-            1,
-            "B",
-            1,
-            false,
-            Color::Rgb(Rgb::new(1, 2, 3)),
-            Color::Default,
-            mods_of(false, true, false, false, false),
-        ),
-        cell(
-            1,
-            1,
-            "s",
-            1,
-            false,
-            Color::Default,
-            Color::Default,
-            mods_of(false, false, true, true, false),
-        ),
-        cell(
-            2,
-            1,
-            "C",
-            1,
-            false,
-            Color::Default,
-            Color::Default,
-            mods_of(false, false, false, false, true),
-        ),
-        cell(
-            3,
-            1,
-            " ",
-            1,
-            false,
-            Color::Default,
-            Color::Default,
-            Mods::default(),
-        ),
-    ];
-    Screen::validate(
+pub(crate) fn screen_gen1() -> Result<Screen, Box<dyn std::error::Error>> {
+    let mut cells: Vec<Cell> = (0..2)
+        .flat_map(|y| (0..4).map(move |x| Cell::blank(x, y)))
+        .collect();
+    cells[0].symbol = "A".into();
+    cells[0].fg = Color::Indexed(1);
+    cells[0].mods = mods_bold();
+    cells[1].symbol = "中".into();
+    cells[1].width = 2;
+    cells[2].symbol.clear();
+    cells[2].width = 0;
+    cells[2].continuation = true;
+    cells[3].bg = Color::Indexed(4);
+    cells[4].symbol = "B".into();
+    cells[4].fg = Color::Rgb(Rgb::new(1, 2, 3));
+    cells[4].mods = mods_underline();
+    cells[5].symbol = "s".into();
+    cells[5].mods = mods_hidden_blink();
+    cells[6].symbol = "C".into();
+    cells[6].mods = mods_reverse();
+    Ok(Screen::validate(
         4,
         2,
         5,
@@ -143,13 +65,12 @@ pub(crate) fn screen_gen1() -> Screen {
             style: CursorStyle::Block,
             blinking: true,
         },
-    )
-    .unwrap()
+    )?)
 }
 
 /// Generation 2: one symbol change (the "app" changed).
-pub(crate) fn screen_gen2() -> Screen {
-    let mut s = screen_gen1();
+pub(crate) fn screen_gen2() -> Result<Screen, Box<dyn std::error::Error>> {
+    let s = screen_gen1()?;
     let cells: Vec<Cell> = s
         .cells()
         .iter()
@@ -162,63 +83,80 @@ pub(crate) fn screen_gen2() -> Screen {
         })
         .collect();
     let cursor = *s.cursor();
-    s = Screen::validate(4, 2, 5, 7, cells, cursor).unwrap();
-    s
+    Ok(Screen::validate(4, 2, 5, 7, cells, cursor)?)
 }
 
-pub(crate) fn rgba_image(pixels: &[[u8; 4]], w: u32, h: u32) -> image::RgbaImage {
+pub(crate) fn rgba_image(
+    pixels: &[[u8; 4]],
+    w: u32,
+    h: u32,
+) -> Result<image::RgbaImage, Box<dyn std::error::Error>> {
     assert_eq!(pixels.len(), (w * h) as usize);
     let mut img = image::RgbaImage::new(w, h);
     for (i, p) in pixels.iter().enumerate() {
-        img.put_pixel(i as u32 % w, i as u32 / w, image::Rgba(*p));
+        let i = u32::try_from(i)?;
+        img.put_pixel(i % w, i / w, image::Rgba(*p));
     }
-    img
+    Ok(img)
 }
 
 pub(crate) fn encode_png(
     img: &image::RgbaImage,
     compression: image::codecs::png::CompressionType,
     filter: image::codecs::png::FilterType,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     use image::ImageEncoder;
     use image::codecs::png::PngEncoder;
     let mut buf = Vec::new();
-    PngEncoder::new_with_quality(&mut buf, compression, filter)
-        .write_image(
-            img.as_raw(),
-            img.width(),
-            img.height(),
-            image::ExtendedColorType::Rgba8,
-        )
-        .unwrap();
-    buf
+    PngEncoder::new_with_quality(&mut buf, compression, filter).write_image(
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgba8,
+    )?;
+    Ok(buf)
 }
 
-pub(crate) fn pixels_gen1() -> [[u8; 4]; 16] {
+pub(crate) fn pixels_gen1() -> Result<[[u8; 4]; 16], Box<dyn std::error::Error>> {
     let mut p = [[0u8; 4]; 16];
     for (i, cell) in p.iter_mut().enumerate() {
-        *cell = [(i as u8) * 16, 255 - (i as u8) * 8, 64, 255];
+        let i = u8::try_from(i)?;
+        *cell = [i * 16, 255 - i * 8, 64, 255];
     }
-    p
+    Ok(p)
+}
+
+/// Semi-transparent gradient (alpha 128): alpha-policy decisions are
+/// observable only on distinctly-encoded identical pixels.
+pub(crate) fn pixels_semi() -> Result<[[u8; 4]; 16], Box<dyn std::error::Error>> {
+    let mut p = [[0u8; 4]; 16];
+    for (i, cell) in p.iter_mut().enumerate() {
+        let i = u8::try_from(i)?;
+        *cell = [i * 9, 40, 90, 128];
+    }
+    Ok(p)
 }
 
 /// Approved PNG bytes for a generation: encoded pixels + tEXt generation tag.
-pub(crate) fn png_for_generation(gen_pixels: &[[u8; 4]; 16], generation: &str) -> Vec<u8> {
-    let img = rgba_image(gen_pixels, 4, 4);
+pub(crate) fn png_for_generation(
+    gen_pixels: &[[u8; 4]; 16],
+    generation: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let img = rgba_image(gen_pixels, 4, 4)?;
     let raw = encode_png(
         &img,
         image::codecs::png::CompressionType::Default,
         image::codecs::png::FilterType::Adaptive,
-    );
+    )?;
     png_insert_text(&raw, PNG_GEN_KEYWORD, generation)
 }
 
-pub(crate) fn png_gen1() -> Vec<u8> {
-    png_for_generation(&pixels_gen1(), GEN1)
+pub(crate) fn png_gen1() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    png_for_generation(&pixels_gen1()?, GEN1)
 }
 
-pub(crate) fn png_gen2() -> Vec<u8> {
-    let mut p = pixels_gen1();
+pub(crate) fn png_gen2() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut p = pixels_gen1()?;
     p[5] = [9, 9, 9, 255];
     png_for_generation(&p, GEN2)
 }
@@ -228,7 +166,7 @@ const PNG_SIG: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 pub(crate) fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFFu32;
     for &b in data {
-        crc ^= b as u32;
+        crc ^= u32::from(b);
         for _ in 0..8 {
             let mask = if crc & 1 == 1 { 0xEDB8_8320 } else { 0 };
             crc = (crc >> 1) ^ mask;
@@ -239,7 +177,11 @@ pub(crate) fn crc32(data: &[u8]) -> u32 {
 
 /// Insert a `tEXt` chunk before `IEND`. Decoders ignore it (pixel verdict
 /// unaffected); [`check_consistent`] reads it back.
-pub(crate) fn png_insert_text(png: &[u8], keyword: &str, value: &str) -> Vec<u8> {
+pub(crate) fn png_insert_text(
+    png: &[u8],
+    keyword: &str,
+    value: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     assert!(png.starts_with(&PNG_SIG), "not a PNG");
     assert!(!keyword.contains('\0') && keyword.len() <= 79);
     let mut data = Vec::new();
@@ -247,7 +189,7 @@ pub(crate) fn png_insert_text(png: &[u8], keyword: &str, value: &str) -> Vec<u8>
     data.push(0);
     data.extend_from_slice(value.as_bytes());
     let mut chunk = Vec::new();
-    chunk.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&u32::try_from(data.len())?.to_be_bytes());
     chunk.extend_from_slice(b"tEXt");
     chunk.extend_from_slice(&data);
     let mut crc_input = b"tEXt".to_vec();
@@ -258,7 +200,7 @@ pub(crate) fn png_insert_text(png: &[u8], keyword: &str, value: &str) -> Vec<u8>
     out.extend_from_slice(&png[..png.len() - 12]);
     out.extend_from_slice(&chunk);
     out.extend_from_slice(&png[png.len() - 12..]);
-    out
+    Ok(out)
 }
 
 pub(crate) fn png_find_text(png: &[u8], keyword: &str) -> Option<String> {
@@ -274,10 +216,10 @@ pub(crate) fn png_find_text(png: &[u8], keyword: &str) -> Option<String> {
         }
         if typ == b"tEXt" {
             let data = &png[i + 8..i + 8 + len];
-            if let Some(z) = data.iter().position(|&b| b == 0) {
-                if &data[..z] == keyword.as_bytes() {
-                    return Some(String::from_utf8_lossy(&data[z + 1..]).into_owned());
-                }
+            if let Some(z) = data.iter().position(|&b| b == 0)
+                && &data[..z] == keyword.as_bytes()
+            {
+                return Some(String::from_utf8_lossy(&data[z + 1..]).into_owned());
             }
         }
         if typ == b"IEND" {
@@ -289,8 +231,8 @@ pub(crate) fn png_find_text(png: &[u8], keyword: &str) -> Option<String> {
 }
 
 /// Raw gen1 PNG without the generation tag (CRC path exercised separately).
-pub(crate) fn png_gen1_no_tag_for_test() -> Vec<u8> {
-    let img = rgba_image(&pixels_gen1(), 4, 4);
+pub(crate) fn png_gen1_no_tag_for_test() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let img = rgba_image(&pixels_gen1()?, 4, 4)?;
     encode_png(
         &img,
         image::codecs::png::CompressionType::Default,

@@ -70,16 +70,24 @@ fn cont(x: u16, y: u16) -> Cell {
 
 /// Blank frame with `leads` overlaid by (x, y). Caller supplies wide-cell
 /// continuations explicitly — nothing is inferred.
-fn frame_from_leads(cols: u16, rows: u16, leads: Vec<Cell>) -> Frame {
+fn frame_from_leads(
+    cols: u16,
+    rows: u16,
+    leads: Vec<Cell>,
+) -> Result<Frame, Box<dyn std::error::Error>> {
     let mut f = Frame::blank(cols, rows, prov());
     for c in leads {
         f.set(c);
     }
-    f.validate().unwrap();
-    f
+    f.validate()?;
+    Ok(f)
 }
 
-fn screen_from_leads(cols: u16, rows: u16, leads: Vec<Cell>) -> Screen {
+fn screen_from_leads(
+    cols: u16,
+    rows: u16,
+    leads: Vec<Cell>,
+) -> Result<Screen, Box<dyn std::error::Error>> {
     let mut cells = Vec::with_capacity(cols as usize * rows as usize);
     for y in 0..rows {
         for x in 0..cols {
@@ -90,10 +98,19 @@ fn screen_from_leads(cols: u16, rows: u16, leads: Vec<Cell>) -> Screen {
         let i = c.y as usize * cols as usize + c.x as usize;
         cells[i] = c;
     }
-    Screen::validate(cols, rows, 0, 0, cells, Cursor::default()).unwrap()
+    Ok(Screen::validate(
+        cols,
+        rows,
+        0,
+        0,
+        cells,
+        Cursor::default(),
+    )?)
 }
 
-fn strict_placeholder(fallbacks: Vec<tuiscotti::FallbackFace<'_>>) -> RenderProfile<'_> {
+fn strict_placeholder(
+    fallbacks: Vec<tuiscotti::FallbackFace<'_>>,
+) -> Result<RenderProfile<'_>, Box<dyn std::error::Error>> {
     RenderProfile::strict(
         "qual".to_string(),
         VENDORED_FACES,
@@ -115,11 +132,11 @@ fn strict_placeholder(fallbacks: Vec<tuiscotti::FallbackFace<'_>>) -> RenderProf
         MissingGlyphPolicy::Placeholder,
         RENDERER_VERSION,
     )
-    .unwrap()
+    .map_err(Box::<dyn std::error::Error>::from)
 }
 
-fn decode(png: &[u8]) -> image::RgbImage {
-    image::load_from_memory(png).unwrap().to_rgb8()
+fn decode(png: &[u8]) -> Result<image::RgbImage, Box<dyn std::error::Error>> {
+    Ok(image::load_from_memory(png)?.to_rgb8())
 }
 
 // ---------------------------------------------------------------------------
@@ -154,9 +171,7 @@ const CORPUS: &[(&str, &str, u8, bool)] = &[
 
 static CACHE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn cache_png() -> Vec<u8> {
+fn cache_png() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let rp = RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder);
-    render_screen(&screen_from_leads(4, 2, vec![cell(0, 0, "Q", 1)]), &rp)
-        .unwrap()
-        .png
+    Ok(render_screen(&screen_from_leads(4, 2, vec![cell(0, 0, "Q", 1)])?, &rp)?.png)
 }

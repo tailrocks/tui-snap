@@ -121,10 +121,10 @@ fn resolution_yields_coords_only() {
     // &provider + revision + key, so no controller call is possible. The
     // type itself is the proof: a bare tuple, no handle, no closure.
     let a = adapter();
-    let coords: (u16, u16) = by_id(&a, 7, "ok").unwrap();
+    let coords: (u16, u16) = by_id(&a, 7, "ok").expect("by_id resolves");
     assert_eq!(coords, (7, 2));
     // Same call twice, no side effects on provider.
-    assert_eq!(by_id(&a, 7, "ok").unwrap(), coords);
+    assert_eq!(by_id(&a, 7, "ok").expect("by_id resolves"), coords);
     assert_eq!(a.nodes().len(), 3);
 }
 
@@ -145,7 +145,7 @@ fn no_appearance_inference() {
         },
         tr::EdgePolicy::default(),
     )
-    .unwrap()
+    .expect("render_screen succeeds")
     .into_screen();
     let _ = screen; // pixels exist but locators never read them.
 
@@ -175,21 +175,25 @@ enum Ev {
     Dec,
 }
 
-fn update(state: &mut i32, ev: HarnessEvent<Ev>) {
+/// Harness state: `Harness` passes `&S` by design, so a non-`Copy` wrapper
+/// holds the small-int state without tripping pass-by-ref lints.
+struct Count(i32);
+
+fn update(state: &mut Count, ev: HarnessEvent<Ev>) {
     match ev {
         HarnessEvent::Tick(_) => {}
-        HarnessEvent::Event(Ev::Inc) => *state += 1,
-        HarnessEvent::Event(Ev::Dec) => *state -= 1,
+        HarnessEvent::Event(Ev::Inc) => state.0 += 1,
+        HarnessEvent::Event(Ev::Dec) => state.0 -= 1,
     }
 }
 
-fn render(state: &i32, f: &mut ratatui::Frame<'_>) {
+fn render(state: &Count, f: &mut ratatui::Frame<'_>) {
     use ratatui::widgets::Paragraph;
-    f.render_widget(Paragraph::new(format!("n={state}")), f.area());
+    f.render_widget(Paragraph::new(format!("n={}", state.0)), f.area());
 }
 
-fn script() -> Harness<i32, Ev> {
-    let mut h = Harness::new(0, 20, 3, update, render);
+fn script() -> Harness<Count, Ev> {
+    let mut h = Harness::new(Count(0), 20, 3, update, render);
     h.schedule(10, Ev::Inc);
     h.schedule(20, Ev::Inc);
     h.schedule(30, Ev::Dec);
@@ -217,25 +221,25 @@ fn harness_uses_update_render_not_view_capture() {
     // update/render fns and a manual clock instead. Proof: advancing the
     // clock with no events still delivers Tick (observable via state), and
     // screens track reducer state, not a static draw.
-    fn tick_counter(state: &mut u64, ev: HarnessEvent<Ev>) {
+    fn tick_counter(state: &mut Count, ev: HarnessEvent<Ev>) {
         if matches!(ev, HarnessEvent::Tick(_)) {
-            *state += 1;
+            state.0 += 1;
         }
     }
-    fn render_tick(state: &u64, f: &mut ratatui::Frame<'_>) {
+    fn render_tick(state: &Count, f: &mut ratatui::Frame<'_>) {
         use ratatui::widgets::Paragraph;
-        f.render_widget(Paragraph::new(format!("t={state}")), f.area());
+        f.render_widget(Paragraph::new(format!("t={}", state.0)), f.area());
     }
-    let mut h = Harness::new(0u64, 20, 3, tick_counter, render_tick);
+    let mut h = Harness::new(Count(0), 20, 3, tick_counter, render_tick);
     assert_eq!(h.now(), 0);
     h.advance(100);
     assert_eq!(h.now(), 100);
-    assert_eq!(*h.state(), 1); // Tick observed: reducer ran, not just a view.
+    assert_eq!(h.state().0, 1); // Tick observed: reducer ran, not just a view.
     let s = h.screen();
     assert!(s.cells().iter().any(|c| c.symbol == "1"));
 
     // Out-of-order scheduling still runs in time order deterministically.
-    let mut h2 = Harness::new(0, 20, 3, update, render);
+    let mut h2 = Harness::new(Count(0), 20, 3, update, render);
     h2.schedule(30, Ev::Dec);
     h2.schedule(10, Ev::Inc);
     h2.schedule(20, Ev::Inc);

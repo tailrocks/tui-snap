@@ -12,15 +12,15 @@ use tuiscotti::ratatui::{
     stateful_screen, widget_screen,
 };
 
-fn row_text(screen: &tuiscotti::Screen, y: u16) -> String {
+fn row_text(screen: &tuiscotti::Screen, y: u16) -> Result<String, Box<dyn std::error::Error>> {
     let mut row = String::new();
     for x in 0..screen.cols() {
-        let c = screen.get(x, y).unwrap();
+        let c = screen.get(x, y).ok_or("row_text: cell out of range")?;
         if !c.continuation {
             row.push_str(&c.symbol);
         }
     }
-    row.trim_end().to_string()
+    Ok(row.trim_end().to_string())
 }
 
 #[test]
@@ -34,8 +34,11 @@ fn draw_closure_renders_content_and_places_cursor() {
         },
         EdgePolicy::default(),
     )
-    .unwrap();
-    assert_eq!(row_text(&cap.screen, 0), "hello");
+    .expect("render_screen( 20, 5, |f| { f.render_widget(Paragraph::new(\"hello\"), f.area()); f.set_c... succeeds");
+    assert_eq!(
+        row_text(&cap.screen, 0).expect("row_text succeeds"),
+        "hello"
+    );
     assert_eq!(cap.screen.origin(), (0, 0));
     let cur = cap.screen.cursor();
     assert!(cur.visible);
@@ -54,7 +57,7 @@ fn draw_closure_without_cursor_leaves_it_hidden() {
         },
         EdgePolicy::default(),
     )
-    .unwrap();
+    .expect("render_screen( 10, 3, |f| { f.render_widget(Paragraph::new(\"x\"), f.area()); }, EdgePoli... succeeds");
     assert!(!cap.screen.cursor().visible);
 }
 
@@ -72,10 +75,22 @@ fn draw_closure_supports_stateful_widget() {
         },
         EdgePolicy::default(),
     )
-    .unwrap();
-    assert_eq!(row_text(&cap.screen, 1), "bb");
-    assert!(cap.screen.get(0, 1).unwrap().mods.reverse);
-    assert!(!cap.screen.get(0, 0).unwrap().mods.reverse);
+    .expect("render_screen( 12, 4, |f| { let list = List::new([\"aa\", \"bb\", \"cc\"]) .highlight_style(S... succeeds");
+    assert_eq!(row_text(&cap.screen, 1).expect("row_text succeeds"), "bb");
+    assert!(
+        cap.screen
+            .get(0, 1)
+            .expect("cap.screen.get(0, 1) is some")
+            .mods
+            .reverse
+    );
+    assert!(
+        !cap.screen
+            .get(0, 0)
+            .expect("cap.screen.get(0, 0) is some")
+            .mods
+            .reverse
+    );
 }
 
 #[test]
@@ -84,16 +99,30 @@ fn stateful_screen_uses_production_render_fn() {
         .highlight_style(Style::default().add_modifier(Modifier::BOLD));
     let mut state = ListState::default();
     state.select(Some(0));
-    let cap = stateful_screen(list, &mut state, 10, 3, EdgePolicy::default()).unwrap();
-    assert_eq!(row_text(&cap.screen, 0), "one");
-    assert!(cap.screen.get(0, 0).unwrap().mods.bold);
-    assert!(!cap.screen.get(0, 1).unwrap().mods.bold);
+    let cap = stateful_screen(list, &mut state, 10, 3, EdgePolicy::default())
+        .expect("stateful_screen(list, &mut state, 10, 3, EdgePolicy::default()) succeeds");
+    assert_eq!(row_text(&cap.screen, 0).expect("row_text succeeds"), "one");
+    assert!(
+        cap.screen
+            .get(0, 0)
+            .expect("cap.screen.get(0, 0) is some")
+            .mods
+            .bold
+    );
+    assert!(
+        !cap.screen
+            .get(0, 1)
+            .expect("cap.screen.get(0, 1) is some")
+            .mods
+            .bold
+    );
 }
 
 #[test]
 fn widget_screen_renders_fullscreen() {
-    let cap = widget_screen(Paragraph::new("wide"), 10, 3, EdgePolicy::default()).unwrap();
-    assert_eq!(row_text(&cap.screen, 0), "wide");
+    let cap = widget_screen(Paragraph::new("wide"), 10, 3, EdgePolicy::default())
+        .expect("widget_screen(Paragraph::new(\"wide\"), 10, 3, EdgePolicy::default()) succeeds");
+    assert_eq!(row_text(&cap.screen, 0).expect("row_text succeeds"), "wide");
     assert_eq!((cap.screen.cols(), cap.screen.rows()), (10, 3));
     assert!(!cap.screen.cursor().visible);
 }
@@ -103,12 +132,19 @@ fn buffer_with_nonzero_origin_preserves_origin() {
     let mut buf = Buffer::empty(Rect::new(5, 3, 10, 4));
     buf.set_string(5, 3, "hi", Style::default());
     buf.set_string(6, 5, "yo", Style::default());
-    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).unwrap();
+    let cap = screen_from_buffer(&buf, None, EdgePolicy::default())
+        .expect("screen_from_buffer(&buf, None, EdgePolicy::default()) succeeds");
     assert_eq!(cap.screen.origin(), (5, 3));
     assert_eq!((cap.screen.cols(), cap.screen.rows()), (10, 4));
-    assert_eq!(row_text(&cap.screen, 0), "hi");
-    assert_eq!(row_text(&cap.screen, 2), " yo");
-    assert!(cap.screen.get(0, 0).unwrap().symbol == "h");
+    assert_eq!(row_text(&cap.screen, 0).expect("row_text succeeds"), "hi");
+    assert_eq!(row_text(&cap.screen, 2).expect("row_text succeeds"), " yo");
+    assert_eq!(
+        cap.screen
+            .get(0, 0)
+            .expect("cap.screen.get(0, 0) is some")
+            .symbol,
+        "h"
+    );
 }
 
 #[test]
@@ -119,7 +155,7 @@ fn buffer_cursor_translates_to_grid_local() {
         Some((Position::new(7, 4), true)),
         EdgePolicy::default(),
     )
-    .unwrap();
+    .expect("screen_from_buffer( &buf, Some((Position::new(7, 4), true)), EdgePolicy::default(), ) succeeds");
     let cur = cap.screen.cursor();
     assert!(cur.visible);
     assert_eq!((cur.x, cur.y), (2, 1));
@@ -133,7 +169,7 @@ fn buffer_cursor_outside_area_captured_hidden_with_note() {
         Some((Position::new(0, 0), true)),
         EdgePolicy::default(),
     )
-    .unwrap();
+    .expect("screen_from_buffer( &buf, Some((Position::new(0, 0), true)), EdgePolicy::default(), ) succeeds");
     assert!(!cap.screen.cursor().visible);
     assert!(cap.notes.iter().any(|n| n.contains("outside buffer area")));
 }
@@ -141,14 +177,15 @@ fn buffer_cursor_outside_area_captured_hidden_with_note() {
 #[test]
 fn test_backend_capture_includes_cursor() {
     let backend = TestBackend::new(16, 4);
-    let mut term = Terminal::new(backend).unwrap();
+    let mut term = Terminal::new(backend).expect("Terminal::new succeeds");
     term.draw(|f| {
         f.render_widget(Paragraph::new("tb"), f.area());
         f.set_cursor_position((3, 1));
     })
-    .unwrap();
-    let cap = screen_from_test_backend(&mut term, EdgePolicy::default()).unwrap();
-    assert_eq!(row_text(&cap.screen, 0), "tb");
+    .expect("term.draw succeeds");
+    let cap = screen_from_test_backend(&mut term, EdgePolicy::default())
+        .expect("screen_from_test_backend(&mut term, EdgePolicy::default()) succeeds");
+    assert_eq!(row_text(&cap.screen, 0).expect("row_text succeeds"), "tb");
     let cur = cap.screen.cursor();
     assert!(cur.visible);
     assert_eq!((cur.x, cur.y), (3, 1));
@@ -158,12 +195,13 @@ fn test_backend_capture_includes_cursor() {
 fn wide_glyph_mid_row_gets_continuation() {
     let mut buf = Buffer::empty(Rect::new(0, 0, 10, 3));
     buf[(3, 1)].set_symbol("漢");
-    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).unwrap();
-    let lead = cap.screen.get(3, 1).unwrap();
+    let cap = screen_from_buffer(&buf, None, EdgePolicy::default())
+        .expect("screen_from_buffer(&buf, None, EdgePolicy::default()) succeeds");
+    let lead = cap.screen.get(3, 1).expect("cap.screen.get(3, 1) is some");
     assert_eq!(lead.symbol, "漢");
     assert_eq!(lead.width, 2);
     assert!(!lead.continuation);
-    let cont = cap.screen.get(4, 1).unwrap();
+    let cont = cap.screen.get(4, 1).expect("cap.screen.get(4, 1) is some");
     assert!(cont.continuation);
     assert_eq!(cont.width, 0);
     assert!(cont.symbol.is_empty());
@@ -174,8 +212,9 @@ fn wide_glyph_mid_row_gets_continuation() {
 fn wide_glyph_at_row_end_clips_with_replacement_by_default() {
     let mut buf = Buffer::empty(Rect::new(0, 0, 10, 3));
     buf[(9, 0)].set_symbol("漢");
-    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).unwrap();
-    let cell = cap.screen.get(9, 0).unwrap();
+    let cap = screen_from_buffer(&buf, None, EdgePolicy::default())
+        .expect("screen_from_buffer(&buf, None, EdgePolicy::default()) succeeds");
+    let cell = cap.screen.get(9, 0).expect("cap.screen.get(9, 0) is some");
     assert_eq!(cell.symbol, REPLACEMENT);
     assert_eq!(cell.width, 1);
     assert!(!cell.continuation);
@@ -192,7 +231,8 @@ fn wide_glyph_at_row_end_clips_with_replacement_by_default() {
 fn wide_glyph_at_row_end_fails_under_error_policy() {
     let mut buf = Buffer::empty(Rect::new(0, 0, 10, 3));
     buf[(9, 2)].set_symbol("漢");
-    let err = screen_from_buffer(&buf, None, EdgePolicy::Error).unwrap_err();
+    let err = screen_from_buffer(&buf, None, EdgePolicy::Error)
+        .expect_err("screen_from_buffer(&buf, None, EdgePolicy::Error) is an error");
     let msg = err.to_string();
     assert!(msg.contains("漢"), "missing glyph: {msg}");
     assert!(msg.contains("(9,2)"), "missing position: {msg}");
@@ -212,8 +252,8 @@ fn styled_blank_and_mods_survive_round_trip() {
         Some((Position::new(2, 0), true)),
         EdgePolicy::default(),
     )
-    .unwrap();
-    let cell = cap.screen.get(2, 0).unwrap();
+    .expect("screen_from_buffer( &buf, Some((Position::new(2, 0), true)), EdgePolicy::default(), ) succeeds");
+    let cell = cap.screen.get(2, 0).expect("cap.screen.get(2, 0) is some");
     assert_eq!(cell.symbol, " ");
     assert_eq!(cell.fg, tuiscotti::frame::Color::Indexed(1));
     assert_eq!(cell.bg, tuiscotti::frame::Color::Indexed(4));
@@ -237,8 +277,9 @@ fn rgb_and_bold_italic_styles_preserved() {
             .fg(RColor::Rgb(1, 2, 3))
             .add_modifier(Modifier::BOLD | Modifier::ITALIC),
     );
-    let cap = screen_from_buffer(&buf, None, EdgePolicy::default()).unwrap();
-    let cell = cap.screen.get(0, 0).unwrap();
+    let cap = screen_from_buffer(&buf, None, EdgePolicy::default())
+        .expect("screen_from_buffer(&buf, None, EdgePolicy::default()) succeeds");
+    let cell = cap.screen.get(0, 0).expect("cap.screen.get(0, 0) is some");
     assert_eq!(
         cell.fg,
         tuiscotti::frame::Color::Rgb(tuiscotti::frame::Rgb::new(1, 2, 3))
@@ -249,7 +290,8 @@ fn rgb_and_bold_italic_styles_preserved() {
 
 #[test]
 fn render_screen_origin_is_zero_zero() {
-    let cap = render_screen(4, 4, |_| {}, EdgePolicy::default()).unwrap();
+    let cap = render_screen(4, 4, |_| {}, EdgePolicy::default())
+        .expect("render_screen(4, 4, |_| {}, EdgePolicy::default()) succeeds");
     assert_eq!(cap.screen.origin(), (0, 0));
     assert_eq!((cap.screen.cols(), cap.screen.rows()), (4, 4));
 }

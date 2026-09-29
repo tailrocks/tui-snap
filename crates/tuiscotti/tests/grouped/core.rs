@@ -6,12 +6,12 @@ use tuiscotti::snapshot::Status;
 #[test]
 fn missing_accept_match_round_trip_nested_name() {
     let name = "showcase/pages/overview_120x40_truecolor";
-    let (_dir, st) = tmp_store("snapshots");
+    let (_dir, st) = tmp_store("snapshots").expect("tmp_store succeeds");
     let frame = frame_with("hello grouped");
 
     let o1 = st
         .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("st .check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
     assert_eq!(o1.status(), Status::MissingApproval);
     assert!(o1.ensure_matched().is_err());
     assert!(o1.outcome.note.contains(".ansi"), "{}", o1.outcome.note);
@@ -26,11 +26,11 @@ fn missing_accept_match_round_trip_nested_name() {
     // Nothing approved yet (fail-closed).
     assert!(!o1.approved.ansi.exists());
 
-    st.accept(name).unwrap();
+    st.accept(name).expect("st.accept(name) succeeds");
     // The approved tree holds EXACTLY the four artifacts: no .frame.json,
     // no .fidelity.json, nothing else.
     assert_eq!(
-        tree_files(st.approved_root()),
+        tree_files(st.approved_root()).expect("tree_files succeeds"),
         vec![
             format!("{name}.ansi"),
             format!("{name}.html"),
@@ -41,19 +41,21 @@ fn missing_accept_match_round_trip_nested_name() {
 
     let o2 = st
         .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("st .check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
     assert_eq!(o2.status(), Status::Matched);
     assert_eq!(o2.outcome.pixel_score, Some(1.0));
     assert_eq!(o2.ansi_match, Some(true));
     assert_eq!(o2.txt_match, Some(true));
     assert_eq!(o2.html_match, Some(true));
-    o2.ensure_matched().unwrap();
+    o2.ensure_matched().expect("o2.ensure_matched() succeeds");
 }
 
 #[test]
 fn ansi_and_txt_and_html_are_byte_deterministic() {
     let profile = profile();
-    let mut renderer = profile.renderer(&VENDORED_FACES).unwrap();
+    let mut renderer = profile
+        .renderer(&VENDORED_FACES)
+        .expect("profile.renderer(&VENDORED_FACES) succeeds");
     // Same screen, different capture timestamps: provenance time must not
     // leak into any artifact (the HTML embed normalizes it).
     let mut p2 = prov();
@@ -65,21 +67,35 @@ fn ansi_and_txt_and_html_are_byte_deterministic() {
         tuiscotti::render::ansi_dump(&b)
     );
     assert_eq!(a.text(), b.text());
-    let ha = renderer.render_html(&a, "t").unwrap();
-    let hb = renderer.render_html(&b, "t").unwrap();
+    let ha = renderer
+        .render_html(&a, "t")
+        .expect("renderer.render_html(&a, \"t\") succeeds");
+    let hb = renderer
+        .render_html(&b, "t")
+        .expect("renderer.render_html(&b, \"t\") succeeds");
     assert_eq!(ha, hb, "html must not embed the capture timestamp");
     // Re-rendered twice through render_artifacts: identical bytes.
-    let r1 = renderer.render_artifacts(&a, "t").unwrap();
-    let r2 = renderer.render_artifacts(&a, "t").unwrap();
+    let r1 = renderer
+        .render_artifacts(&a, "t")
+        .expect("renderer.render_artifacts(&a, \"t\") succeeds");
+    let r2 = renderer
+        .render_artifacts(&a, "t")
+        .expect("renderer.render_artifacts(&a, \"t\") succeeds");
     assert_eq!(r1.ansi, r2.ansi);
     assert_eq!(r1.txt, r2.txt);
     assert_eq!(r1.html, r2.html);
     assert_eq!(r1.png, r2.png);
     // The embedded frame JSON still re-imports losslessly (timestamp zeroed).
-    let start = ha.find("<script type=\"application/json\">").unwrap()
+    let start = ha
+        .find("<script type=\"application/json\">")
+        .expect("ha.find(\"<script type=\\\"application/json\\\">\") is some")
         + "<script type=\"application/json\">".len();
-    let end = ha[start..].find("</script>").unwrap() + start;
-    let back = tuiscotti::Frame::from_json(&ha[start..end]).unwrap();
+    let end = ha[start..]
+        .find("</script>")
+        .expect("ha[start..].find(\"</script>\") is some")
+        + start;
+    let back = tuiscotti::Frame::from_json(&ha[start..end])
+        .expect("tuiscotti::Frame::from_json(&ha[start..end]) succeeds");
     assert_eq!(back.digest(), a.digest(), "cells/cursor survive the embed");
     assert_eq!(back.provenance.created_unix, 0);
 }
@@ -87,21 +103,21 @@ fn ansi_and_txt_and_html_are_byte_deterministic() {
 #[test]
 fn check_seals_manifest_and_verdict_that_report_reuses_verbatim() {
     let name = "sealed/one";
-    let (_dir, st) = tmp_store("sealed");
+    let (_dir, st) = tmp_store("sealed").expect("tmp_store succeeds");
     let frame = frame_with("sealed verdict");
     st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
-    st.accept(name).unwrap();
+        .expect("st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
+    st.accept(name).expect("st.accept(name) succeeds");
     let checked = st
         .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("st .check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
     assert_eq!(checked.status(), Status::Matched);
 
     // C08-grouped: candidate seal written after all candidate writes.
     let manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(st.actual_root().join(format!("{name}.manifest.json"))).unwrap(),
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.manifest.json"))).expect("std::fs::read_to_string(st.actual_root().join(format!(\"{name}.manifest.json\"))) succeeds"),
     )
-    .unwrap();
+    .expect("serde_json::from_str( &std::fs::read_to_string(st.actual_root().join(format!(\"{name}.ma... succeeds");
     assert_eq!(manifest["complete"], true);
     assert_eq!(manifest["name"], name);
     assert!(manifest["profile"].is_string());
@@ -112,26 +128,33 @@ fn check_seals_manifest_and_verdict_that_report_reuses_verbatim() {
         "html_sha256",
         "frame_sha256",
     ] {
-        assert_eq!(manifest[key].as_str().unwrap().len(), 64, "{key}");
+        assert_eq!(
+            manifest[key]
+                .as_str()
+                .expect("manifest[key].as_str() is some")
+                .len(),
+            64,
+            "{key}"
+        );
     }
     // C05: the ONE persisted verdict.
     let verdict: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).unwrap(),
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).expect("std::fs::read_to_string(st.actual_root().join(format!(\"{name}.verdict.json\"))) succeeds"),
     )
-    .unwrap();
+    .expect("serde_json::from_str( &std::fs::read_to_string(st.actual_root().join(format!(\"{name}.ve... succeeds");
     assert_eq!(verdict["status"], "matched");
     assert_eq!(verdict["pixel_threshold"], 1.0);
     assert!(
         verdict["checks_performed"]
             .as_array()
-            .unwrap()
+            .expect("verdict[\"checks_performed\"] .as_array() is some")
             .contains(&serde_json::Value::String("png-pixel-gate".into()))
     );
 
     // C05: report on the same inputs reuses the verdict — same status.
     let report = st
         .report(&profile(), &VENDORED_FACES, 1.0, "sealed suite")
-        .unwrap();
+        .expect("st .report(&profile(), &VENDORED_FACES, 1.0, \"sealed suite\") succeeds");
     assert_eq!(report.outcomes.len(), 1);
     assert_eq!(report.outcomes[0].status, checked.status());
     assert_eq!(report.outcomes[0].pixel_score, Some(1.0));
@@ -140,47 +163,48 @@ fn check_seals_manifest_and_verdict_that_report_reuses_verbatim() {
 #[test]
 fn stale_verdict_after_accept_recomputes_instead_of_reuse() {
     let name = "stale/one";
-    let (_dir, st) = tmp_store("stale");
+    let (_dir, st) = tmp_store("stale").expect("tmp_store succeeds");
     let frame = frame_with("stale verdict");
     let first = st
         .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("st .check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
     assert_eq!(first.status(), Status::MissingApproval);
     // Accept WITHOUT re-checking: the sealed MissingApproval verdict is now
     // stale (the approved side appeared). Report must recompute via check —
     // never silently reuse the stale verdict.
-    st.accept(name).unwrap();
+    st.accept(name).expect("st.accept(name) succeeds");
     let report = st
         .report(&profile(), &VENDORED_FACES, 1.0, "stale suite")
-        .unwrap();
+        .expect("st .report(&profile(), &VENDORED_FACES, 1.0, \"stale suite\") succeeds");
     assert_eq!(report.outcomes.len(), 1);
     assert_eq!(report.outcomes[0].status, Status::Matched);
     // The recompute re-sealed a fresh verdict for the next report.
     let verdict: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).unwrap(),
+        &std::fs::read_to_string(st.actual_root().join(format!("{name}.verdict.json"))).expect("std::fs::read_to_string(st.actual_root().join(format!(\"{name}.verdict.json\"))) succeeds"),
     )
-    .unwrap();
+    .expect("serde_json::from_str( &std::fs::read_to_string(st.actual_root().join(format!(\"{name}.ve... succeeds");
     assert_eq!(verdict["status"], "matched");
 }
 
 #[test]
 fn interrupted_candidate_reports_missing_approval_never_pixel_verdict() {
     let name = "broken/one";
-    let (_dir, st) = tmp_store("broken");
+    let (_dir, st) = tmp_store("broken").expect("tmp_store succeeds");
     let frame = frame_with("interrupted");
     st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
-    st.accept(name).unwrap();
+        .expect("st.check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
+    st.accept(name).expect("st.accept(name) succeeds");
     let matched = st
         .check(name, &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("st .check(name, &frame, &profile(), &VENDORED_FACES, 1.0) succeeds");
     assert_eq!(matched.status(), Status::Matched);
 
     // Simulate interruption: frame survived, PNG write lost.
-    std::fs::remove_file(&matched.actual.png).unwrap();
+    std::fs::remove_file(&matched.actual.png)
+        .expect("std::fs::remove_file(&matched.actual.png) succeeds");
     let report = st
         .report(&profile(), &VENDORED_FACES, 1.0, "broken suite")
-        .unwrap();
+        .expect("st .report(&profile(), &VENDORED_FACES, 1.0, \"broken suite\") succeeds");
     assert_eq!(report.outcomes.len(), 1);
     assert_eq!(report.outcomes[0].status, Status::MissingApproval);
     assert!(

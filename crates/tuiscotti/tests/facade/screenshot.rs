@@ -5,13 +5,15 @@ use tuiscotti::insta_proto::insta_string;
 
 #[test]
 fn snapshot_macro_passes_on_identical_rerun() {
-    let ws = workspace();
-    let screen = fixture();
+    let ws = workspace().expect("workspace succeeds");
+    let screen = fixture().expect("fixture succeeds");
     let canonical = insta_string(&screen);
     let generation = generation_id(&canonical);
     // Second same-process call auto-suffixes to `fac_rerun-2` (no public opt-out).
-    write_text_snap(&ws.snaps, "fac_rerun", &generation, &canonical);
-    write_text_snap(&ws.snaps, "fac_rerun-2", &generation, &canonical);
+    write_text_snap(&ws.snaps, "fac_rerun", &generation, &canonical)
+        .expect("write_text_snap succeeds");
+    write_text_snap(&ws.snaps, "fac_rerun-2", &generation, &canonical)
+        .expect("write_text_snap succeeds");
     tuiscotti::assert_snapshot!("fac_rerun", &screen, &ws.policy());
     tuiscotti::assert_snapshot!("fac_rerun", &screen, &ws.policy());
 }
@@ -21,46 +23,52 @@ fn snapshot_macro_passes_on_identical_rerun() {
 // ---------------------------------------------------------------------------
 #[test]
 fn screenshot_passes_when_consistent() {
-    let ws = workspace();
-    let screen = fixture();
-    let sample = render_sample(&screen).unwrap();
+    let ws = workspace().expect("workspace succeeds");
+    let screen = fixture().expect("fixture succeeds");
+    let sample = render_sample(&screen).expect("render_sample(&screen) succeeds");
     let generation = generation_id(&sample.canonical);
-    write_text_snap(&ws.snaps, "fac_shotok", &generation, &sample.canonical);
+    write_text_snap(&ws.snaps, "fac_shotok", &generation, &sample.canonical)
+        .expect("write_text_snap succeeds");
     write_binary_snap(
         &ws.snaps,
         "fac_shotok-img",
         &generation,
         &png_tag_generation(&sample.png, &generation),
-    );
+    )
+    .expect("write_binary_snap succeeds");
     tuiscotti::assert_screenshot!("fac_shotok", &screen, &ws.policy());
 }
 
 #[test]
 fn screenshot_evidence_present_before_failure() {
-    let ws = workspace();
-    let screen = fixture();
+    let ws = workspace().expect("workspace succeeds");
+    let screen = fixture().expect("fixture succeeds");
     // No approvals for fac_evidence: the macro must fail.
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         tuiscotti::assert_screenshot!("fac_evidence", &screen, &ws.policy());
     }));
     assert!(result.is_err(), "unapproved screenshot must fail");
     // ...but candidate evidence from the same sample is on disk first.
-    let sample = render_sample(&screen).unwrap();
+    let sample = render_sample(&screen).expect("render_sample(&screen) succeeds");
     let generation = generation_id(&sample.canonical);
     assert_eq!(
-        fs::read(ws.evidence.join("fac_evidence.png")).unwrap(),
+        fs::read(ws.evidence.join("fac_evidence.png"))
+            .expect("fs::read(ws.evidence.join(\"fac_evidence.png\")) succeeds"),
         png_tag_generation(&sample.png, &generation)
     );
     assert_eq!(
-        fs::read_to_string(ws.evidence.join("fac_evidence.ansi")).unwrap(),
+        fs::read_to_string(ws.evidence.join("fac_evidence.ansi"))
+            .expect("fs::read_to_string(ws.evidence.join(\"fac_evidence.ansi\")) succeeds"),
         sample.ansi
     );
     assert_eq!(
-        fs::read_to_string(ws.evidence.join("fac_evidence.txt")).unwrap(),
+        fs::read_to_string(ws.evidence.join("fac_evidence.txt"))
+            .expect("fs::read_to_string(ws.evidence.join(\"fac_evidence.txt\")) succeeds"),
         sample.txt
     );
     assert_eq!(
-        fs::read_to_string(ws.evidence.join("fac_evidence.html")).unwrap(),
+        fs::read_to_string(ws.evidence.join("fac_evidence.html"))
+            .expect("fs::read_to_string(ws.evidence.join(\"fac_evidence.html\")) succeeds"),
         sample.html
     );
     // Approvals are never blessed (unless the ambient run forces in-place
@@ -78,24 +86,26 @@ fn screenshot_evidence_present_before_failure() {
 
 #[test]
 fn screenshot_mixed_generation_fails() {
-    let ws = workspace();
-    let screen = fixture();
-    let sample = render_sample(&screen).unwrap();
+    let ws = workspace().expect("workspace succeeds");
+    let screen = fixture().expect("fixture succeeds");
+    let sample = render_sample(&screen).expect("render_sample(&screen) succeeds");
     let generation = generation_id(&sample.canonical);
     // Canonical approved at gen-A; PNG pixels identical but bound to gen-B.
-    write_text_snap(&ws.snaps, "fac_mixed", &generation, &sample.canonical);
+    write_text_snap(&ws.snaps, "fac_mixed", &generation, &sample.canonical)
+        .expect("write_text_snap succeeds");
     write_binary_snap(
         &ws.snaps,
         "fac_mixed-img",
         "gen-b",
         &png_tag_generation(&sample.png, "gen-b"),
-    );
+    )
+    .expect("write_binary_snap succeeds");
     // Strict gate agrees directly.
     check_consistent(&ws.snaps, "fac_mixed", "fac_mixed-img")
         .expect_err("mixed baseline must be inconsistent");
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         tuiscotti::assert_screenshot!("fac_mixed", &screen, &ws.policy());
     }));
-    let msg = panic_message(result.unwrap_err());
+    let msg = panic_message(&*result.expect_err("result is an error"));
     assert!(msg.contains("mixed compound baseline"), "{msg}");
 }

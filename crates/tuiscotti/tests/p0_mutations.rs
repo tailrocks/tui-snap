@@ -41,57 +41,65 @@ fn frame_with(text: &str) -> tuiscotti::Frame {
     tuiscotti::ratatui::widget_frame(Paragraph::new(text), 30, 6, prov())
 }
 
-fn tmp_classic(tag: &str) -> (tempfile::TempDir, Store) {
-    let dir = tempfile::tempdir().unwrap();
+fn tmp_classic(tag: &str) -> Result<(tempfile::TempDir, Store), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
     let st = Store::new(&dir.path().join(tag));
-    (dir, st)
+    Ok((dir, st))
 }
 
-fn tmp_grouped(tag: &str) -> (tempfile::TempDir, GroupedStore) {
-    let dir = tempfile::tempdir().unwrap();
+fn tmp_grouped(tag: &str) -> Result<(tempfile::TempDir, GroupedStore), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
     let st = GroupedStore::new(&dir.path().join(tag));
-    (dir, st)
+    Ok((dir, st))
 }
 
 /// 16x16 deterministic gradient (non-trivial bytes so encoder settings matter).
 fn gradient_rgb() -> RgbImage {
     let mut img = RgbImage::new(16, 16);
-    for y in 0..16 {
-        for x in 0..16 {
-            img.put_pixel(x, y, image::Rgb([(x * 16) as u8, (y * 16) as u8, 128]));
+    for y in 0..16u8 {
+        for x in 0..16u8 {
+            img.put_pixel(
+                u32::from(x),
+                u32::from(y),
+                image::Rgb([x * 16, y * 16, 128]),
+            );
         }
     }
     img
 }
 
-fn encode_rgb(img: &RgbImage, c: CompressionType, f: FilterType) -> Vec<u8> {
+fn encode_rgb(
+    img: &RgbImage,
+    c: CompressionType,
+    f: FilterType,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
-    PngEncoder::new_with_quality(&mut buf, c, f)
-        .write_image(
-            img.as_raw(),
-            img.width(),
-            img.height(),
-            image::ExtendedColorType::Rgb8,
-        )
-        .unwrap();
-    buf
+    PngEncoder::new_with_quality(&mut buf, c, f).write_image(
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgb8,
+    )?;
+    Ok(buf)
 }
 
-fn encode_rgba(img: &RgbaImage, c: CompressionType, f: FilterType) -> Vec<u8> {
+fn encode_rgba(
+    img: &RgbaImage,
+    c: CompressionType,
+    f: FilterType,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
-    PngEncoder::new_with_quality(&mut buf, c, f)
-        .write_image(
-            img.as_raw(),
-            img.width(),
-            img.height(),
-            image::ExtendedColorType::Rgba8,
-        )
-        .unwrap();
-    buf
+    PngEncoder::new_with_quality(&mut buf, c, f).write_image(
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgba8,
+    )?;
+    Ok(buf)
 }
 
-fn decode_rgb(png: &[u8]) -> RgbImage {
-    image::load_from_memory(png).unwrap().to_rgb8()
+fn decode_rgb(png: &[u8]) -> Result<RgbImage, Box<dyn std::error::Error>> {
+    Ok(image::load_from_memory(png)?.to_rgb8())
 }
 
 // ------------------------------------------------- C01: cell-equality bypass

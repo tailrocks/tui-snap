@@ -32,28 +32,33 @@ fn frame_with(text: &str) -> tuiscotti::Frame {
     tuiscotti::ratatui::widget_frame(Paragraph::new(text), 30, 6, prov())
 }
 
-fn tmp_store(tag: &str) -> (tempfile::TempDir, GroupedStore) {
-    let dir = tempfile::tempdir().unwrap();
+fn tmp_store(tag: &str) -> Result<(tempfile::TempDir, GroupedStore), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
     let st = GroupedStore::new(&dir.path().join(tag));
-    (dir, st)
+    Ok((dir, st))
 }
 
 /// Every file below `dir`, relative paths sorted (for approved-tree audits).
-fn tree_files(dir: &std::path::Path) -> Vec<String> {
-    let mut out = Vec::new();
-    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
-        for entry in std::fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
+fn tree_files(dir: &std::path::Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    fn walk(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        out: &mut Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in std::fs::read_dir(dir)? {
+            let path = entry?.path();
             if path.is_dir() {
-                walk(root, &path, out);
+                walk(root, &path, out)?;
             } else {
-                out.push(path.strip_prefix(root).unwrap().display().to_string());
+                out.push(path.strip_prefix(root)?.display().to_string());
             }
         }
+        Ok(())
     }
+    let mut out = Vec::new();
     if dir.exists() {
-        walk(dir, dir, &mut out);
+        walk(dir, dir, &mut out)?;
     }
     out.sort();
-    out
+    Ok(out)
 }

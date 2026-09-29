@@ -9,14 +9,17 @@ mod graphics;
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn png_solid(w: u32, h: u32, px: [u8; 4]) -> Vec<u8> {
+fn png_solid(w: u32, h: u32, px: [u8; 4]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     use image::ImageEncoder as _;
     let img = image::RgbaImage::from_pixel(w, h, image::Rgba(px));
     let mut buf = Vec::new();
-    image::codecs::png::PngEncoder::new(&mut buf)
-        .write_image(img.as_raw(), w, h, image::ExtendedColorType::Rgba8)
-        .unwrap();
-    buf
+    image::codecs::png::PngEncoder::new(&mut buf).write_image(
+        img.as_raw(),
+        w,
+        h,
+        image::ExtendedColorType::Rgba8,
+    )?;
+    Ok(buf)
 }
 
 fn b64(bytes: &[u8]) -> String {

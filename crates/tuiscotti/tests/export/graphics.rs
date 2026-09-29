@@ -19,7 +19,9 @@ fn sixel_parse_and_exact_decode() {
     assert_eq!(p.placement.image_px, Some((2, 6)));
     assert_eq!(p.placement.z, None);
     assert_eq!(p.placement.col, None);
-    let img = p.decode_bounded(&GraphicsPolicy::default()).unwrap();
+    let img = p
+        .decode_bounded(&GraphicsPolicy::default())
+        .expect("p.decode_bounded(&GraphicsPolicy::default()) succeeds");
     assert_eq!((img.width, img.height), (2, 6));
     let (pixels, _rest) = img.rgba.as_chunks::<4>();
     assert!(pixels.iter().all(|px| *px == [255, 0, 0, 255]));
@@ -33,7 +35,7 @@ fn sixel_hls_repeat_and_newline() {
     assert!(scan.is_clean(), "diagnostics: {:?}", scan.diagnostics);
     let img = scan.payloads[0]
         .decode_bounded(&GraphicsPolicy::default())
-        .unwrap();
+        .expect("scan.payloads[0] .decode_bounded(&GraphicsPolicy::default()) succeeds");
     assert_eq!((img.width, img.height), (2, 12));
     let px = |x: u32, y: u32| {
         let o = (y as usize * 2 + x as usize) * 4;
@@ -91,7 +93,9 @@ fn kitty_single_decode_and_placement() {
     assert_eq!((p.placement.dx_px, p.placement.dy_px), (3, 4));
     assert_eq!(p.placement.image_px, Some((2, 1)));
     assert_eq!(p.placement.display_cells, Some((5, 6)));
-    let img = p.decode_bounded(&GraphicsPolicy::default()).unwrap();
+    let img = p
+        .decode_bounded(&GraphicsPolicy::default())
+        .expect("p.decode_bounded(&GraphicsPolicy::default()) succeeds");
     assert_eq!((img.width, img.height), (2, 1));
     assert_eq!(img.rgba, raw);
 }
@@ -112,22 +116,22 @@ fn kitty_chunked_reassembly_equals_single() {
     assert_eq!(
         a.payloads[0]
             .decode_bounded(&GraphicsPolicy::default())
-            .unwrap(),
+            .expect("a.payloads[0] .decode_bounded(&GraphicsPolicy::default()) succeeds"),
         b.payloads[0]
             .decode_bounded(&GraphicsPolicy::default())
-            .unwrap()
+            .expect("b.payloads[0] .decode_bounded(&GraphicsPolicy::default()) succeeds")
     );
 }
 
 #[test]
 fn kitty_png_and_rgb24_roundtrip() {
     // f=100 PNG.
-    let png = png_solid(3, 2, [10, 20, 30, 40]);
+    let png = png_solid(3, 2, [10, 20, 30, 40]).expect("png_solid succeeds");
     let scan = scan_graphics_default(&kitty("a=T,f=100", &b64(&png)));
     assert!(scan.is_clean(), "diagnostics: {:?}", scan.diagnostics);
     let img = scan.payloads[0]
         .decode_bounded(&GraphicsPolicy::default())
-        .unwrap();
+        .expect("scan.payloads[0] .decode_bounded(&GraphicsPolicy::default()) succeeds");
     assert_eq!((img.width, img.height), (3, 2));
     let (pixels, _rest) = img.rgba.as_chunks::<4>();
     assert!(pixels.iter().all(|p| *p == [10, 20, 30, 40]));
@@ -135,7 +139,7 @@ fn kitty_png_and_rgb24_roundtrip() {
     let scan = scan_graphics_default(&kitty("a=T,f=24,s=1,v=1", &b64(&[7, 8, 9])));
     let img = scan.payloads[0]
         .decode_bounded(&GraphicsPolicy::default())
-        .unwrap();
+        .expect("scan.payloads[0] .decode_bounded(&GraphicsPolicy::default()) succeeds");
     assert_eq!(img.rgba, vec![7, 8, 9, 255]);
     // f=24 without dims.
     let scan = scan_graphics_default(&kitty("a=T,f=24", &b64(&[7, 8, 9])));
@@ -181,7 +185,10 @@ fn placement_equality_semantics() {
     let at = |prefix: &[u8], params: &str| {
         let mut s = prefix.to_vec();
         s.extend(kitty(params, &b64(&raw)));
-        scan_graphics_default(&s).payloads.pop().unwrap()
+        scan_graphics_default(&s)
+            .payloads
+            .pop()
+            .expect("scan_graphics_default(&s).payloads.pop() is some")
     };
     let a = at(b"", "a=T,f=32,s=1,v=1,X=3");
     let b = at(b"different length prefix text", "a=T,f=32,s=1,v=1,X=3");

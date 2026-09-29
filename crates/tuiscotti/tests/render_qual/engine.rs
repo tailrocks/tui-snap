@@ -20,13 +20,18 @@ fn screen_and_frame_share_one_engine() {
     let mut lead = cell(0, 0, "東", 2);
     lead.mods = mods;
     lead.fg = Color::Indexed(2);
-    let frame = frame_from_leads(6, 3, vec![lead, cont(1, 0), cell(2, 0, "★", 1)]);
-    let screen = Screen::from_frame(&frame).unwrap();
-    let via_screen = render_screen(&screen, &rp).unwrap();
-    let via_frame = render_frame_strict(&frame, &rp).unwrap();
+    let frame = frame_from_leads(6, 3, vec![lead, cont(1, 0), cell(2, 0, "★", 1)])
+        .expect("frame_from_leads succeeds");
+    let screen = Screen::from_frame(&frame).expect("Screen::from_frame(&frame) succeeds");
+    let via_screen = render_screen(&screen, &rp).expect("render_screen(&screen, &rp) succeeds");
+    let via_frame =
+        render_frame_strict(&frame, &rp).expect("render_frame_strict(&frame, &rp) succeeds");
     assert_eq!(via_screen.png, via_frame.png);
     assert_eq!(via_screen.fidelity.to_json(), via_frame.fidelity.to_json());
-    assert_eq!(render_screen_png(&screen, &rp).unwrap(), via_screen.png);
+    assert_eq!(
+        render_screen_png(&screen, &rp).expect("render_screen_png(&screen, &rp) succeeds"),
+        via_screen.png
+    );
 }
 
 #[test]
@@ -35,19 +40,25 @@ fn screen_adaptation_is_lossless_and_origin_free() {
     let mut lead = cell(1, 1, "京", 2);
     lead.mods.italic = true;
     lead.bg = Color::Indexed(4);
-    let screen = screen_from_leads(6, 3, vec![lead.clone(), cont(2, 1)]);
+    let screen = screen_from_leads(6, 3, vec![lead.clone(), cont(2, 1)])
+        .expect("screen_from_leads succeeds");
     let frame = frame_from_screen(&screen, "qual");
     assert_eq!(frame.version, FRAME_VERSION);
     assert_eq!((frame.cols, frame.rows), (6, 3));
     assert_eq!(frame.cells, screen.cells().to_vec());
     assert_eq!(frame.cursor, *screen.cursor());
-    frame.validate().unwrap();
+    frame.validate().expect("frame.validate() succeeds");
     // Same grid at a nonzero origin renders identical pixels: origin is
     // positional metadata, not render input.
-    let moved = Screen::validate(6, 3, 5, 7, screen.cells().to_vec(), *screen.cursor()).unwrap();
+    let moved = Screen::validate(6, 3, 5, 7, screen.cells().to_vec(), *screen.cursor())
+        .expect("Screen::validate(6, 3, 5, 7, screen.cells().to_vec(), *screen.cursor()) succeeds");
     assert_eq!(
-        render_screen(&screen, &rp).unwrap().png,
-        render_screen(&moved, &rp).unwrap().png
+        render_screen(&screen, &rp)
+            .expect("render_screen(&screen, &rp) succeeds")
+            .png,
+        render_screen(&moved, &rp)
+            .expect("render_screen(&moved, &rp) succeeds")
+            .png
     );
     assert_eq!(lead.symbol, "京");
 }
@@ -92,10 +103,14 @@ fn strict_constructor_validates_every_pin() {
     // Reordered fallback chain = different identity.
     let mut rev = VENDORED_FALLBACK_FACES.to_vec();
     rev.reverse();
-    let reordered = strict_placeholder(rev).hash();
+    let reordered = strict_placeholder(rev)
+        .expect("strict_placeholder succeeds")
+        .hash();
     assert_ne!(
         reordered,
-        strict_placeholder(VENDORED_FALLBACK_FACES.to_vec()).hash()
+        strict_placeholder(VENDORED_FALLBACK_FACES.to_vec())
+            .expect("strict_placeholder succeeds")
+            .hash()
     );
     // Other phase / policy / cursor = different identity (no shared keys).
     assert_ne!(
@@ -138,7 +153,7 @@ fn strict_constructor_rejects_bad_pins_and_geometry() {
     // Swapped pin: no substitution, an error naming the face.
     let mut bad = good;
     bad[1] = VENDORED_FONT_SHA256;
-    let err = build(bad).unwrap_err();
+    let err = build(bad).expect_err("build(bad) is an error");
     assert!(err.to_string().contains("bold"), "{err}");
     // Wrong renderer version.
     let err = RenderProfile::strict(
@@ -157,7 +172,7 @@ fn strict_constructor_rejects_bad_pins_and_geometry() {
         MissingGlyphPolicy::Strict,
         RENDERER_VERSION + 1,
     )
-    .unwrap_err();
+    .expect_err("wrong renderer version is an error");
     assert!(err.to_string().contains("renderer version"), "{err}");
     // Degenerate geometry.
     let err = RenderProfile::strict(
@@ -176,6 +191,6 @@ fn strict_constructor_rejects_bad_pins_and_geometry() {
         MissingGlyphPolicy::Strict,
         RENDERER_VERSION,
     )
-    .unwrap_err();
+    .expect_err("degenerate geometry is an error");
     assert!(err.to_string().contains("geometry"), "{err}");
 }

@@ -1,4 +1,5 @@
 use super::*;
+use image::AnimationDecoder as _;
 use tuiscotti::export::*;
 
 #[test]
@@ -8,35 +9,43 @@ fn cast_deterministic_and_pinned() {
         ("second frame \x1b[31mred\x1b[0m".to_string(), 0.5),
         ("third".to_string(), 1.25),
     ];
-    let a = tempfile::tempdir().unwrap();
-    let b = tempfile::tempdir().unwrap();
-    let pa = cast_v2(&frames, 80, 24, a.path()).unwrap();
-    let pb = cast_v2(&frames, 80, 24, b.path()).unwrap();
-    assert_eq!(pa.file_name().unwrap(), "session.cast");
-    let ba = std::fs::read(&pa).unwrap();
-    let bb = std::fs::read(&pb).unwrap();
+    let a = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let b = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let pa =
+        cast_v2(&frames, 80, 24, a.path()).expect("cast_v2(&frames, 80, 24, a.path()) succeeds");
+    let pb =
+        cast_v2(&frames, 80, 24, b.path()).expect("cast_v2(&frames, 80, 24, b.path()) succeeds");
+    assert_eq!(
+        pa.file_name().expect("pa.file_name() is some"),
+        "session.cast"
+    );
+    let ba = std::fs::read(&pa).expect("std::fs::read(&pa) succeeds");
+    let bb = std::fs::read(&pb).expect("std::fs::read(&pb) succeeds");
     assert_eq!(ba, bb, "same input must give byte-identical cast");
-    let text = String::from_utf8(ba).unwrap();
+    let text = String::from_utf8(ba).expect("String::from_utf8(ba) succeeds");
     let mut lines = text.lines();
     assert_eq!(
-        lines.next().unwrap(),
+        lines.next().expect("lines.next() is some"),
         r#"{"version":2,"width":80,"height":24,"timestamp":0,"title":"tuisnap","env":{"TERM":"tuisnap"}}"#
     );
     assert_eq!(
-        lines.next().unwrap(),
+        lines.next().expect("lines.next() is some"),
         "[0.000000,\"o\",\"hello \\\"quoted\\\"\\nline2\\t✓\"]"
     );
     assert_eq!(
-        lines.next().unwrap(),
+        lines.next().expect("lines.next() is some"),
         "[0.500000,\"o\",\"second frame \\u001b[31mred\\u001b[0m\"]"
     );
-    assert_eq!(lines.next().unwrap(), "[1.750000,\"o\",\"third\"]");
+    assert_eq!(
+        lines.next().expect("lines.next() is some"),
+        "[1.750000,\"o\",\"third\"]"
+    );
     assert_eq!(lines.next(), None);
 }
 
 #[test]
 fn cast_rejects_bad_input() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let ok = vec![("x".to_string(), 0.0)];
     assert!(cast_v2(&ok, 0, 24, dir.path()).is_err());
     assert!(cast_v2(&ok, 80, 0, dir.path()).is_err());
@@ -46,9 +55,9 @@ fn cast_rejects_bad_input() {
 
 #[test]
 fn cast_empty_frames_is_header_only() {
-    let dir = tempfile::tempdir().unwrap();
-    let p = cast_v2(&[], 80, 24, dir.path()).unwrap();
-    let text = std::fs::read_to_string(p).unwrap();
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let p = cast_v2(&[], 80, 24, dir.path()).expect("cast_v2(&[], 80, 24, dir.path()) succeeds");
+    let text = std::fs::read_to_string(p).expect("std::fs::read_to_string(p) succeeds");
     assert_eq!(text.lines().count(), 1);
     assert!(text.starts_with(r#"{"version":2,"#));
 }
@@ -59,31 +68,34 @@ fn cast_empty_frames_is_header_only() {
 #[test]
 fn gif_deterministic_and_decodable() {
     let frames = vec![
-        png_solid(8, 8, [255, 0, 0, 255]),
-        png_solid(8, 8, [0, 0, 255, 255]),
+        png_solid(8, 8, [255, 0, 0, 255]).expect("png_solid succeeds"),
+        png_solid(8, 8, [0, 0, 255, 255]).expect("png_solid succeeds"),
     ];
     let delays = vec![100, 200];
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let a = dir.path().join("a.gif");
     let b = dir.path().join("b.gif");
-    gif(&frames, &delays, &a).unwrap();
-    gif(&frames, &delays, &b).unwrap();
-    let ba = std::fs::read(&a).unwrap();
-    let bb = std::fs::read(&b).unwrap();
+    gif(&frames, &delays, &a).expect("gif(&frames, &delays, &a) succeeds");
+    gif(&frames, &delays, &b).expect("gif(&frames, &delays, &b) succeeds");
+    let ba = std::fs::read(&a).expect("std::fs::read(&a) succeeds");
+    let bb = std::fs::read(&b).expect("std::fs::read(&b) succeeds");
     assert_eq!(ba, bb, "same PNGs must give byte-identical GIF");
     assert!(ba.starts_with(b"GIF89a"));
     // Qualify: the bytes decode to the two frames we sent.
-    use image::AnimationDecoder as _;
-    let dec = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(&ba)).unwrap();
-    let got: Vec<_> = dec.into_frames().collect::<Result<_, _>>().unwrap();
+    let dec = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(&ba))
+        .expect("image::codecs::gif::GifDecoder::new(std::io::Cursor::new(&ba)) succeeds");
+    let got: Vec<_> = dec
+        .into_frames()
+        .collect::<Result<_, _>>()
+        .expect("dec.into_frames().collect::<Result<_, _>>() succeeds");
     assert_eq!(got.len(), 2);
 }
 
 #[test]
 fn gif_rejects_bad_input() {
-    let dir = tempfile::tempdir().unwrap();
-    let good = png_solid(4, 4, [1, 2, 3, 255]);
-    let other = png_solid(5, 4, [1, 2, 3, 255]);
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let good = png_solid(4, 4, [1, 2, 3, 255]).expect("png_solid succeeds");
+    let other = png_solid(5, 4, [1, 2, 3, 255]).expect("png_solid succeeds");
     let out = dir.path().join("x.gif");
     assert!(gif(&[], &[], &out).is_err());
     assert!(gif(std::slice::from_ref(&good), &[10, 10], &out).is_err());
@@ -103,15 +115,18 @@ fn gif_rejects_bad_input() {
 fn apng_deterministic_and_roundtrips_pixels() {
     let red = [255, 0, 0, 255];
     let blue = [0, 0, 255, 255];
-    let frames = vec![png_solid(6, 4, red), png_solid(6, 4, blue)];
+    let frames = vec![
+        png_solid(6, 4, red).expect("png_solid succeeds"),
+        png_solid(6, 4, blue).expect("png_solid succeeds"),
+    ];
     let delays = vec![50, 150];
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let a = dir.path().join("a.png");
     let b = dir.path().join("b.png");
-    apng(&frames, &delays, &a).unwrap();
-    apng(&frames, &delays, &b).unwrap();
-    let ba = std::fs::read(&a).unwrap();
-    let bb = std::fs::read(&b).unwrap();
+    apng(&frames, &delays, &a).expect("apng(&frames, &delays, &a) succeeds");
+    apng(&frames, &delays, &b).expect("apng(&frames, &delays, &b) succeeds");
+    let ba = std::fs::read(&a).expect("std::fs::read(&a) succeeds");
+    let bb = std::fs::read(&b).expect("std::fs::read(&b) succeeds");
     assert_eq!(ba, bb, "same PNGs must give byte-identical APNG");
     assert!(ba.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]));
     for marker in [b"acTL".as_slice(), b"fcTL", b"fdAT", b"IDAT", b"IEND"] {
@@ -121,15 +136,15 @@ fn apng_deterministic_and_roundtrips_pixels() {
         );
     }
     // Qualify: image's own APNG decoder reads both frames back losslessly.
-    use image::AnimationDecoder as _;
-    let dec = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&ba)).unwrap();
-    assert!(dec.is_apng().unwrap());
+    let dec = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&ba))
+        .expect("image::codecs::png::PngDecoder::new(std::io::Cursor::new(&ba)) succeeds");
+    assert!(dec.is_apng().expect("dec.is_apng() succeeds"));
     let got: Vec<_> = dec
         .apng()
-        .unwrap()
+        .expect("dec .apng() succeeds")
         .into_frames()
         .collect::<Result<_, _>>()
-        .unwrap();
+        .expect("apng frames decode succeeds");
     assert_eq!(got.len(), 2);
     assert!(got[0].buffer().pixels().all(|p| p.0 == red));
     assert!(got[1].buffer().pixels().all(|p| p.0 == blue));
@@ -137,9 +152,9 @@ fn apng_deterministic_and_roundtrips_pixels() {
 
 #[test]
 fn apng_rejects_bad_input() {
-    let dir = tempfile::tempdir().unwrap();
-    let good = png_solid(4, 4, [1, 2, 3, 255]);
-    let other = png_solid(4, 5, [1, 2, 3, 255]);
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let good = png_solid(4, 4, [1, 2, 3, 255]).expect("png_solid succeeds");
+    let other = png_solid(4, 5, [1, 2, 3, 255]).expect("png_solid succeeds");
     let out = dir.path().join("x.png");
     assert!(apng(&[], &[], &out).is_err());
     assert!(apng(std::slice::from_ref(&good), &[10, 10], &out).is_err());
@@ -156,13 +171,14 @@ fn apng_rejects_bad_input() {
 // ---------------------------------------------------------------------------
 #[test]
 fn mp4_policy_validated_without_encoder() {
-    let dir = tempfile::tempdir().unwrap();
-    let frames = vec![png_solid(4, 4, [9, 9, 9, 255])];
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let frames = vec![png_solid(4, 4, [9, 9, 9, 255]).expect("png_solid succeeds")];
     let bad = Mp4Policy {
         crf: 99,
         ..Default::default()
     };
-    let err = mp4_with(&frames, &[100], &dir.path().join("x.mp4"), &bad).unwrap_err();
+    let err = mp4_with(&frames, &[100], &dir.path().join("x.mp4"), &bad)
+        .expect_err("mp4_with(&frames, &[100], &dir.path().join(\"x.mp4\"), &bad) is an error");
     assert!(!err.is_encoder_missing());
     let mut bad = Mp4Policy::default();
     bad.preset.clear();
@@ -177,25 +193,28 @@ fn mp4_missing_encoder_or_real_encode() {
             assert!(msg.contains("ffmpeg"), "must name the tool: {msg}");
             assert!(msg.contains("ffmpeg.org"), "must name the install: {msg}");
             // And mp4 surfaces the same explicit error.
-            let dir = tempfile::tempdir().unwrap();
-            let frames = vec![png_solid(4, 4, [9, 9, 9, 255])];
-            let err = mp4(&frames, &[100], &dir.path().join("x.mp4")).unwrap_err();
+            let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+            let frames = vec![png_solid(4, 4, [9, 9, 9, 255]).expect("png_solid succeeds")];
+            let err = mp4(&frames, &[100], &dir.path().join("x.mp4"))
+                .expect_err("mp4(&frames, &[100], &dir.path().join(\"x.mp4\")) is an error");
             assert!(err.is_encoder_missing());
         }
         Err(e) => panic!("unexpected probe failure: {e}"),
         Ok(version) => {
             assert!(!version.is_empty());
-            let dir = tempfile::tempdir().unwrap();
+            let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
             let frames = vec![
-                png_solid(16, 16, [255, 0, 0, 255]),
-                png_solid(16, 16, [0, 255, 0, 255]),
+                png_solid(16, 16, [255, 0, 0, 255]).expect("png_solid succeeds"),
+                png_solid(16, 16, [0, 255, 0, 255]).expect("png_solid succeeds"),
             ];
             let out = dir.path().join("x.mp4");
-            let sidecar = mp4(&frames, &[100, 100], &out).unwrap();
+            let sidecar =
+                mp4(&frames, &[100, 100], &out).expect("mp4(&frames, &[100, 100], &out) succeeds");
             assert_eq!(sidecar.ffmpeg_version, version);
-            let video = std::fs::read(&sidecar.mp4).unwrap();
+            let video = std::fs::read(&sidecar.mp4).expect("std::fs::read(&sidecar.mp4) succeeds");
             assert!(!video.is_empty());
-            let record = std::fs::read_to_string(&sidecar.sidecar).unwrap();
+            let record = std::fs::read_to_string(&sidecar.sidecar)
+                .expect("std::fs::read_to_string(&sidecar.sidecar) succeeds");
             assert!(record.contains("ffmpeg"));
             assert!(record.contains("\"deterministic\": false"));
             assert!(

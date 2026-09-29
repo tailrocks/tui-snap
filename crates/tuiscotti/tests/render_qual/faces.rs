@@ -42,7 +42,7 @@ fn face_swap_detected_at_construction_and_at_render() {
         MissingGlyphPolicy::Placeholder,
         RENDERER_VERSION,
     )
-    .unwrap_err();
+    .expect_err("swapped face bytes are an error");
     assert!(err.to_string().contains("regular"), "{err}");
 
     // NOTE (wave 1): the historical second half mutated the borrowed bytes
@@ -77,7 +77,7 @@ fn face_swap_detected_at_construction_and_at_render() {
         MissingGlyphPolicy::Placeholder,
         RENDERER_VERSION,
     )
-    .unwrap();
+    .expect("unswapped faces construct");
     Renderer::for_render_profile(&rp).expect("unswapped faces must render");
 }
 
@@ -89,23 +89,23 @@ fn grapheme_corpus_grids_match_hand_authored_expectations() {
         if *width == 2 {
             leads.push(cont(1, 0));
         }
-        let screen = screen_from_leads(6, 2, leads);
+        let screen = screen_from_leads(6, 2, leads).expect("screen_from_leads succeeds");
         // Independent grid expectation: exact widths/continuations.
         let frame = frame_from_screen(&screen, "qual");
-        let lead = frame.get(0, 0).unwrap();
+        let lead = frame.get(0, 0).expect("frame.get(0, 0) is some");
         assert_eq!(lead.symbol, *symbol, "{name}");
         assert_eq!(lead.width, *width, "{name}");
         assert!(!lead.continuation, "{name}");
         if *width == 2 {
-            let c = frame.get(1, 0).unwrap();
+            let c = frame.get(1, 0).expect("frame.get(1, 0) is some");
             assert!(
                 c.continuation && c.width == 0 && c.symbol.is_empty(),
                 "{name}"
             );
         }
         // Source widths control layout: image dims derive from the grid.
-        let rendered = render_screen(&screen, &rp).unwrap();
-        let img = decode(&rendered.png);
+        let rendered = render_screen(&screen, &rp).expect("render_screen(&screen, &rp) succeeds");
+        let img = decode(&rendered.png).expect("decode succeeds");
         let (ew, eh) = rp.image_size(6, 2);
         assert_eq!((img.width(), img.height()), (ew, eh), "{name}");
         // Coverage expectation is per-case, not renderer-derived.
@@ -127,19 +127,21 @@ fn fallback_never_shifts_the_grid() {
     // Same hand-authored frame, full chain vs NO fallback chain: geometry
     // (dims + every pixel outside the served span) must be identical —
     // fallback only fills ink inside the source-width span (V04).
-    let full = strict_placeholder(VENDORED_FALLBACK_FACES.to_vec());
-    let bare = strict_placeholder(vec![]);
+    let full =
+        strict_placeholder(VENDORED_FALLBACK_FACES.to_vec()).expect("strict_placeholder succeeds");
+    let bare = strict_placeholder(vec![]).expect("strict_placeholder succeeds");
     let screen = screen_from_leads(
         8,
         2,
         vec![cell(0, 0, "東", 2), cont(1, 0), cell(3, 0, "A", 1)],
-    );
-    let a = render_screen(&screen, &full).unwrap();
-    let b = render_screen(&screen, &bare).unwrap();
+    )
+    .expect("screen_from_leads succeeds");
+    let a = render_screen(&screen, &full).expect("render_screen(&screen, &full) succeeds");
+    let b = render_screen(&screen, &bare).expect("render_screen(&screen, &bare) succeeds");
     assert!(!a.fidelity.fallback_glyphs.is_empty());
     assert_eq!(b.fidelity.missing.len(), 1);
-    let ia = decode(&a.png);
-    let ib = decode(&b.png);
+    let ia = decode(&a.png).expect("decode succeeds");
+    let ib = decode(&b.png).expect("decode succeeds");
     assert_eq!((ia.width(), ia.height()), (ib.width(), ib.height()));
     // Served span: row 0, cells 0..2 → pixel rect.
     let (cw, ch, pad, u) = (10u32, 21u32, 12u32, 2u32);

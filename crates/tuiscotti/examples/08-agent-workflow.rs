@@ -9,11 +9,11 @@
 
 use tuiscotti::proto::{Op, OpResult, PROTOCOL_VERSION, capabilities, execute, run_machine_line};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Linked Rust: version + a passing shared-engine check.
-    match execute(&Op::Version).unwrap() {
+    match execute(&Op::Version)? {
         OpResult::Version { protocol, .. } => assert_eq!(protocol, PROTOCOL_VERSION),
-        other => panic!("expected Version, got {other:?}"),
+        other => return Err(format!("expected Version, got {other:?}").into()),
     }
     match execute(&Op::Assert {
         check: "text-contains".to_string(),
@@ -21,11 +21,9 @@ fn main() {
         needle: Some("world".to_string()),
         actual: None,
         expected: None,
-    })
-    .unwrap()
-    {
+    })? {
         OpResult::Asserted { passed, .. } => assert!(passed),
-        other => panic!("expected Asserted, got {other:?}"),
+        other => return Err(format!("expected Asserted, got {other:?}").into()),
     }
     assert_eq!(capabilities().protocol, PROTOCOL_VERSION);
 
@@ -40,4 +38,5 @@ fn main() {
     assert!(bad_line.contains("invalid-input"));
 
     println!("EXAMPLE-08-OK protocol={PROTOCOL_VERSION} machine_ok={ok}");
+    Ok(())
 }

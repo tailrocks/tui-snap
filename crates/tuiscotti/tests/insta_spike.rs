@@ -68,6 +68,8 @@ mod fixtures;
 mod harness;
 #[path = "insta_spike/lifecycle.rs"]
 mod lifecycle;
+#[path = "insta_spike/review.rs"]
+mod review;
 
 // ---------------------------------------------------------------------------
 // Fixtures

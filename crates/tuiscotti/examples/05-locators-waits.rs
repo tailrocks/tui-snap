@@ -11,7 +11,7 @@ use tuiscotti::locate::Locator;
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::screen::{CaptureProvenance, CaptureReason, Observation, TermState};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shot = render_screen(
         30,
         5,
@@ -22,12 +22,11 @@ fn main() {
             );
         },
         EdgePolicy::default(),
-    )
-    .unwrap();
+    )?;
     let screen = shot.into_screen();
 
     // Unique match: coordinates + text + revision travel on the span.
-    let span = Locator::text("needle").resolve_unique(&screen, 7).unwrap();
+    let span = Locator::text("needle").resolve_unique(&screen, 7)?;
     assert_eq!(span.text, "needle");
     assert_eq!(span.click_point(), Some((span.x, span.y)));
 
@@ -41,13 +40,12 @@ fn main() {
             CaptureProvenance::new(0, None, None, 0),
         )
     };
-    let spans = Locator::text("needle")
-        .expect_visible(&mut observe, Duration::from_secs(2))
-        .unwrap();
+    let spans = Locator::text("needle").expect_visible(&mut observe, Duration::from_secs(2))?;
     assert_eq!(spans.len(), 1);
     let obs = observe();
-    assert!(Locator::text("needle").present_now(&obs).unwrap());
-    assert!(Locator::text("no-such-text").not_present_now(&obs).unwrap());
+    assert!(Locator::text("needle").present_now(&obs)?);
+    assert!(Locator::text("no-such-text").not_present_now(&obs)?);
 
     println!("EXAMPLE-05-OK span={span} count={}", spans.len());
+    Ok(())
 }

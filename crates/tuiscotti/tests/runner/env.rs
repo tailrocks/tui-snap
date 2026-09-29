@@ -4,12 +4,12 @@ use tuiscotti::runner::{AttemptId, BaselineId, JunitKey, is_nextest_map};
 
 #[test]
 fn env_parsing_nextest_shape() {
-    let root = tmp_root("parse");
-    let e = nextest_env(&root);
+    let root = tmp_root("parse").expect("tmp_root succeeds");
+    let e = nextest_env(&root).expect("nextest_env succeeds");
     assert!(is_nextest_map(&e));
 
     let b = BaselineId::from_map("scenario-a", &e, "/fallback");
-    assert_eq!(b.workspace, root.to_str().unwrap());
+    assert_eq!(b.workspace, root.to_str().expect("root to_str succeeds"));
     assert_eq!(b.package, "tuiscotti");
     assert_eq!(b.binary, "runner");
     assert_eq!(b.test, "env_parsing");

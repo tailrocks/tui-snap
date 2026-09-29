@@ -26,7 +26,10 @@ fn concurrent_different_names_are_safe() {
                 Ok((first, o2.status))
             }));
         }
-        handles.into_iter().map(|h| h.join()).collect::<Vec<_>>()
+        handles
+            .into_iter()
+            .map(std::thread::ScopedJoinHandle::join)
+            .collect::<Vec<_>>()
     });
     for r in results {
         let (first, second) = r.expect("join thread").expect("thread check");
@@ -123,7 +126,10 @@ fn same_name_concurrent_checks_are_safe() {
                 Ok(o.status)
             }));
         }
-        handles.into_iter().map(|h| h.join()).collect::<Vec<_>>()
+        handles
+            .into_iter()
+            .map(std::thread::ScopedJoinHandle::join)
+            .collect::<Vec<_>>()
     });
     for r in results {
         let status = r.expect("join thread").expect("thread check");

@@ -7,7 +7,7 @@
 //! screen, and tears the session down. No fixtures: the script is inline.
 
 #[cfg(feature = "pty")]
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{Duration, Instant};
     use tuiscotti::screen::Screen;
     use tuiscotti::tui::{CancelToken, Tui};
@@ -17,8 +17,9 @@ fn main() {
             .map(|y| {
                 let mut s = String::new();
                 for x in 0..screen.cols() {
-                    let c = screen.get(x, y).unwrap();
-                    if !c.continuation {
+                    if let Some(c) = screen.get(x, y)
+                        && !c.continuation
+                    {
                         s.push_str(&c.symbol);
                     }
                 }
@@ -33,27 +34,25 @@ fn main() {
         "printf 'menu: alpha\\nmenu: beta\\n'; sleep 30",
     ])
     .size(40, 8)
-    .spawn()
-    .unwrap();
+    .spawn()?;
 
     // Readiness wait: fail loudly on timeout, never report false success.
     let cancel = CancelToken::new();
-    let obs = s
-        .wait_predicate(
-            |o| rows(&o.screen).iter().any(|r| r.contains("menu: beta")),
-            Instant::now() + Duration::from_secs(5),
-            &cancel,
-        )
-        .unwrap();
-    let screen = s.snapshot().unwrap();
+    let obs = s.wait_predicate(
+        |o| rows(&o.screen).iter().any(|r| r.contains("menu: beta")),
+        Instant::now() + Duration::from_secs(5),
+        &cancel,
+    )?;
+    let screen = s.snapshot()?;
     let text = rows(&screen).join("\n");
     assert!(text.contains("menu: alpha") && text.contains("menu: beta"));
-    s.close().unwrap();
+    s.close()?;
     println!(
         "EXAMPLE-04-OK revision={} rows={}",
         obs.revision,
         screen.rows()
     );
+    Ok(())
 }
 
 /// Without the `pty` feature there is no PTY backend; stay green, say so.

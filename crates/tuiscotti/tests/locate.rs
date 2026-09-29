@@ -39,8 +39,15 @@ fn put_wide(cells: &mut [Cell], cols: u16, x: u16, y: u16, sym: &str) {
     cells[idx + 1].continuation = true;
 }
 
-fn finish(cells: Vec<Cell>, cols: u16, rows: u16) -> Screen {
-    Screen::validate(cols, rows, 0, 0, cells, Cursor::default()).unwrap()
+fn finish(cells: Vec<Cell>, cols: u16, rows: u16) -> Result<Screen, Box<dyn std::error::Error>> {
+    Ok(Screen::validate(
+        cols,
+        rows,
+        0,
+        0,
+        cells,
+        Cursor::default(),
+    )?)
 }
 
 fn obs(screen: Screen, revision: u64) -> Observation {
@@ -53,11 +60,11 @@ fn obs(screen: Screen, revision: u64) -> Observation {
     )
 }
 
-fn screen_with(text_rows: &[&str], cols: u16) -> Screen {
-    let rows = text_rows.len() as u16;
+fn screen_with(text_rows: &[&str], cols: u16) -> Result<Screen, Box<dyn std::error::Error>> {
+    let rows = u16::try_from(text_rows.len())?;
     let mut cells = blank(cols, rows);
     for (y, row) in text_rows.iter().enumerate() {
-        put(&mut cells, cols, 0, y as u16, row);
+        put(&mut cells, cols, 0, u16::try_from(y)?, row);
     }
     finish(cells, cols, rows)
 }

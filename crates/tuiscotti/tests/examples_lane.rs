@@ -25,18 +25,18 @@ const CASES: &[(&str, &[&str])] = &[
     ("08-agent-workflow", &["EXAMPLE-08-OK"]),
 ];
 
-fn examples_dir() -> PathBuf {
-    let exe = std::env::current_exe().expect("current test exe");
+fn examples_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let exe = std::env::current_exe()?;
     // .../target/<profile>/deps/examples_lane-<hash> → .../target/<profile>
     let profile = exe
         .parent()
         .and_then(|d| d.parent())
-        .expect("profile dir above deps/")
+        .ok_or("profile dir above deps/")?
         .to_path_buf();
-    profile.join("examples")
+    Ok(profile.join("examples"))
 }
 
-fn build_examples(profile_dir_name: Option<&str>) {
+fn build_examples(profile_dir_name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let mut cmd = Command::new(cargo);
     cmd.args(["build", "--examples"]);
@@ -45,24 +45,25 @@ fn build_examples(profile_dir_name: Option<&str>) {
     }
     // Run from the package root so plain `cargo build` resolves the manifest.
     cmd.current_dir(env!("CARGO_MANIFEST_DIR"));
-    let out = cmd.output().expect("run cargo build --examples");
+    let out = cmd.output()?;
     assert!(
         out.status.success(),
         "cargo build --examples failed:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    Ok(())
 }
 
 #[test]
 fn examples_lane_executes_everything() {
-    let dir = examples_dir();
+    let dir = examples_dir().expect("examples_dir succeeds");
     let profile_name = dir
         .parent()
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().into_owned());
     let exe = |name: &str| dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     if CASES.iter().any(|(n, _)| !exe(n).is_file()) {
-        build_examples(profile_name.as_deref());
+        build_examples(profile_name.as_deref()).expect("build_examples succeeds");
     }
 
     let mut failures = Vec::new();

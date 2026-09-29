@@ -33,23 +33,25 @@ struct Workspace {
 
 /// Shared hermetic dirs for the whole binary (unique snapshot names per test
 /// keep parallel tests isolated).
-fn workspace() -> &'static Workspace {
-    static O: OnceLock<Workspace> = OnceLock::new();
+fn workspace() -> Result<&'static Workspace, Box<dyn std::error::Error>> {
+    static O: OnceLock<Result<Workspace, String>> = OnceLock::new();
     O.get_or_init(|| {
-        let tmp = tempfile::Builder::new()
-            .prefix("facade-")
-            .tempdir()
-            .unwrap();
-        let snaps = tmp.path().join("snaps");
-        let evidence = tmp.path().join("evidence");
-        fs::create_dir(&snaps).unwrap();
-        fs::create_dir(&evidence).unwrap();
-        Workspace {
-            _tmp: tmp,
-            snaps,
-            evidence,
-        }
+        (|| -> Result<Workspace, Box<dyn std::error::Error>> {
+            let tmp = tempfile::Builder::new().prefix("facade-").tempdir()?;
+            let snaps = tmp.path().join("snaps");
+            let evidence = tmp.path().join("evidence");
+            fs::create_dir(&snaps)?;
+            fs::create_dir(&evidence)?;
+            Ok(Workspace {
+                _tmp: tmp,
+                snaps,
+                evidence,
+            })
+        })()
+        .map_err(|e| e.to_string())
     })
+    .as_ref()
+    .map_err(|e| format!("workspace init: {e}").into())
 }
 
 impl Workspace {
@@ -61,81 +63,42 @@ impl Workspace {
     }
 }
 
-fn fixture() -> Screen {
+fn cell(x: u16, y: u16, symbol: &str, fg: Color, bg: Color, mods: Mods) -> Cell {
+    Cell {
+        x,
+        y,
+        symbol: symbol.to_string(),
+        width: 1,
+        continuation: false,
+        fg,
+        bg,
+        mods,
+        underline_color: Color::Default,
+    }
+}
+
+fn fixture() -> Result<Screen, Box<dyn std::error::Error>> {
     let plain = Mods::default();
     let bold = Mods {
         bold: true,
         ..Mods::default()
     };
     let cells = vec![
-        Cell {
-            x: 0,
-            y: 0,
-            symbol: "A".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Indexed(1),
-            bg: Color::Default,
-            mods: bold,
-            underline_color: Color::Default,
-        },
-        Cell {
-            x: 1,
-            y: 0,
-            symbol: "b".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Rgb(Rgb::new(1, 2, 3)),
-            bg: Color::Default,
-            mods: plain,
-            underline_color: Color::Default,
-        },
-        Cell {
-            x: 2,
-            y: 0,
-            symbol: " ".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Default,
-            bg: Color::Indexed(4),
-            mods: plain,
-            underline_color: Color::Default,
-        },
-        Cell {
-            x: 0,
-            y: 1,
-            symbol: "Z".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Default,
-            bg: Color::Default,
-            mods: plain,
-            underline_color: Color::Default,
-        },
-        Cell {
-            x: 1,
-            y: 1,
-            symbol: "y".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Default,
-            bg: Color::Default,
-            mods: plain,
-            underline_color: Color::Default,
-        },
-        Cell {
-            x: 2,
-            y: 1,
-            symbol: "x".to_string(),
-            width: 1,
-            continuation: false,
-            fg: Color::Default,
-            bg: Color::Default,
-            mods: plain,
-            underline_color: Color::Default,
-        },
+        cell(0, 0, "A", Color::Indexed(1), Color::Default, bold),
+        cell(
+            1,
+            0,
+            "b",
+            Color::Rgb(Rgb::new(1, 2, 3)),
+            Color::Default,
+            plain,
+        ),
+        cell(2, 0, " ", Color::Default, Color::Indexed(4), plain),
+        cell(0, 1, "Z", Color::Default, Color::Default, plain),
+        cell(1, 1, "y", Color::Default, Color::Default, plain),
+        cell(2, 1, "x", Color::Default, Color::Default, plain),
     ];
-    Screen::validate(
+    Ok(Screen::validate(
         3,
         2,
         0,
@@ -148,26 +111,35 @@ fn fixture() -> Screen {
             style: CursorStyle::Block,
             blinking: false,
         },
-    )
-    .unwrap()
+    )?)
 }
 
-fn write_text_snap(dir: &Path, name: &str, generation: &str, body: &str) {
+fn write_text_snap(
+    dir: &Path,
+    name: &str,
+    generation: &str,
+    body: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
         "---\nsource: tests/facade.rs\ndescription: tuisnap generation {generation}\nexpression: canonical\n---\n{body}"
     );
-    fs::write(dir.join(format!("{name}.snap")), content).unwrap();
+    Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }
 
-fn write_binary_snap(dir: &Path, name: &str, generation: &str, sidecar: &[u8]) {
+fn write_binary_snap(
+    dir: &Path,
+    name: &str,
+    generation: &str,
+    sidecar: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
     let meta = format!(
         "---\nsource: tests/facade.rs\ndescription: tuisnap generation {generation}\nexpression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
     );
-    fs::write(dir.join(format!("{name}.snap")), meta).unwrap();
-    fs::write(dir.join(format!("{name}.snap.png")), sidecar).unwrap();
+    fs::write(dir.join(format!("{name}.snap")), meta)?;
+    Ok(fs::write(dir.join(format!("{name}.snap.png")), sidecar)?)
 }
 
-fn panic_message(p: Box<dyn std::any::Any + Send>) -> String {
+fn panic_message(p: &(dyn std::any::Any + Send)) -> String {
     if let Some(s) = p.downcast_ref::<String>() {
         s.clone()
     } else if let Some(s) = p.downcast_ref::<&str>() {
@@ -177,13 +149,13 @@ fn panic_message(p: Box<dyn std::any::Any + Send>) -> String {
     }
 }
 
-fn list_files(dir: &Path) -> Vec<PathBuf> {
+fn list_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let mut out = Vec::new();
-    for e in fs::read_dir(dir).unwrap() {
-        out.push(e.unwrap().path());
+    for e in fs::read_dir(dir)? {
+        out.push(e?.path());
     }
     out.sort();
-    out
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -194,24 +166,27 @@ fn list_files(dir: &Path) -> Vec<PathBuf> {
 // I06: frozen policy
 // ---------------------------------------------------------------------------
 
-fn frozen_dir() -> tempfile::TempDir {
-    tempfile::Builder::new()
+fn frozen_dir() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+    Ok(tempfile::Builder::new()
         .prefix("facade-frozen-")
-        .tempdir()
-        .unwrap()
+        .tempdir()?)
 }
 
-fn write_frozen(root: &Path, name: &str, screen: &Screen, tag_png: bool) {
+fn write_frozen(
+    root: &Path,
+    name: &str,
+    screen: &Screen,
+    tag_png: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     fs::write(
         root.join(format!("{name}.canonical.txt")),
         insta_string(screen),
-    )
-    .unwrap();
-    let sample = render_sample(screen).unwrap();
+    )?;
+    let sample = render_sample(screen)?;
     let png = if tag_png {
         png_tag_generation(&sample.png, &generation_id(&sample.canonical))
     } else {
         sample.png
     };
-    fs::write(root.join(format!("{name}.png")), png).unwrap();
+    Ok(fs::write(root.join(format!("{name}.png")), png)?)
 }

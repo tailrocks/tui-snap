@@ -8,11 +8,13 @@ use tuiscotti::insta_proto::insta_string;
 
 #[test]
 fn frozen_missing_fails() {
-    let root = frozen_dir();
-    let screen = fixture();
-    let err = check_frozen_snapshot(root.path(), "shot", &screen).unwrap_err();
+    let root = frozen_dir().expect("frozen_dir succeeds");
+    let screen = fixture().expect("fixture succeeds");
+    let err = check_frozen_snapshot(root.path(), "shot", &screen)
+        .expect_err("check_frozen_snapshot(root.path(), \"shot\", &screen) is an error");
     assert!(matches!(err, FrozenError::Missing { .. }), "{err}");
-    let err = check_frozen_screenshot(root.path(), "shot", &screen).unwrap_err();
+    let err = check_frozen_screenshot(root.path(), "shot", &screen)
+        .expect_err("check_frozen_screenshot(root.path(), \"shot\", &screen) is an error");
     assert!(matches!(err, FrozenError::Missing { .. }), "{err}");
     assert!(
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -30,24 +32,29 @@ fn frozen_missing_fails() {
 
 #[test]
 fn frozen_corrupt_fails_and_never_heals() {
-    let root = frozen_dir();
-    let screen = fixture();
-    write_frozen(root.path(), "shot", &screen, false);
-    fs::write(root.path().join("shot.png"), b"not a png").unwrap();
-    let before = list_files(root.path());
-    let err = check_frozen_screenshot(root.path(), "shot", &screen).unwrap_err();
+    let root = frozen_dir().expect("frozen_dir succeeds");
+    let screen = fixture().expect("fixture succeeds");
+    write_frozen(root.path(), "shot", &screen, false).expect("write_frozen succeeds");
+    fs::write(root.path().join("shot.png"), b"not a png")
+        .expect("fs::write(root.path().join(\"shot.png\"), b\"not a png\") succeeds");
+    let before = list_files(root.path()).expect("list_files succeeds");
+    let err = check_frozen_screenshot(root.path(), "shot", &screen)
+        .expect_err("check_frozen_screenshot(root.path(), \"shot\", &screen) is an error");
     assert!(matches!(err, FrozenError::Corrupt { .. }), "{err}");
     assert_eq!(
-        list_files(root.path()),
+        list_files(root.path()).expect("list_files succeeds"),
         before,
         "frozen failure must not write"
     );
     // Non-UTF-8 canonical is corrupt too.
-    fs::write(root.path().join("shot.canonical.txt"), b"\xff\xfe invalid").unwrap();
-    let err = check_frozen_snapshot(root.path(), "shot", &screen).unwrap_err();
+    fs::write(root.path().join("shot.canonical.txt"), b"\xff\xfe invalid").expect(
+        "fs::write(root.path().join(\"shot.canonical.txt\"), b\"\\xff\\xfe invalid\") succeeds",
+    );
+    let err = check_frozen_snapshot(root.path(), "shot", &screen)
+        .expect_err("check_frozen_snapshot(root.path(), \"shot\", &screen) is an error");
     assert!(matches!(err, FrozenError::Corrupt { .. }), "{err}");
     assert_eq!(
-        list_files(root.path()),
+        list_files(root.path()).expect("list_files succeeds"),
         before,
         "frozen failure must not write"
     );
@@ -55,13 +62,20 @@ fn frozen_corrupt_fails_and_never_heals() {
 
 #[test]
 fn frozen_accept_always_errors() {
-    let root = frozen_dir();
-    write_frozen(root.path(), "shot", &fixture(), true);
+    let root = frozen_dir().expect("frozen_dir succeeds");
+    write_frozen(
+        root.path(),
+        "shot",
+        &fixture().expect("fixture succeeds"),
+        true,
+    )
+    .expect("write_frozen succeeds");
     // Even with valid state present...
-    let err = frozen_accept(root.path(), "shot").unwrap_err();
+    let err = frozen_accept(root.path(), "shot")
+        .expect_err("frozen_accept(root.path(), \"shot\") is an error");
     assert!(matches!(err, FrozenError::AcceptRejected { .. }), "{err}");
     // ...and on an empty root.
-    let empty = frozen_dir();
+    let empty = frozen_dir().expect("frozen_dir succeeds");
     assert!(matches!(
         frozen_accept(empty.path(), "x"),
         Err(FrozenError::AcceptRejected { .. })
@@ -70,28 +84,34 @@ fn frozen_accept_always_errors() {
 
 #[test]
 fn frozen_passes_when_matching() {
-    let root = frozen_dir();
-    let screen = fixture();
+    let root = frozen_dir().expect("frozen_dir succeeds");
+    let screen = fixture().expect("fixture succeeds");
     // Untagged legacy PNG: pixel verdict stands.
-    write_frozen(root.path(), "plain", &screen, false);
-    check_frozen_snapshot(root.path(), "plain", &screen).unwrap();
-    check_frozen_screenshot(root.path(), "plain", &screen).unwrap();
+    write_frozen(root.path(), "plain", &screen, false).expect("write_frozen succeeds");
+    check_frozen_snapshot(root.path(), "plain", &screen)
+        .expect("check_frozen_snapshot(root.path(), \"plain\", &screen) succeeds");
+    check_frozen_screenshot(root.path(), "plain", &screen)
+        .expect("check_frozen_screenshot(root.path(), \"plain\", &screen) succeeds");
     // Tagged PNG with the right generation: full gate green.
-    write_frozen(root.path(), "tagged", &screen, true);
-    check_frozen_screenshot(root.path(), "tagged", &screen).unwrap();
+    write_frozen(root.path(), "tagged", &screen, true).expect("write_frozen succeeds");
+    check_frozen_screenshot(root.path(), "tagged", &screen)
+        .expect("check_frozen_screenshot(root.path(), \"tagged\", &screen) succeeds");
     // Tagged PNG with the WRONG generation: pixels match, binding fails.
-    let sample = render_sample(&screen).unwrap();
+    let sample = render_sample(&screen).expect("render_sample(&screen) succeeds");
     fs::write(
         root.path().join("mistag.canonical.txt"),
         insta_string(&screen),
     )
-    .unwrap();
+    .expect(
+        "fs::write( root.path().join(\"mistag.canonical.txt\"), insta_string(&screen), ) succeeds",
+    );
     fs::write(
         root.path().join("mistag.png"),
         png_tag_generation(&sample.png, "gen-b"),
     )
-    .unwrap();
-    let err = check_frozen_screenshot(root.path(), "mistag", &screen).unwrap_err();
+    .expect("fs::write( root.path().join(\"mistag.png\"), png_tag_generation(&sample.png, \"gen-b\"), ) succeeds");
+    let err = check_frozen_screenshot(root.path(), "mistag", &screen)
+        .expect_err("check_frozen_screenshot(root.path(), \"mistag\", &screen) is an error");
     assert!(matches!(err, FrozenError::Mismatch { .. }), "{err}");
     assert!(err.to_string().contains("generation"), "{err}");
 }

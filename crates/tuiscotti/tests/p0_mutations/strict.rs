@@ -11,17 +11,19 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
     let mut b = gradient_rgb();
     b.put_pixel(3, 5, image::Rgb([255, 0, 0]));
     a.put_pixel(3, 5, image::Rgb([0, 0, 255]));
-    let png_a = encode_rgb(&a, CompressionType::Default, FilterType::Adaptive);
-    let png_b = encode_rgb(&b, CompressionType::Default, FilterType::Adaptive);
+    let png_a = encode_rgb(&a, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
+    let png_b = encode_rgb(&b, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
     assert_ne!(png_a, png_b, "setup: encodings must differ");
     assert_ne!(
-        decode_rgb(&png_a).as_raw(),
-        decode_rgb(&png_b).as_raw(),
+        decode_rgb(&png_a).expect("decode_rgb succeeds").as_raw(),
+        decode_rgb(&png_b).expect("decode_rgb succeeds").as_raw(),
         "setup: decoded pixels must differ"
     );
 
     // Guard: the real pixel gate catches the difference.
-    let honest = compare_png(&png_a, &png_b).unwrap();
+    let honest = compare_png(&png_a, &png_b).expect("compare_png(&png_a, &png_b) succeeds");
     assert!(honest.dims_equal);
     assert!(
         honest.score < 1.0,
@@ -31,7 +33,7 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
 
     // The strict gate must catch the same difference unconditionally:
     // same cells+dims never SKIP the pixel metric (C01).
-    let bypassed = compare_png(&png_a, &png_b).unwrap();
+    let bypassed = compare_png(&png_a, &png_b).expect("compare_png(&png_a, &png_b) succeeds");
     assert!(
         bypassed.score < 1.0,
         "C01 gap: score={} for differing decoded pixels; strict check must fail",
@@ -43,15 +45,18 @@ fn c01_same_cells_dims_but_different_pixels_must_fail_strict_check() {
 #[test]
 fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     let img = gradient_rgb();
-    let enc_default = encode_rgb(&img, CompressionType::Default, FilterType::Adaptive);
-    let enc_best = encode_rgb(&img, CompressionType::Best, FilterType::NoFilter);
+    let enc_default = encode_rgb(&img, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
+    let enc_best =
+        encode_rgb(&img, CompressionType::Best, FilterType::NoFilter).expect("encode_rgb succeeds");
     assert_ne!(
         enc_default, enc_best,
         "setup: different encoder settings must give different bytes for same pixels"
     );
 
     // Re-encoding identical pixels must pass.
-    let re = compare_png(&enc_default, &enc_best).unwrap();
+    let re = compare_png(&enc_default, &enc_best)
+        .expect("compare_png(&enc_default, &enc_best) succeeds");
     assert!(
         re.score >= 1.0,
         "re-encoded identical pixels must pass strict gate, got score={}",
@@ -62,8 +67,10 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
     let mut one = img.clone();
     let p = *one.get_pixel(7, 7);
     one.put_pixel(7, 7, image::Rgb([p[0].wrapping_add(1), p[1], p[2]]));
-    let enc_one = encode_rgb(&one, CompressionType::Default, FilterType::Adaptive);
-    let v_one = compare_png(&enc_default, &enc_one).unwrap();
+    let enc_one = encode_rgb(&one, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
+    let v_one =
+        compare_png(&enc_default, &enc_one).expect("compare_png(&enc_default, &enc_one) succeeds");
     assert!(
         v_one.score < 1.0,
         "one-channel pixel difference must fail strict gate, got score={}",
@@ -81,9 +88,12 @@ fn c03_exact_decoded_rgba_comparison_with_explicit_alpha_policy() {
             clear.put_pixel(x, y, image::Rgba([200, 100, 50, 0]));
         }
     }
-    let png_opaque = encode_rgba(&opaque, CompressionType::Default, FilterType::Adaptive);
-    let png_clear = encode_rgba(&clear, CompressionType::Default, FilterType::Adaptive);
-    let v_alpha = compare_png(&png_opaque, &png_clear).unwrap();
+    let png_opaque = encode_rgba(&opaque, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgba succeeds");
+    let png_clear = encode_rgba(&clear, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgba succeeds");
+    let v_alpha = compare_png(&png_opaque, &png_clear)
+        .expect("compare_png(&png_opaque, &png_clear) succeeds");
     assert!(
         v_alpha.score < 1.0,
         "C03 gap: fully-transparent vs fully-opaque (same RGB) scores {}; \
@@ -101,10 +111,13 @@ fn c04_similarity_score_must_not_establish_strict_equality() {
     let mut b = gradient_rgb();
     b.put_pixel(0, 0, image::Rgb([1, 2, 3]));
     a.put_pixel(0, 0, image::Rgb([3, 2, 1]));
-    let png_a = encode_rgb(&a, CompressionType::Default, FilterType::Adaptive);
-    let png_b = encode_rgb(&b, CompressionType::Default, FilterType::Adaptive);
-    let v = compare_png(&png_a, &png_b).unwrap();
-    let decoded_equal = decode_rgb(&png_a).as_raw() == decode_rgb(&png_b).as_raw();
+    let png_a = encode_rgb(&a, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
+    let png_b = encode_rgb(&b, CompressionType::Default, FilterType::Adaptive)
+        .expect("encode_rgb succeeds");
+    let v = compare_png(&png_a, &png_b).expect("compare_png(&png_a, &png_b) succeeds");
+    let decoded_equal = decode_rgb(&png_a).expect("decode_rgb succeeds").as_raw()
+        == decode_rgb(&png_b).expect("decode_rgb succeeds").as_raw();
     assert!(
         v.score < 1.0 || decoded_equal,
         "C04 gap: score={} establishes 'equality' for decoded-different pixels; \
@@ -116,12 +129,13 @@ fn c04_similarity_score_must_not_establish_strict_equality() {
     // Today `score < pixel_threshold` with NaN is always false → Matched,
     // and threshold 2.0 fails even identical images (no validation anywhere
     // on the check/report path).
-    let (_dir, st) = tmp_classic("c04");
+    let (_dir, st) = tmp_classic("c04").expect("tmp_classic succeeds");
     let frame = frame_with("tolerance");
-    let _ = st
-        .check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
-        .unwrap();
-    st.accept("home").unwrap();
+    drop(
+        st.check("home", &frame, &profile(), &VENDORED_FACES, 1.0)
+            .expect("st .check(\"home\", &frame, &profile(), &VENDORED_FACES, 1.0) succeeds"),
+    );
+    st.accept("home").expect("st.accept(\"home\") succeeds");
     let nan = st.check("home", &frame, &profile(), &VENDORED_FACES, f64::NAN);
     assert!(
         nan.is_err(),

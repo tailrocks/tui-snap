@@ -7,7 +7,7 @@
 
 use tuiscotti::command::{Command, Termination};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Missing binary: SpawnError carries the OS detail, no exception thrown.
     let missing = Command::new("/nonexistent-tuisnap-binary-xyz").run();
     assert_eq!(missing.status, Termination::SpawnError);
@@ -37,7 +37,8 @@ fn main() {
     println!(
         "EXAMPLE-03-OK spawn_error={:?} exit={} stdout={:?}",
         missing.status,
-        failed.code().unwrap(),
+        failed.code().ok_or("exit code missing")?,
         failed.stdout_lossy().trim(),
     );
+    Ok(())
 }
