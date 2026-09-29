@@ -8,6 +8,7 @@
 
 pub mod diff;
 pub mod export;
+pub mod formats;
 pub mod profile;
 pub mod render;
 

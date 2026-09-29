@@ -10,6 +10,18 @@ publish = false
 default = ["pty"]
 pty = ["tuiscotti/pty"]
 
+[[bin]]
+name = "menu_fixture"
+path = "tests/fixtures/apps/menu.rs"
+
+[[bin]]
+name = "streams_fixture"
+path = "tests/fixtures/apps/streams.rs"
+
+[[bin]]
+name = "protocol_fixture"
+path = "tests/fixtures/apps/protocol.rs"
+
 [dependencies]
 anyhow.workspace = true
 crossterm.workspace = true
@@ -17,6 +29,8 @@ ratatui.workspace = true
 
 [dev-dependencies]
 tuiscotti = { path = "../tuiscotti" }
+tuiscotti-core = { path = "../tuiscotti-core" }
+tuiscotti-render = { path = "../tuiscotti-render" }
 image.workspace = true
 insta.workspace = true
 serde.workspace = true

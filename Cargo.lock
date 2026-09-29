@@ -2655,6 +2655,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tuiscotti",
+ "tuiscotti-core",
+ "tuiscotti-render",
 ]
 
 [[package]]
@@ -2665,6 +2667,7 @@ dependencies = [
  "insta",
  "serde_json",
  "sha2 0.11.0",
+ "tempfile",
  "tuiscotti-core",
  "tuiscotti-render",
 ]
