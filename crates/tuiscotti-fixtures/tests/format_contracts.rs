@@ -129,6 +129,29 @@ fn ansi_is_normalized_not_raw_transcript() {
 }
 
 #[test]
+fn ansi_matches_committed_approvals_for_all_views() {
+    for (name, frame) in [
+        (
+            "menu-demo-40x10",
+            menu_frame(40, 10, Theme::Dark, Scenario::Demo),
+        ),
+        (
+            "streams-demo-60x12",
+            streams_frame(60, 12, Theme::Dark, false),
+        ),
+        (
+            "protocol-demo-50x12",
+            protocol_frame(50, 12, Theme::Dark, false),
+        ),
+    ] {
+        let bundle = capture_all(&mut renderer(), &frame, name).expect("capture");
+        let approved = common::read_expected(&format!("{name}.ansi"));
+        assert_normalized_sgr(&approved).expect("committed ANSI stays normalized");
+        assert_eq!(bundle.ansi, approved, "{name}: ANSI drifted");
+    }
+}
+
+#[test]
 fn ansi_only_style_change_moves_ansi_but_not_txt() {
     let dark = menu_frame(40, 10, Theme::Dark, Scenario::Demo);
     let light = menu_frame(40, 10, Theme::Light, Scenario::Demo);
@@ -213,6 +236,29 @@ fn html_is_static_offline_with_png_embed() {
         bundle.html.contains(&bundle.generation.id),
         "generation labeled"
     );
+}
+
+#[test]
+fn html_matches_committed_approvals_for_all_views() {
+    for (name, frame) in [
+        (
+            "menu-demo-40x10",
+            menu_frame(40, 10, Theme::Dark, Scenario::Demo),
+        ),
+        (
+            "streams-demo-60x12",
+            streams_frame(60, 12, Theme::Dark, false),
+        ),
+        (
+            "protocol-demo-50x12",
+            protocol_frame(50, 12, Theme::Dark, false),
+        ),
+    ] {
+        let bundle = capture_all(&mut renderer(), &frame, name).expect("capture");
+        let approved = common::read_expected(&format!("{name}.html"));
+        assert_static_offline(&approved).expect("committed HTML stays static offline");
+        assert_eq!(bundle.html, approved, "{name}: HTML drifted");
+    }
 }
 
 #[test]
@@ -327,6 +373,61 @@ fn every_capture_exports_one_identifiable_generation() {
     // Deterministic: same frame + profile always yields the same id.
     let again = menu_bundle();
     assert_eq!(bundle.generation, again.generation);
+}
+
+// --- SHA256SUMS manifest ------------------------------------------------------
+
+#[test]
+fn sha256sums_manifest_pins_every_approval() {
+    // `tests/SHA256SUMS` (see `cargo xtask fixtures --bless-manifest`) pins every
+    // committed approval byte: sorted `sha256sum` over `fixtures/expected`
+    // + `visual/approved`. Any bless/unbless without a manifest refresh
+    // fails here. Hashes recompute with the render crate's public SHA-256
+    // helper (no new dependency just for the check).
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let manifest = std::fs::read_to_string(root.join("SHA256SUMS")).expect("manifest ships");
+    let mut entries: Vec<(&str, &str)> = Vec::new();
+    for (n, line) in manifest.lines().enumerate() {
+        let (hash, path) = line
+            .split_once("  ")
+            .unwrap_or_else(|| panic!("line {}: not `sha256sum` format", n + 1));
+        assert_eq!(hash.len(), 64, "line {}: short hash", n + 1);
+        let bytes = std::fs::read(root.join(path))
+            .unwrap_or_else(|_| panic!("line {}: {path} listed but missing", n + 1));
+        assert_eq!(
+            tuiscotti_render::profile::font_sha256(&bytes),
+            hash,
+            "{path}: bytes drifted from the manifest"
+        );
+        entries.push((hash, path));
+    }
+    assert!(!entries.is_empty(), "manifest pins nothing");
+    let mut paths: Vec<&str> = entries.iter().map(|(_, p)| *p).collect();
+    let mut sorted = paths.clone();
+    sorted.sort_unstable();
+    assert_eq!(paths, sorted, "manifest entries are sorted");
+    // Exact coverage: every approval pinned, nothing extra pinned.
+    fn collect(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).expect("approvals dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                collect(&path, root, out);
+            } else {
+                out.push(
+                    path.strip_prefix(root)
+                        .expect("under tests/")
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    let mut actual = Vec::new();
+    collect(&root.join("fixtures/expected"), &root, &mut actual);
+    collect(&root.join("visual/approved"), &root, &mut actual);
+    actual.sort_unstable();
+    paths.sort_unstable();
+    assert_eq!(paths, actual, "manifest covers exactly the approvals dirs");
 }
 
 // --- Pipes ------------------------------------------------------------------

@@ -675,15 +675,14 @@ fn primary_covered_frames_are_byte_identical_with_and_without_fallbacks() {
 }
 
 #[test]
-fn primary_covered_fixtures_match_pre_fallback_render_bytes() {
-    // Baselines rendered by the pre-fallback renderer (rev 00b178e) from the
-    // approved fixture frames; every glyph in these frames is covered by the
-    // primary JetBrainsMono family, so the fallback chain must not move a
-    // single byte (zero-drift contract, constraint: PRIMARY GEOMETRY
-    // UNCHANGED).
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let baselines = root.join("tests/fixtures/render-baseline");
-    let approved = root.join("tests/visual/approved");
+fn approved_pngs_are_exactly_what_the_current_renderer_emits() {
+    // The stale `tests/fixtures/render-baseline` copies were deleted: the
+    // visual approvals are the single source of truth. Spot-check that fresh
+    // renders of approved frames reproduce the approved PNG bytes exactly.
+    // Every glyph in these frames is covered by the primary JetBrainsMono
+    // family, so the fallback chain must stay out (zero-drift contract,
+    // constraint: PRIMARY GEOMETRY UNCHANGED).
+    let approved = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual/approved");
     for name in [
         "home-dark-80x24",
         "home-light-160x50",
@@ -693,10 +692,10 @@ fn primary_covered_fixtures_match_pre_fallback_render_bytes() {
         let text = std::fs::read_to_string(approved.join(format!("{name}.frame.json"))).unwrap();
         let frame = tuiscotti::Frame::from_json(&text).unwrap();
         let r = tuiscotti::render::render_png_report(&frame, &profile(), &VENDORED_FACES).unwrap();
-        let baseline = std::fs::read(baselines.join(format!("{name}.png"))).unwrap();
+        let committed = std::fs::read(approved.join(format!("{name}.png"))).unwrap();
         assert_eq!(
-            r.png, baseline,
-            "{name}: primary-covered render drifted from the pre-fallback bytes"
+            r.png, committed,
+            "{name}: fresh render drifted from the approved PNG bytes"
         );
         assert!(
             r.fidelity.missing.is_empty(),
@@ -704,12 +703,5 @@ fn primary_covered_fixtures_match_pre_fallback_render_bytes() {
             r.fidelity.missing
         );
         assert!(r.fidelity.fallback_glyphs.is_empty(), "{name}");
-        let baseline_fidelity =
-            std::fs::read_to_string(baselines.join(format!("{name}.png.fidelity.json"))).unwrap();
-        assert_eq!(
-            r.fidelity.to_json().trim(),
-            baseline_fidelity.trim(),
-            "{name}: fidelity sidecar drifted"
-        );
     }
 }

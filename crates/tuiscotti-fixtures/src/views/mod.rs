@@ -7,6 +7,7 @@
 //! step functions stay separate from rendering so action tests never
 //! depend on pixels.
 
+pub mod matrix;
 pub mod menu;
 pub mod protocol;
 pub mod streams;

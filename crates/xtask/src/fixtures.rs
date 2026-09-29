@@ -10,11 +10,13 @@ pub const NAME: &str = "fixtures";
 
 /// Subcommand usage.
 pub const HELP: &str = "\
-usage: cargo xtask fixtures [--export DIR]\n\
+usage: cargo xtask fixtures [--export DIR] [--bless-manifest]\n\
 \n\
 builds tuiscotti-fixtures binaries and prints the authoritative artifact\n\
 paths parsed from cargo --message-format=json (never first-found guesses).\n\
 With --export DIR, copies each built executable into DIR.\n\
+With --bless-manifest, rewrites tests/SHA256SUMS from current approval\n\
+bytes (fixtures/expected + visual/approved, sorted sha256sum format).\n\
 ";
 
 /// Build fixtures and resolve authoritative artifacts.
@@ -28,6 +30,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<Status> {
         return Ok(Status::Pass);
     }
     let mut export: Option<&str> = None;
+    let mut bless = false;
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--export" {
@@ -36,9 +39,17 @@ pub fn run(root: &Path, args: &[String]) -> Result<Status> {
             };
             export = Some(dir.as_str());
             i += 2;
+        } else if args[i] == "--bless-manifest" {
+            bless = true;
+            i += 1;
         } else {
             return Err(util::fail(format!("{NAME}: unexpected arg: {}", args[i])));
         }
+    }
+    if bless {
+        let count = bless_manifest(root)?;
+        println!("fixtures: PASS (blessed {count} manifest entries)");
+        return Ok(Status::Pass);
     }
     let stdout = util::run_cargo(
         root,
@@ -102,6 +113,54 @@ fn executable_of(line: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Rewrite `tests/SHA256SUMS` from current approval bytes.
+///
+/// Mirrors the coverage asserted by
+/// `sha256sums_manifest_pins_every_approval`: recursive files under
+/// `fixtures/expected` + `visual/approved`, paths relative to `tests/`,
+/// byte-sorted, `sha256sum` text format. Returns the entry count.
+fn bless_manifest(root: &Path) -> Result<usize> {
+    let tests = root.join("crates/tuiscotti-fixtures/tests");
+    let mut rels: Vec<String> = Vec::new();
+    for dir in ["fixtures/expected", "visual/approved"] {
+        collect_files(&tests.join(dir), &tests, &mut rels)?;
+    }
+    rels.sort();
+    let mut text = String::new();
+    for rel in &rels {
+        let bytes =
+            fs::read(tests.join(rel)).map_err(|e| util::fail(format!("read {rel}: {e}")))?;
+        text.push_str(&crate::sha256::hexdigest(&bytes));
+        text.push_str("  ");
+        text.push_str(rel);
+        text.push('\n');
+    }
+    fs::write(tests.join("SHA256SUMS"), &text)
+        .map_err(|e| util::fail(format!("write SHA256SUMS: {e}")))?;
+    Ok(rels.len())
+}
+
+fn collect_files(dir: &Path, root: &Path, out: &mut Vec<String>) -> Result<()> {
+    let entries =
+        fs::read_dir(dir).map_err(|e| util::fail(format!("read {}: {e}", dir.display())))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| util::fail(format!("dir entry: {e}")))?
+            .path();
+        if path.is_dir() {
+            collect_files(&path, root, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(root)
+                .map_err(|e| util::fail(format!("prefix: {e}")))?
+                .to_string_lossy()
+                .into_owned();
+            out.push(rel);
+        }
+    }
+    Ok(())
 }
 
 fn export_artifacts(artifacts: &[String], dir: &Path) -> Result<()> {
