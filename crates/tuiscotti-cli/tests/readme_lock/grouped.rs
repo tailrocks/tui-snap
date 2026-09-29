@@ -21,7 +21,7 @@ fn readme_grouped_store() {
         Ok(())
     }
 
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
     let store = tuiscotti::grouped::GroupedStore::new(&tmp.path().join("snapshots"));
     // Documented defaults live outside the approved tree.
     assert_eq!(store.actual_root(), tmp.path().join("snapshots.actual"));
@@ -43,11 +43,11 @@ fn readme_grouped_store() {
     let frame = home_frame();
     let first = store
         .check("pages/overview", &frame, &profile, &VENDORED_FACES, 1.0)
-        .unwrap();
+        .expect("check");
     assert_eq!(first.status(), tuiscotti::snapshot::Status::MissingApproval);
 
     // Bless recursively from Rust (the documented accept_all fence).
-    let accepted = store.accept_all().unwrap();
+    let accepted = store.accept_all().expect("accept all");
     assert_eq!(accepted, vec!["pages/overview".to_string()]);
     // Approved tree holds exactly the four artifacts.
     for ext in ["ansi", "txt", "png", "html"] {
@@ -64,7 +64,7 @@ fn readme_grouped_store() {
             .exists(),
         "approved tree must not hold .frame.json"
     );
-    check_page(&store, &profile, &frame).unwrap();
+    check_page(&store, &profile, &frame).expect("check page");
     assert!(store.report_path().is_file());
 }
 
@@ -90,8 +90,8 @@ fn readme_fallback_chain() {
     }
 
     let profile = Profile::default_profile();
-    let mut r = custom_chain(&profile).unwrap();
-    let rendered = r.render(&home_frame()).unwrap();
+    let mut r = custom_chain(&profile).expect("custom chain");
+    let rendered = r.render(&home_frame()).expect("render");
     assert!(!rendered.png.is_empty());
     // A wrong pin refuses to render.
     let bad = tuiscotti::render::Renderer::with_fallbacks(

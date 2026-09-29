@@ -1,4 +1,4 @@
-//! execute(): version, assert, render, diff, PTY ops (split from `cli.rs`; shared helpers live in the root).
+//! `execute()`: version, assert, render, diff, PTY ops (split from `cli.rs`; shared helpers live in the root).
 
 use super::{blank_frame_json, pty_available};
 use tuiscotti::proto::{self, Capabilities, Op, OpResult};
@@ -58,11 +58,14 @@ fn op_assert_paths() {
         proto::execute(&mk("text-equals", None, None, Some("a"), Some("b"))).expect("ok")
     ));
     // error paths
-    let e = proto::execute(&mk("text-contains", Some("x"), Some(""), None, None)).unwrap_err();
+    let e = proto::execute(&mk("text-contains", Some("x"), Some(""), None, None))
+        .expect_err("empty needle must be rejected");
     assert_eq!(e.code, "invalid-input");
-    let e = proto::execute(&mk("text-contains", None, Some("x"), None, None)).unwrap_err();
+    let e = proto::execute(&mk("text-contains", None, Some("x"), None, None))
+        .expect_err("missing text must be rejected");
     assert_eq!(e.code, "invalid-input");
-    let e = proto::execute(&mk("nope", None, None, None, None)).unwrap_err();
+    let e = proto::execute(&mk("nope", None, None, None, None))
+        .expect_err("unknown check must be rejected");
     assert_eq!(e.code, "invalid-input");
 }
 
@@ -102,13 +105,13 @@ fn op_render_all_formats() {
         frame_json: frame.clone(),
         format: "mp4".to_string(),
     })
-    .unwrap_err();
+    .expect_err("unknown render format must be rejected");
     assert_eq!(e.code, "invalid-input");
     let e = proto::execute(&Op::Render {
         frame_json: "not json".to_string(),
         format: "txt".to_string(),
     })
-    .unwrap_err();
+    .expect_err("bad frame JSON must be rejected");
     assert_eq!(e.code, "invalid-input");
 }
 
@@ -138,7 +141,7 @@ fn op_diff_equal_and_unequal() {
             score,
         } => {
             assert!(pixels_equal && dims_equal);
-            assert_eq!(score, 1.0);
+            assert!((score - 1.0).abs() < f64::EPSILON);
         }
         r => panic!("wrong result: {r:?}"),
     }
@@ -146,7 +149,7 @@ fn op_diff_equal_and_unequal() {
         OpResult::Diffed { pixels_equal, .. } => assert!(!pixels_equal),
         r => panic!("wrong result: {r:?}"),
     }
-    let e = diff("!!!bad!!!", &a).unwrap_err();
+    let e = diff("!!!bad!!!", &a).expect_err("bad PNG base64 must be rejected");
     assert_eq!(e.code, "invalid-input");
 }
 
@@ -166,7 +169,7 @@ fn op_pty_lifecycle() {
         cols: None,
         rows: None,
         cwd: None,
-        env: Default::default(),
+        env: std::collections::HashMap::default(),
     })
     .expect("spawn")
     {
@@ -197,7 +200,7 @@ fn op_pty_lifecycle() {
                 observation.screen.text.contains("hi-pty"),
                 "{}",
                 observation.screen.text
-            )
+            );
         }
         r => panic!("wrong result: {r:?}"),
     }
@@ -232,7 +235,8 @@ fn op_pty_lifecycle() {
         r => panic!("wrong result: {r:?}"),
     }
     // session is gone now
-    let e = proto::execute(&Op::Observe { session }).unwrap_err();
+    let e =
+        proto::execute(&Op::Observe { session }).expect_err("observe after exit must be not-found");
     assert_eq!(e.code, "not-found");
 }
 
@@ -247,9 +251,9 @@ fn op_pty_error_paths() {
         cols: None,
         rows: None,
         cwd: None,
-        env: Default::default(),
+        env: std::collections::HashMap::default(),
     })
-    .unwrap_err();
+    .expect_err("empty spawn argv must be rejected");
     assert_eq!(e.code, "invalid-input");
     let e = proto::execute(&Op::Spawn {
         argv: vec!["/nonexistent-binary-xyz".to_string()],
@@ -257,9 +261,9 @@ fn op_pty_error_paths() {
         cols: None,
         rows: None,
         cwd: None,
-        env: Default::default(),
+        env: std::collections::HashMap::default(),
     })
-    .unwrap_err();
+    .expect_err("missing binary must fail spawn");
     assert_eq!(e.code, "spawn-failed");
     let e = proto::execute(&Op::Stdin {
         session: "no-such".to_string(),
@@ -267,7 +271,7 @@ fn op_pty_error_paths() {
         chord: None,
         bytes_b64: None,
     })
-    .unwrap_err();
+    .expect_err("stdin to missing session must be not-found");
     assert_eq!(e.code, "not-found");
     // spawn a live session for input-validation errors
     let session = match proto::execute(&Op::Spawn {
@@ -276,7 +280,7 @@ fn op_pty_error_paths() {
         cols: None,
         rows: None,
         cwd: None,
-        env: Default::default(),
+        env: std::collections::HashMap::default(),
     })
     .expect("spawn sleep")
     {
@@ -289,7 +293,7 @@ fn op_pty_error_paths() {
         chord: Some("Enter".to_string()),
         bytes_b64: None,
     })
-    .unwrap_err();
+    .expect_err("text+chord must be rejected");
     assert_eq!(e.code, "invalid-input");
     let e = proto::execute(&Op::Wait {
         session: session.clone(),
@@ -298,7 +302,7 @@ fn op_pty_error_paths() {
         quiet_ms: None,
         timeout_ms: 100,
     })
-    .unwrap_err();
+    .expect_err("bogus wait kind must be rejected");
     assert_eq!(e.code, "invalid-input");
     let e = proto::execute(&Op::Wait {
         session: session.clone(),
@@ -307,15 +311,16 @@ fn op_pty_error_paths() {
         quiet_ms: None,
         timeout_ms: 100,
     })
-    .unwrap_err();
+    .expect_err("wait must time out");
     assert_eq!(e.code, "timeout");
     // exit on a running child times out but still tears the session down
     let e = proto::execute(&Op::Exit {
         session: session.clone(),
         timeout_ms: 100,
     })
-    .unwrap_err();
+    .expect_err("exit must time out");
     assert_eq!(e.code, "timeout");
-    let e = proto::execute(&Op::Observe { session }).unwrap_err();
+    let e = proto::execute(&Op::Observe { session })
+        .expect_err("observe after teardown must be not-found");
     assert_eq!(e.code, "not-found");
 }

@@ -16,13 +16,10 @@ fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_tuisnap"))
 }
 
-fn help(args: &[&str]) -> String {
-    let out = Command::new(bin())
-        .args(args)
-        .output()
-        .expect("spawn tuisnap help");
+fn help(args: &[&str]) -> std::io::Result<String> {
+    let out = Command::new(bin()).args(args).output()?;
     assert!(out.status.success(), "help {args:?} failed");
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 fn home_frame() -> tuiscotti::Frame {

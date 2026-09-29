@@ -2,22 +2,26 @@
 
 use ratatui::widgets::Paragraph;
 use tuiscotti::Profile;
+use tuiscotti::frame::UnderlineStyle;
 
 // ---------------------------------------------------------------------------
 // API-map section: every named facade item resolves and behaves.
 // ---------------------------------------------------------------------------
 
-#[test]
-fn readme_api_map_resolves() {
-    // ratatui::render_screen -> Screen.
-    let screen = tuiscotti::ratatui::render_screen(
+fn api_screen() -> Result<tuiscotti::Screen, Box<dyn std::error::Error>> {
+    Ok(tuiscotti::ratatui::render_screen(
         30,
         5,
         |f| f.render_widget(Paragraph::new("alpha needle beta"), f.area()),
         tuiscotti::ratatui::EdgePolicy::default(),
-    )
-    .unwrap()
-    .into_screen();
+    )?
+    .into_screen())
+}
+
+#[test]
+fn readme_api_map_render_and_locate() {
+    // ratatui::render_screen -> Screen.
+    let screen = api_screen().expect("render api screen");
     assert_eq!((screen.cols(), screen.rows()), (30, 5));
 
     // locate::Locator text + present/not-present.
@@ -30,25 +34,28 @@ fn readme_api_map_resolves() {
     );
     let span = tuiscotti::locate::Locator::text("needle")
         .resolve_unique(&screen, 7)
-        .unwrap();
+        .expect("resolve needle");
     assert_eq!(span.text, "needle");
     assert!(
         tuiscotti::locate::Locator::text("needle")
             .present_now(&obs)
-            .unwrap()
+            .expect("present check")
     );
     assert!(
         tuiscotti::locate::Locator::text("no-such-text")
             .not_present_now(&obs)
-            .unwrap()
+            .expect("absent check")
     );
     assert!(
         tuiscotti::locate::Locator::regex("n.edle")
-            .unwrap()
+            .expect("regex locator")
             .present_now(&obs)
-            .unwrap()
+            .expect("regex present")
     );
+}
 
+#[test]
+fn readme_api_map_command_and_proto() {
     // command::Command piped run.
     let out = tuiscotti::command::Command::new("/bin/sh")
         .args(["-c", "exit 0"])
@@ -57,9 +64,9 @@ fn readme_api_map_resolves() {
     assert_eq!(out.code(), Some(0));
 
     // proto typed ops + machine line.
-    match tuiscotti::proto::execute(&tuiscotti::proto::Op::Version).unwrap() {
+    match tuiscotti::proto::execute(&tuiscotti::proto::Op::Version).expect("version op") {
         tuiscotti::proto::OpResult::Version { protocol, .. } => {
-            assert_eq!(protocol, tuiscotti::proto::PROTOCOL_VERSION)
+            assert_eq!(protocol, tuiscotti::proto::PROTOCOL_VERSION);
         }
         other => panic!("expected Version, got {other:?}"),
     }
@@ -73,19 +80,24 @@ fn readme_api_map_resolves() {
     let (bad_line, bad_ok) = tuiscotti::proto::run_machine_line("not json");
     assert!(!bad_ok);
     assert!(bad_line.contains("invalid-input"));
+}
+
+#[test]
+fn readme_api_map_runner_and_assert() {
+    let screen = api_screen().expect("render api screen");
 
     // runner::TestContext from an injected env (no global state).
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
     let ctx = tuiscotti::runner::TestContext::from_map(
         "readme-lock",
         &std::collections::HashMap::new(),
         tmp.path(),
     )
-    .unwrap();
+    .expect("test context");
     assert!(ctx.evidence_dir().is_dir());
 
     // assert helpers: sample render, generation binding, four-tree export.
-    let sample = tuiscotti::assert::render_sample(&screen).unwrap();
+    let sample = tuiscotti::assert::render_sample(&screen).expect("render sample");
     let generation = tuiscotti::assert::generation_id(&sample.canonical);
     assert_eq!(
         tuiscotti::assert::png_generation(&tuiscotti::assert::png_tag_generation(
@@ -94,9 +106,15 @@ fn readme_api_map_resolves() {
         )),
         Some(generation)
     );
-    let paths = tuiscotti::assert::emit_four(&screen, &tmp.path().join("four")).unwrap();
+    let paths = tuiscotti::assert::emit_four(&screen, &tmp.path().join("four")).expect("emit four");
     assert!(paths.ansi.is_file() && paths.txt.is_file());
     assert!(paths.png.is_file() && paths.html.is_file());
+}
+
+#[test]
+fn readme_api_map_observe_export_and_pins() {
+    let screen = api_screen().expect("render api screen");
+    let tmp = tempfile::tempdir().expect("tempdir");
 
     // observe + export + mcp.
     assert_eq!(
@@ -105,7 +123,7 @@ fn readme_api_map_resolves() {
     );
     let cast =
         tuiscotti::export::cast_v2(&[("hi".to_string(), 0.5)], 80, 24, &tmp.path().join("cast"))
-            .unwrap();
+            .expect("write cast");
     assert!(cast.is_file());
     assert!(!tuiscotti::mcp::tools().is_empty());
     let list = tuiscotti::mcp::tools_list_json();
@@ -119,11 +137,10 @@ fn readme_api_map_resolves() {
     assert_eq!(tuiscotti::VENDORED_FALLBACK_FACES.len(), 3);
     let profile = Profile::default_profile();
     assert_eq!((profile.cell_w, profile.cell_h), (10, 21));
-    assert_eq!(profile.font_px, 16.0);
+    assert!((profile.font_px - 16.0).abs() < f32::EPSILON);
     assert_eq!(profile.scale, 2);
     assert_eq!(tuiscotti::frame::FRAME_VERSION, 3);
     // Schema v3 + additive underline style/color: bool untouched, new keys sparse.
-    use tuiscotti::frame::UnderlineStyle;
     assert_eq!(UnderlineStyle::default(), UnderlineStyle::None);
     assert!(UnderlineStyle::Curly.is_some());
     assert_eq!(UnderlineStyle::Double.token(), "double-underline");
@@ -144,9 +161,9 @@ fn readme_macro_gates_pass_preapproved() {
     use tuiscotti::insta_proto::insta_string;
     use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
     let snaps = tmp.path().join("snaps");
-    std::fs::create_dir(&snaps).unwrap();
+    std::fs::create_dir(&snaps).expect("mkdir");
     let evidence = tmp.path().join("evidence");
     // Explicit dirs (`set_var` is an `unsafe fn` in edition 2024 and cannot
     // be used under the workspace lints); `INSTA_UPDATE` stays ambient.
@@ -161,7 +178,7 @@ fn readme_macro_gates_pass_preapproved() {
         |f| f.render_widget(Paragraph::new("readme lock"), f.area()),
         EdgePolicy::default(),
     )
-    .unwrap()
+    .expect("render lock screen")
     .into_screen();
 
     // Pre-approve the canonical text gate.
@@ -174,12 +191,12 @@ fn readme_macro_gates_pass_preapproved() {
              expression: canonical\n---\n{canonical}"
         ),
     )
-    .unwrap();
+    .expect("write snap");
     tuiscotti::assert_snapshot!("readme-lock", &screen, &policy);
     assert!(!snaps.join("readme-lock.snap.new").exists());
 
     // Pre-approve the compound screenshot gate (canonical + tagged PNG).
-    let sample = render_sample(&screen).unwrap();
+    let sample = render_sample(&screen).expect("render sample");
     assert_eq!(generation_id(&sample.canonical), generation);
     std::fs::write(
         snaps.join("readme-lock-shot.snap"),
@@ -189,7 +206,7 @@ fn readme_macro_gates_pass_preapproved() {
             sample.canonical
         ),
     )
-    .unwrap();
+    .expect("write snap");
     std::fs::write(
         snaps.join("readme-lock-shot-img.snap"),
         format!(
@@ -197,12 +214,12 @@ fn readme_macro_gates_pass_preapproved() {
              expression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
         ),
     )
-    .unwrap();
+    .expect("write snap");
     std::fs::write(
         snaps.join("readme-lock-shot-img.snap.png"),
         png_tag_generation(&sample.png, &generation),
     )
-    .unwrap();
+    .expect("write snap png");
     tuiscotti::assert_screenshot!("readme-lock-shot", &screen, &policy);
     assert!(evidence.join("readme-lock-shot.png").is_file());
 }

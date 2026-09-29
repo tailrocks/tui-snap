@@ -10,13 +10,13 @@ use crate::cli::RenderFormat;
 
 /// Raster profile plus the font bytes backing it: a `--font-file` override
 /// (one file used for all four faces) or the vendored faces.
-pub struct RasterFonts {
+pub(crate) struct RasterFonts {
     profile: tuiscotti::Profile,
     owned: Option<[Vec<u8>; 4]>,
 }
 
 impl RasterFonts {
-    pub fn load(font_file: Option<&Path>) -> Result<Self, String> {
+    pub(crate) fn load(font_file: Option<&Path>) -> Result<Self, String> {
         let Some(path) = font_file else {
             return Ok(Self {
                 profile: tuiscotti::Profile::default_profile(),
@@ -33,7 +33,7 @@ impl RasterFonts {
         })
     }
 
-    pub fn faces(&self) -> tuiscotti::FontFaces<'_> {
+    pub(crate) fn faces(&self) -> tuiscotti::FontFaces<'_> {
         if let Some(owned) = &self.owned {
             tuiscotti::FontFaces {
                 regular: owned[0].as_slice(),
@@ -54,7 +54,7 @@ impl RasterFonts {
 
 /// Render `frame` in one `format` to `path`. The raster renderer is lazily
 /// constructed and reused across formats (faces parse once).
-pub fn render_format_to(
+pub(crate) fn render_format_to(
     frame: &tuiscotti::Frame,
     fonts: &RasterFonts,
     renderer: &mut Option<tuiscotti::Renderer>,
@@ -78,11 +78,11 @@ pub fn render_format_to(
             std::fs::write(path, html).map_err(|e| e.to_string())
         }
         RenderFormat::Png => {
-            let rendered = cached_renderer(fonts, renderer)?
+            let raster = cached_renderer(fonts, renderer)?
                 .render(frame)
                 .map_err(|e| e.to_string())?;
-            std::fs::write(path, &rendered.png).map_err(|e| e.to_string())?;
-            std::fs::write(format!("{path}.fidelity.json"), rendered.fidelity.to_json())
+            std::fs::write(path, &raster.png).map_err(|e| e.to_string())?;
+            std::fs::write(format!("{path}.fidelity.json"), raster.fidelity.to_json())
                 .map_err(|e| e.to_string())
         }
     }

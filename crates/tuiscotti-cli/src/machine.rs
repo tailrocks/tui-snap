@@ -11,7 +11,7 @@ use std::io::BufRead;
 use tuiscotti::proto::{self, EXIT_OP_ERROR};
 
 /// Run machine mode over stdio; return the process exit code.
-pub fn machine_main() -> i32 {
+pub(crate) fn machine_main() -> i32 {
     let stdin = std::io::stdin();
     let mut all_ok = true;
     for line in stdin.lock().lines() {

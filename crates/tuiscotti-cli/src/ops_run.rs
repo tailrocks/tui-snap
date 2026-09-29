@@ -26,7 +26,7 @@ fn argv_display(argv: &[OsString]) -> Vec<String> {
         .collect()
 }
 
-pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
+pub(crate) fn cmd_capture(out: &Path, timeout_ms: u64, argv: &[OsString]) -> i32 {
     if argv.is_empty() {
         eprintln!("error: pass the command after `--`");
         return EXIT_USAGE;
@@ -48,12 +48,12 @@ pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
         return EXIT_OP_ERROR;
     }
     let manifest = serde_json::json!({
-        "argv": argv_display(&argv),
+        "argv": argv_display(argv),
         "termination": format!("{:?}", result.status),
         "code": result.code(),
         "signal": result.signal(),
         "truncated": result.truncated,
-        "elapsed_ms": result.elapsed.as_millis() as u64,
+        "elapsed_ms": u64::try_from(result.elapsed.as_millis()).unwrap_or(u64::MAX),
         "stdout_bytes": result.stdout.len(),
         "stderr_bytes": result.stderr.len(),
     });
@@ -75,7 +75,7 @@ pub fn cmd_capture(out: &Path, timeout_ms: u64, argv: Vec<OsString>) -> i32 {
     }
 }
 
-pub fn cmd_session(cmd: SessionCmd) -> i32 {
+pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
     match cmd {
         SessionCmd::Start { name, force, argv } => {
             if argv.is_empty() {
@@ -175,9 +175,8 @@ fn cmd_session_attach(name: &str) -> i32 {
         let mut discarded: u64 = 0;
         loop {
             match stdin.read(&mut buf) {
-                Ok(0) => break,
+                Ok(0) | Err(_) => break,
                 Ok(n) => discarded += n as u64,
-                Err(_) => break,
             }
         }
         if discarded > 0 {
@@ -199,12 +198,10 @@ fn cmd_session_attach(name: &str) -> i32 {
             }
             offset = bytes.len();
         }
-        let alive = proto::session_list()
-            .map(|l| {
-                l.iter()
-                    .any(|s| s.name == *name && s.status == proto::SessionStatus::Running)
-            })
-            .unwrap_or(false);
+        let alive = proto::session_list().is_ok_and(|l| {
+            l.iter()
+                .any(|s| s.name == *name && s.status == proto::SessionStatus::Running)
+        });
         if !alive {
             return crate::write_line("detached: session ended").unwrap_or(0);
         }
@@ -212,7 +209,7 @@ fn cmd_session_attach(name: &str) -> i32 {
     }
 }
 
-pub fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<OsString>) -> i32 {
+pub(crate) fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: &[OsString]) -> i32 {
     if argv.is_empty() {
         eprintln!("error: pass the command after `--`");
         return EXIT_USAGE;
@@ -225,7 +222,7 @@ pub fn cmd_record(out: &Path, max_events: u64, max_bytes: u64, argv: Vec<OsStrin
         eprintln!("error: {e}");
         EXIT_OP_ERROR
     };
-    if let Err(e) = rec.record("start", &format!("argv={:?}", argv_display(&argv))) {
+    if let Err(e) = rec.record("start", &format!("argv={:?}", argv_display(argv))) {
         return fail(e);
     }
     let result = tuiscotti::command::Command::new(&argv[0])

@@ -1,4 +1,4 @@
-//! execute(): named sessions + machine envelope shape (split from `cli.rs`; shared helpers live in the root).
+//! `execute()`: named sessions + machine envelope shape (split from `cli.rs`; shared helpers live in the root).
 
 use super::with_runtime_dir;
 use tuiscotti::proto::{self, Envelope, Op, OpResult, SessionStatus};
@@ -22,7 +22,7 @@ fn op_named_session_round_trip() {
         }
         // collision without force
         let e = proto::session_start("rt1", &["sleep".to_string(), "1".to_string()], false)
-            .unwrap_err();
+            .expect_err("session collision must fail");
         assert_eq!(e.code, "session-exists");
         let list = proto::session_list().expect("list");
         assert_eq!(list.len(), 1);
@@ -33,11 +33,12 @@ fn op_named_session_round_trip() {
         assert_ne!(info.pid, info2.pid);
         proto::session_stop("rt1").expect("stop");
         assert!(!dir.join("rt1.json").is_file());
-        let e = proto::session_stop("rt1").unwrap_err();
+        let e = proto::session_stop("rt1").expect_err("double stop must be not-found");
         assert_eq!(e.code, "not-found");
         // bad names rejected
         for bad in ["", "../evil", "a/b", &"x".repeat(65)] {
-            let e = proto::session_start(bad, &["sleep".to_string()], false).unwrap_err();
+            let e = proto::session_start(bad, &["sleep".to_string()], false)
+                .expect_err("bad session name must be rejected");
             assert_eq!(e.code, "invalid-input", "{bad:?}");
         }
         // prune removes dead endpoints
@@ -45,7 +46,8 @@ fn op_named_session_round_trip() {
         std::thread::sleep(std::time::Duration::from_millis(300));
         let pruned = proto::session_prune().expect("prune");
         assert!(pruned.contains(&"short".to_string()), "{pruned:?}");
-    });
+    })
+    .expect("isolated runtime dir");
 }
 
 #[test]
@@ -63,7 +65,7 @@ fn op_session_ops_via_execute() {
         }
         match proto::execute(&Op::SessionList).expect("list") {
             OpResult::SessionList { sessions } => {
-                assert!(sessions.iter().any(|s| s.name == "ex1"))
+                assert!(sessions.iter().any(|s| s.name == "ex1"));
             }
             r => panic!("wrong result: {r:?}"),
         }
@@ -75,7 +77,8 @@ fn op_session_ops_via_execute() {
             OpResult::Session { session } => assert_eq!(session.name, "ex1"),
             r => panic!("wrong result: {r:?}"),
         }
-    });
+    })
+    .expect("isolated runtime dir");
 }
 
 // ---------------------------------------------------------------------------

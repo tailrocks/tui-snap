@@ -201,19 +201,27 @@ fn isolated_home_is_respected() {
     assert_eq!(out.status, Termination::Exit(0));
     let text = out.stdout_lossy();
     let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines[0], iso.home().to_str().unwrap());
+    assert_eq!(lines[0], iso.home().to_str().expect("utf8 path"));
     // $PWD is canonical (/private/var/...); temp_dir() may use a symlink.
     let canon_cwd = iso.cwd().canonicalize().expect("cwd exists");
-    assert_eq!(lines[1], canon_cwd.to_str().unwrap());
+    assert_eq!(lines[1], canon_cwd.to_str().expect("utf8 path"));
     assert_eq!(
         lines[2],
-        iso.home().join(".config").to_str().unwrap().to_string()
+        iso.home()
+            .join(".config")
+            .to_str()
+            .expect("utf8 path")
+            .to_string()
     );
     assert_eq!(
         lines[3],
-        iso.home().join(".cache").to_str().unwrap().to_string()
+        iso.home()
+            .join(".cache")
+            .to_str()
+            .expect("utf8 path")
+            .to_string()
     );
-    assert_eq!(lines[4], iso.tmp().to_str().unwrap());
+    assert_eq!(lines[4], iso.tmp().to_str().expect("utf8 path"));
     // Parent env untouched by the fixture.
     assert_eq!(std::env::var("HOME").unwrap_or_default(), parent_home);
 
@@ -230,7 +238,7 @@ fn isolated_env_scrubs_dylib_path_unless_preserved() {
     // builder level below instead (portable, no platform bypass).
     let probe = "printf '%s' \"$LD_LIBRARY_PATH\"";
     let out = isolated_env()
-        .unwrap()
+        .expect("isolated env fixture")
         .apply(
             Command::new("/bin/sh")
                 .args(["-c", probe])
@@ -243,7 +251,7 @@ fn isolated_env_scrubs_dylib_path_unless_preserved() {
         out.stdout_lossy()
     );
     let kept = isolated_env()
-        .unwrap()
+        .expect("isolated env fixture")
         .preserve_dylib_path(true)
         .apply(
             Command::new("/bin/sh")
@@ -261,7 +269,7 @@ fn isolated_env_scrubs_dylib_path_unless_preserved() {
         "DYLD_FALLBACK_LIBRARY_PATH",
     ] {
         let scrubbed = isolated_env()
-            .unwrap()
+            .expect("isolated env fixture")
             .apply(Command::new("x"))
             .std_command();
         let entry: Vec<_> = scrubbed
@@ -272,7 +280,7 @@ fn isolated_env_scrubs_dylib_path_unless_preserved() {
         assert_eq!(entry[0].1, None, "{var} must be removed by default");
 
         let preserved = isolated_env()
-            .unwrap()
+            .expect("isolated env fixture")
             .preserve_dylib_path(true)
             .apply(Command::new("x"))
             .std_command();

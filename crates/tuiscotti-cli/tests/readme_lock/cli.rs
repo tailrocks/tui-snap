@@ -2,6 +2,7 @@
 
 use super::{bin, help, home_frame};
 use ratatui::widgets::Paragraph;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tuiscotti::{Profile, Provenance, VENDORED_FACES};
@@ -13,7 +14,7 @@ use tuiscotti::{Profile, Provenance, VENDORED_FACES};
 
 #[test]
 fn readme_cli_help_lists_documented_subcommands() {
-    let top = help(&["--help"]);
+    let top = help(&["--help"]).expect("help text");
     for cmd in [
         "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
         "report", "import", "session", "record", "trace", "machine",
@@ -33,15 +34,15 @@ fn readme_cli_help_lists_documented_subcommands() {
         );
     }
     // Documented flags per subcommand.
-    let render = help(&["render", "--help"]);
+    let render = help(&["render", "--help"]).expect("help text");
     for flag in ["--input", "--format", "--out", "--font-file"] {
         assert!(render.contains(flag), "render --help missing {flag}");
     }
-    let report = help(&["report", "--help"]);
+    let report = help(&["report", "--help"]).expect("help text");
     for flag in ["--dir", "--out", "--title"] {
         assert!(report.contains(flag), "report --help missing {flag}");
     }
-    let session = help(&["session", "--help"]);
+    let session = help(&["session", "--help"]).expect("help text");
     for sub in ["start", "stop", "list", "prune", "attach"] {
         assert!(session.contains(sub), "session --help missing {sub}");
     }
@@ -57,7 +58,7 @@ fn readme_cli_help_lists_documented_subcommands() {
         ("init", &["--dir", "--force"]),
     ];
     for &(cmd, flags) in cases {
-        let text = help(&[cmd, "--help"]);
+        let text = help(&[cmd, "--help"]).expect("help text");
         for flag in flags {
             assert!(text.contains(flag), "{cmd} --help missing {flag}");
         }
@@ -66,9 +67,9 @@ fn readme_cli_help_lists_documented_subcommands() {
 
 #[test]
 fn readme_cli_render_and_diff_round_trip() {
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
     let input = tmp.path().join("shot.frame.json");
-    std::fs::write(&input, home_frame().to_json()).unwrap();
+    std::fs::write(&input, home_frame().to_json()).expect("write frame");
     // Documented render example: png + svg formats, --out prefix.
     let out = Command::new(bin())
         .args([
@@ -101,7 +102,7 @@ fn readme_cli_render_and_diff_round_trip() {
         .output()
         .expect("spawn diff");
     assert_eq!(same.status.code(), Some(0));
-    let other = home_frame_diff_png(tmp.path());
+    let other = home_frame_diff_png(tmp.path()).expect("diff png");
     let mismatch = Command::new(bin())
         .args([
             "diff",
@@ -115,7 +116,7 @@ fn readme_cli_render_and_diff_round_trip() {
     assert_eq!(mismatch.status.code(), Some(4));
 }
 
-fn home_frame_diff_png(dir: &Path) -> PathBuf {
+fn home_frame_diff_png(dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let frame = tuiscotti::ratatui::draw_frame(
         120,
         40,
@@ -123,16 +124,16 @@ fn home_frame_diff_png(dir: &Path) -> PathBuf {
         |f| f.render_widget(Paragraph::new("other"), f.area()),
     );
     let profile = Profile::default_profile();
-    let mut renderer = profile.renderer(&VENDORED_FACES).unwrap();
-    let rendered = renderer.render(&frame).unwrap();
+    let mut renderer = profile.renderer(&VENDORED_FACES)?;
+    let raster = renderer.render(&frame)?;
     let path = dir.join("other.png");
-    std::fs::write(&path, &rendered.png).unwrap();
+    std::fs::write(&path, &raster.png)?;
     assert_ne!(
-        rendered.png,
-        std::fs::read(dir.join("shot.png")).unwrap(),
+        raster.png,
+        std::fs::read(dir.join("shot.png"))?,
         "frames must differ for the exit-4 lock"
     );
-    path
+    Ok(path)
 }
 
 #[test]
@@ -145,22 +146,21 @@ fn readme_cli_machine_and_offline_commands() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn machine");
-    use std::io::Write;
     child
         .stdin
         .take()
-        .unwrap()
+        .expect("piped stdin")
         .write_all(br#"{"type":"capabilities"}"#)
-        .unwrap();
+        .expect("write op");
     let out = child.wait_with_output().expect("wait machine");
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(r#""ok":true"#), "machine out: {stdout}");
 
     // Offline review/report on an empty verdict dir: exit 0.
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
     let verdicts = tmp.path().join("verdicts");
-    std::fs::create_dir(&verdicts).unwrap();
+    std::fs::create_dir(&verdicts).expect("mkdir");
     let review = Command::new(bin())
         .args(["review", "--dir", &verdicts.to_string_lossy()])
         .output()
@@ -185,11 +185,14 @@ fn readme_cli_machine_and_offline_commands() {
         Command::new(bin())
             .arg("doctor")
             .output()
-            .unwrap()
+            .expect("run doctor")
             .status
             .success()
     );
-    let schema = Command::new(bin()).arg("schema").output().unwrap();
+    let schema = Command::new(bin())
+        .arg("schema")
+        .output()
+        .expect("run schema");
     assert!(schema.status.success());
     let schema_text = String::from_utf8_lossy(&schema.stdout).into_owned();
     assert!(
@@ -208,7 +211,8 @@ fn readme_pinned_facts() {
     // This test lives in crates/tuiscotti-cli; pinned facts live at the workspace root.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root = manifest.join("../..");
-    let toolchain = std::fs::read_to_string(root.join("rust-toolchain.toml")).unwrap();
+    let toolchain =
+        std::fs::read_to_string(root.join("rust-toolchain.toml")).expect("read toolchain");
     assert!(
         toolchain.contains("1.98.1"),
         "README pins toolchain 1.98.1: {toolchain}"
@@ -237,6 +241,6 @@ fn readme_pinned_facts() {
     // in the `fallback` split part of the render suite.
     let render_tests =
         std::fs::read_to_string(root.join("crates/tuiscotti-fixtures/tests/render/fallback.rs"))
-            .unwrap();
+            .expect("read render tests");
     assert!(render_tests.contains("fn approved_pngs_are_exactly_what_the_current_renderer_emits"));
 }

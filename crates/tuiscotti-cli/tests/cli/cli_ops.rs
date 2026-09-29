@@ -22,26 +22,28 @@ fn cli_review_and_report() {
     )
     .expect("v2");
     let out = run_cli(
-        &["review", "--dir", tmp.path().to_str().unwrap()],
+        &["review", "--dir", tmp.path().to_str().expect("utf8 path")],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_VERIFY_FAIL);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_VERIFY_FAIL);
     assert!(stdout(&out).contains("two"), "{}", stdout(&out));
     let html = tmp.path().join("report.html");
     let out = run_cli(
         &[
             "report",
             "--dir",
-            tmp.path().to_str().unwrap(),
+            tmp.path().to_str().expect("utf8 path"),
             "--out",
-            html.to_str().unwrap(),
+            html.to_str().expect("utf8 path"),
         ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -58,17 +60,18 @@ fn cli_import_readonly() {
         .map(|e| e.expect("entry").path())
         .collect();
     let out = run_cli(
-        &["import", "--dir", tmp.path().to_str().unwrap()],
+        &["import", "--dir", tmp.path().to_str().expect("utf8 path")],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(stdout(&out).contains("0"), "{}", stdout(&out));
+    assert!(stdout(&out).contains('0'), "{}", stdout(&out));
     let after: Vec<PathBuf> = std::fs::read_dir(tmp.path())
         .expect("read")
         .map(|e| e.expect("entry").path())
@@ -86,43 +89,50 @@ fn cli_session_round_trip() {
     let rt = tmp.path().join("rt").to_string_lossy().into_owned();
     let env = &[("TUISNAP_RUNTIME_DIR", rt.as_str())][..];
     // stop-before-start is a clean op error, not a crash
-    let out = run_cli(&["session", "stop", "--name", "ghost"], env, None);
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    let out = run_cli(&["session", "stop", "--name", "ghost"], env, None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
     let out = run_cli(
         &["session", "start", "--name", "s1", "--", "sleep", "30"],
         env,
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let out = run_cli(&["session", "list"], env, None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["session", "list"], env, None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     assert!(stdout(&out).contains("s1"), "{}", stdout(&out));
     let out = run_cli(
         &["session", "start", "--name", "s1", "--", "sleep", "1"],
         env,
         None,
+    )
+    .expect("run tuisnap");
+    assert_eq!(
+        code(&out).expect("exit code"),
+        EXIT_OP_ERROR,
+        "collision without --force"
     );
-    assert_eq!(code(&out), EXIT_OP_ERROR, "collision without --force");
     let out = run_cli(
         &[
             "session", "start", "--name", "s1", "--force", "--", "sleep", "30",
         ],
         env,
         None,
-    );
-    assert_eq!(code(&out), 0);
-    let out = run_cli(&["session", "stop", "--name", "s1"], env, None);
-    assert_eq!(code(&out), 0);
-    let out = run_cli(&["session", "list"], env, None);
-    assert_eq!(code(&out), 0);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
+    let out = run_cli(&["session", "stop", "--name", "s1"], env, None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
+    let out = run_cli(&["session", "list"], env, None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     assert!(!stdout(&out).contains("s1"), "{}", stdout(&out));
-    let out = run_cli(&["session", "prune"], env, None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["session", "prune"], env, None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +147,7 @@ fn cli_record_and_trace() {
         &[
             "record",
             "--out",
-            journal.to_str().unwrap(),
+            journal.to_str().expect("utf8 path"),
             "--max-events",
             "100",
             "--max-bytes",
@@ -148,29 +158,36 @@ fn cli_record_and_trace() {
         ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let out = run_cli(&["trace", "--input", journal.to_str().unwrap()], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(
+        &["trace", "--input", journal.to_str().expect("utf8 path")],
+        &[],
+        None,
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     let t = stdout(&out);
     assert!(t.contains("start") && t.contains("exit"), "{t}");
     let out = run_cli(
         &[
             "trace",
             "--input",
-            journal.to_str().unwrap(),
+            journal.to_str().expect("utf8 path"),
             "--kind",
             "exit",
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 0);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     assert!(!stdout(&out).contains("start"), "kind filter applies");
     // tiny bound trips the recorder instead of truncating silently
     let small = tmp.path().join("small.jsonl");
@@ -178,7 +195,7 @@ fn cli_record_and_trace() {
         &[
             "record",
             "--out",
-            small.to_str().unwrap(),
+            small.to_str().expect("utf8 path"),
             "--max-events",
             "1",
             "--max-bytes",
@@ -189,8 +206,9 @@ fn cli_record_and_trace() {
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,9 +227,10 @@ fn cli_missing_values_are_usage_errors() {
         &["render", "--input", &frame_arg, "--out", &out_arg],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         2,
         "empty --format must be exit 2: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -223,28 +242,29 @@ fn cli_missing_values_are_usage_errors() {
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 2);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 2);
     // Missing child argv after `--`: usage error on every spawner.
     let cap = tmp.path().join("cap").to_string_lossy().into_owned();
-    let out = run_cli(&["capture", "--out", &cap], &[], None);
+    let out = run_cli(&["capture", "--out", &cap], &[], None).expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         2,
         "capture without argv must be exit 2: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let rec = tmp.path().join("r.jsonl").to_string_lossy().into_owned();
-    let out = run_cli(&["record", "--out", &rec], &[], None);
+    let out = run_cli(&["record", "--out", &rec], &[], None).expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         2,
         "record without argv must be exit 2: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let out = run_cli(&["session", "start", "--name", "noargv"], &[], None);
+    let out = run_cli(&["session", "start", "--name", "noargv"], &[], None).expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         2,
         "session start without argv must be exit 2: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -264,17 +284,19 @@ fn cli_trace_typed_kind() {
         &["record", "--out", &journal_arg, "--", "echo", "kind-hi"],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 0);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     // Every typed kind is accepted.
     for kind in ["start", "output", "exit", "complete"] {
         let out = run_cli(
             &["trace", "--input", &journal_arg, "--kind", kind],
             &[],
             None,
-        );
+        )
+        .expect("run tuisnap");
         assert_eq!(
-            code(&out),
+            code(&out).expect("exit code"),
             0,
             "kind {kind}: {}",
             String::from_utf8_lossy(&out.stderr)
@@ -285,8 +307,9 @@ fn cli_trace_typed_kind() {
         &["trace", "--input", &journal_arg, "--kind", "bogus"],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 2);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 2);
     let err = String::from_utf8_lossy(&out.stderr).into_owned();
     for kind in ["start", "output", "exit", "complete"] {
         assert!(err.contains(kind), "stderr lists {kind}:\n{err}");

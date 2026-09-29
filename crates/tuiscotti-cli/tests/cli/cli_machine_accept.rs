@@ -10,9 +10,9 @@ use tuiscotti::proto::{EXIT_OP_ERROR, Envelope};
 #[test]
 fn cli_machine_mode() {
     let input = "{\"type\":\"version\"}\n{\"type\":\"assert\",\"check\":\"text-equals\",\"actual\":\"a\",\"expected\":\"a\"}\n";
-    let out = run_cli(&["machine"], &[], Some(input));
+    let out = run_cli(&["machine"], &[], Some(input)).expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -24,8 +24,9 @@ fn cli_machine_mode() {
         let env: Envelope = serde_json::from_str(line).expect("envelope json");
         assert!(env.ok);
     }
-    let out = run_cli(&["machine"], &[], Some("{\"type\":\"version\"}\ngarbage\n"));
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    let out =
+        run_cli(&["machine"], &[], Some("{\"type\":\"version\"}\ngarbage\n")).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 2);
@@ -49,9 +50,10 @@ fn child_receives_double_dash_machine() {
         &["capture", "--out", &out_arg, "--", "/bin/echo", "--machine"],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&res),
+        code(&res).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&res.stderr)
@@ -60,13 +62,13 @@ fn child_receives_double_dash_machine() {
     assert_eq!(captured, b"--machine\n");
     // A literal `--` child argument survives too (clap consumes only the
     // separator; no post-filter may eat child values).
-    let out2 = tmp.path().join("cap2");
-    let out2_arg = out2.to_str().expect("utf8 tempdir").to_string();
+    let cap2 = tmp.path().join("cap2");
+    let cap2_arg = cap2.to_str().expect("utf8 tempdir").to_string();
     let res = run_cli(
         &[
             "capture",
             "--out",
-            &out2_arg,
+            &cap2_arg,
             "--",
             "/bin/echo",
             "--",
@@ -74,16 +76,17 @@ fn child_receives_double_dash_machine() {
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&res), 0);
-    let captured = std::fs::read(out2.join("stdout.bin")).expect("stdout.bin");
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&res).expect("exit code"), 0);
+    let captured = std::fs::read(cap2.join("stdout.bin")).expect("stdout.bin");
     assert_eq!(captured, b"-- --machine\n");
     // A bare `--machine` flag is no longer machine mode: usage error (exit 2).
-    let res = run_cli(&["--machine"], &[], None);
-    assert_eq!(code(&res), 2);
+    let res = run_cli(&["--machine"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&res).expect("exit code"), 2);
     // `machine --help` documents the explicit interface.
-    let res = run_cli(&["machine", "--help"], &[], None);
-    assert_eq!(code(&res), 0);
+    let res = run_cli(&["machine", "--help"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&res).expect("exit code"), 0);
     assert!(
         stdout(&res).contains("stdin"),
         "machine help: {}",
@@ -100,30 +103,49 @@ fn accept_frame() -> tuiscotti::Frame {
     tuiscotti::assert::frame_from_screen(&screen)
 }
 
-#[test]
-fn cli_accept_round_trip() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let store_dir = tmp.path().join("shots");
-    let store = tuiscotti::snapshot::Store::new(&store_dir);
+fn accept_setup() -> std::io::Result<(
+    tempfile::TempDir,
+    tuiscotti::snapshot::Store,
+    tuiscotti::Profile,
+    tuiscotti::Frame,
+)> {
+    let tmp = tempfile::tempdir()?;
+    let store = tuiscotti::snapshot::Store::new(&tmp.path().join("shots"));
     let profile = tuiscotti::Profile::default_profile();
     let frame = accept_frame();
+    Ok((tmp, store, profile, frame))
+}
+
+#[test]
+fn cli_accept_round_trip() {
+    let (tmp, store, profile, frame) = accept_setup().expect("accept setup");
+    let store_dir = tmp.path().join("shots");
 
     // Missing approval fails closed and advertises the exact CLI invocation.
     let o1 = store
         .check("home", &frame, &profile, &tuiscotti::VENDORED_FACES, 1.0)
         .expect("check");
     assert!(!o1.status.matched());
-    let err = o1.ensure_matched().unwrap_err().to_string();
+    let err = o1
+        .ensure_matched()
+        .expect_err("missing approval must fail closed")
+        .to_string();
     assert!(err.contains("tuisnap accept home"), "{err}");
 
     // The CLI blesses exactly one name; the gate then matches.
     let out = run_cli(
-        &["accept", "--store", store_dir.to_str().unwrap(), "home"],
+        &[
+            "accept",
+            "--store",
+            store_dir.to_str().expect("utf8 path"),
+            "home",
+        ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -134,7 +156,13 @@ fn cli_accept_round_trip() {
         .check("home", &frame, &profile, &tuiscotti::VENDORED_FACES, 1.0)
         .expect("re-check");
     assert!(o2.status.matched());
-    o2.ensure_matched().unwrap();
+    o2.ensure_matched().expect("gate matches after accept");
+}
+
+#[test]
+fn cli_accept_message_invocation_from_store_root() {
+    let (tmp, store, profile, frame) = accept_setup().expect("accept setup");
+    let store_dir = tmp.path().join("shots");
 
     // The message's exact invocation (`tuisnap accept <name>`, no --store)
     // works from the store root.
@@ -142,9 +170,9 @@ fn cli_accept_round_trip() {
         .check("away", &frame, &profile, &tuiscotti::VENDORED_FACES, 1.0)
         .expect("check");
     assert!(!o3.status.matched());
-    let out = run_cli_cwd(&store_dir, &["accept", "away"]);
+    let out = run_cli_cwd(&store_dir, &["accept", "away"]).expect("run tuisnap in dir");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -153,6 +181,12 @@ fn cli_accept_round_trip() {
         .check("away", &frame, &profile, &tuiscotti::VENDORED_FACES, 1.0)
         .expect("re-check");
     assert!(o4.status.matched());
+}
+
+#[test]
+fn cli_accept_nested_name() {
+    let (tmp, store, profile, frame) = accept_setup().expect("accept setup");
+    let store_dir = tmp.path().join("shots");
 
     // Nested names bless through the same per-name path.
     let o5 = store
@@ -169,14 +203,15 @@ fn cli_accept_round_trip() {
         &[
             "accept",
             "--store",
-            store_dir.to_str().unwrap(),
+            store_dir.to_str().expect("utf8 path"),
             "pages/overview",
         ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -191,19 +226,31 @@ fn cli_accept_round_trip() {
         )
         .expect("re-check");
     assert!(o6.status.matched());
+}
+
+#[test]
+fn cli_accept_invalid() {
+    let (tmp, store, profile, frame) = accept_setup().expect("accept setup");
+    let store_dir = tmp.path().join("shots");
+    // Seed an approved name so the store layout matches the round trip.
+    let _seed = store
+        .check("home", &frame, &profile, &tuiscotti::VENDORED_FACES, 1.0)
+        .expect("seed check");
+    store.accept("home").expect("seed accept");
 
     // Nothing to accept is an op error, never a silent pass.
     let out = run_cli(
         &[
             "accept",
             "--store",
-            store_dir.to_str().unwrap(),
+            store_dir.to_str().expect("utf8 path"),
             "never-checked",
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("nothing to accept"),
         "{:?}",
@@ -212,25 +259,32 @@ fn cli_accept_round_trip() {
 
     // Name escapes are rejected before any copy.
     let out = run_cli(
-        &["accept", "--store", store_dir.to_str().unwrap(), "../evil"],
+        &[
+            "accept",
+            "--store",
+            store_dir.to_str().expect("utf8 path"),
+            "../evil",
+        ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
 
     // No bulk/auto flags: --all is a usage error.
     let out = run_cli(
         &[
             "accept",
             "--store",
-            store_dir.to_str().unwrap(),
+            store_dir.to_str().expect("utf8 path"),
             "--all",
             "home",
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 2);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 2);
 }
 
 #[test]
@@ -261,11 +315,17 @@ fn cli_accept_rejects_frozen() {
     let before = std::fs::read(frozen.join("home.canonical.txt")).expect("read");
 
     let out = run_cli(
-        &["accept", "--store", frozen.to_str().unwrap(), "home"],
+        &[
+            "accept",
+            "--store",
+            frozen.to_str().expect("utf8 path"),
+            "home",
+        ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_OP_ERROR);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("rejects acceptance"),
         "{:?}",

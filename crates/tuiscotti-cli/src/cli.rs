@@ -19,7 +19,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// Config responsibilities (kept in sync with `proto::CONFIG_DOCS`).
-pub const INIT_HELP: &str = "\
+pub(crate) const INIT_HELP: &str = "\
 Scaffold tui-snap.toml, nextest config, and an example test.
 
 Config responsibilities:
@@ -37,15 +37,15 @@ Config responsibilities:
     version,
     about = "TUI visual regression: capture, inspect, sessions, render, diff, review"
 )]
-pub struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
-    pub cmd: Cmd,
+    pub(crate) cmd: Cmd,
 }
 
 /// Offline render output format. Typed, so an unknown `--format` is a usage
 /// error (exit 2) with the valid set listed — never a silent skip.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum RenderFormat {
+pub(crate) enum RenderFormat {
     /// Plain Unicode text, no escapes.
     Txt,
     /// Normalized VT/SGR screen dump.
@@ -63,7 +63,7 @@ pub enum RenderFormat {
 impl RenderFormat {
     /// File extension for `--out <prefix>.<ext>` outputs.
     #[must_use]
-    pub fn extension(self) -> &'static str {
+    pub(crate) fn extension(self) -> &'static str {
         match self {
             Self::Txt => "txt",
             Self::Ansi => "ansi",
@@ -78,7 +78,7 @@ impl RenderFormat {
 /// Journal event kind filter for `trace`. Typed, so an unknown `--kind` is a
 /// usage error (exit 2) with the valid set listed — never a silent no-match.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
-pub enum TraceKind {
+pub(crate) enum TraceKind {
     /// Session start record (`argv=…`).
     Start,
     /// Captured output sizes record.
@@ -92,7 +92,7 @@ pub enum TraceKind {
 impl TraceKind {
     /// Journal `kind` string this variant filters on.
     #[must_use]
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Start => "start",
             Self::Output => "output",
@@ -103,7 +103,7 @@ impl TraceKind {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Cmd {
+pub(crate) enum Cmd {
     /// Scaffold tui-snap.toml, nextest config, and an example test.
     #[command(long_about = INIT_HELP)]
     Init {
@@ -207,7 +207,7 @@ pub enum Cmd {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum SessionCmd {
+pub(crate) enum SessionCmd {
     /// Start a named session (detached child + endpoint file).
     Start {
         #[arg(long)]
@@ -244,7 +244,7 @@ pub(crate) fn run(cli: Cli) -> i32 {
             out,
             timeout_ms,
             argv,
-        } => crate::ops_run::cmd_capture(&out, timeout_ms, argv),
+        } => crate::ops_run::cmd_capture(&out, timeout_ms, &argv),
         Cmd::Inspect { dir } => crate::ops_offline::cmd_inspect(&dir),
         Cmd::Render {
             input,
@@ -263,7 +263,7 @@ pub(crate) fn run(cli: Cli) -> i32 {
             max_events,
             max_bytes,
             argv,
-        } => crate::ops_run::cmd_record(&out, max_events, max_bytes, argv),
+        } => crate::ops_run::cmd_record(&out, max_events, max_bytes, &argv),
         Cmd::Trace { input, kind } => crate::ops_offline::cmd_trace(&input, kind),
         Cmd::Machine => crate::machine::machine_main(),
     }

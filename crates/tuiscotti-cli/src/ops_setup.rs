@@ -41,7 +41,7 @@ fn example_view() {
 }
 "#;
 
-pub fn cmd_init(dir: &Path, force: bool) -> i32 {
+pub(crate) fn cmd_init(dir: &Path, force: bool) -> i32 {
     let files: &[(&str, &str)] = &[
         ("tui-snap.toml", SCAFFOLD_TOML),
         (".config/nextest.toml", SCAFFOLD_NEXTEST),
@@ -60,10 +60,10 @@ pub fn cmd_init(dir: &Path, force: bool) -> i32 {
     let mut buf = String::new();
     for (rel, body) in files {
         let path = dir.join(rel);
-        if let Some(parent) = path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
         }
         if let Err(e) = std::fs::write(&path, body) {
             return crate::fail_flushed(&buf, &format!("write {}: {e}", path.display()));
@@ -87,7 +87,7 @@ fn probe(program: &str, args: &[&str]) -> String {
     }
 }
 
-pub fn cmd_doctor() -> i32 {
+pub(crate) fn cmd_doctor() -> i32 {
     let profile = tuiscotti::Profile::default_profile();
     let caps = tuiscotti::proto::capabilities();
     let mut buf = format!(
@@ -117,13 +117,13 @@ pub fn cmd_doctor() -> i32 {
         "TUISNAP_SNAPSHOT_DIR",
     ] {
         match std::env::var(key) {
-            Ok(v) => buf.push_str(&format!("  {key}={v}\n")),
-            Err(_) => buf.push_str(&format!("  {key}=(unset)\n")),
+            Ok(v) => crate::push_line(&mut buf, &format!("  {key}={v}")),
+            Err(_) => crate::push_line(&mut buf, &format!("  {key}=(unset)")),
         }
     }
     crate::write_stdout(&buf)
 }
 
-pub fn cmd_schema() -> i32 {
+pub(crate) fn cmd_schema() -> i32 {
     crate::write_stdout(&format!("{}\n", tuiscotti::proto::PROTOCOL_SCHEMA_JSON))
 }

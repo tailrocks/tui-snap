@@ -11,45 +11,48 @@ use tuiscotti::mcp;
 // Harness: drive mcp::serve over in-memory pipes
 // ---------------------------------------------------------------------------
 
-fn roundtrip(requests: &[Value]) -> Vec<Value> {
-    let input = requests
+fn roundtrip(requests: &[Value]) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    let parts: Vec<String> = requests
         .iter()
-        .map(|r| serde_json::to_string(r).unwrap())
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n";
+        .map(serde_json::to_string)
+        .collect::<Result<_, _>>()?;
+    let input = parts.join("\n") + "\n";
     let mut out: Vec<u8> = Vec::new();
     mcp::serve(BufReader::new(Cursor::new(input)), &mut out);
-    let text = String::from_utf8(out).unwrap();
-    text.lines()
+    let text = String::from_utf8(out)?;
+    let resps: Vec<Value> = text
+        .lines()
         .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    Ok(resps)
 }
 
-fn roundtrip_raw(lines: &[&str]) -> Vec<Value> {
+fn roundtrip_raw(lines: &[&str]) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     let input = lines.join("\n") + "\n";
     let mut out: Vec<u8> = Vec::new();
     mcp::serve(BufReader::new(Cursor::new(input)), &mut out);
-    String::from_utf8(out)
-        .unwrap()
+    let text = String::from_utf8(out)?;
+    let resps: Vec<Value> = text
         .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    Ok(resps)
 }
 
 fn req(id: i64, method: &str, params: Value) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+    let mut v = json!({"jsonrpc": "2.0", "id": id, "method": method});
+    v["params"] = params;
+    v
 }
 
 /// Unwrap MCP content[0].text as JSON + isError flag.
-fn content_json(resp: &Value) -> (Value, bool) {
+fn content_json(resp: &Value) -> Option<(Value, bool)> {
     let result = &resp["result"];
-    let text = result["content"][0]["text"].as_str().unwrap();
-    (
-        serde_json::from_str(text).unwrap(),
-        result["isError"].as_bool().unwrap(),
-    )
+    let text = result["content"][0]["text"].as_str()?;
+    let body: Value = serde_json::from_str(text).ok()?;
+    let is_error = result["isError"].as_bool()?;
+    Some((body, is_error))
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +66,8 @@ fn initialize_reports_protocol_and_capabilities() {
         "initialize",
         json!({"protocolVersion": "2024-11-05", "capabilities": {},
                "clientInfo": {"name": "test", "version": "0"}}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps.len(), 1);
     let r = &resps[0];
     assert_eq!(r["jsonrpc"], "2.0");
@@ -75,9 +79,12 @@ fn initialize_reports_protocol_and_capabilities() {
 
 #[test]
 fn tools_list_has_one_tool_per_op() {
-    let resps = roundtrip(&[req(2, "tools/list", json!({}))]);
-    let tools = resps[0]["result"]["tools"].as_array().unwrap();
-    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    let resps = roundtrip(&[req(2, "tools/list", json!({}))]).expect("mcp roundtrip");
+    let tools = resps[0]["result"]["tools"].as_array().expect("tools array");
+    let names: Vec<&str> = tools
+        .iter()
+        .map(|t| t["name"].as_str().expect("tool name"))
+        .collect();
     assert_eq!(
         names,
         [
@@ -99,7 +106,10 @@ fn tools_list_has_one_tool_per_op() {
         ]
     );
     for t in tools {
-        assert!(t["description"].as_str().unwrap().len() > 10, "{t}");
+        assert!(
+            t["description"].as_str().expect("tool description").len() > 10,
+            "{t}"
+        );
         assert_eq!(t["inputSchema"]["type"], "object");
     }
 }
@@ -110,9 +120,10 @@ fn tools_call_version_roundtrip() {
         3,
         "tools/call",
         json!({"name": "version", "arguments": {}}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps[0]["id"], 3);
-    let (env, is_error) = content_json(&resps[0]);
+    let (env, is_error) = content_json(&resps[0]).expect("mcp content");
     assert!(!is_error);
     assert_eq!(env["ok"], true);
     assert_eq!(env["result"]["type"], "version");
@@ -130,8 +141,9 @@ fn tools_call_runs_asserts_in_shared_engine() {
         "tools/call",
         json!({"name": "assert", "arguments":
             {"check": "text-contains", "text": "hello", "needle": "ell"}}),
-    )]);
-    let (env, is_error) = content_json(&resps[0]);
+    )])
+    .expect("mcp roundtrip");
+    let (env, is_error) = content_json(&resps[0]).expect("mcp content");
     assert!(!is_error);
     assert_eq!(
         env["result"],
@@ -144,8 +156,9 @@ fn tools_call_runs_asserts_in_shared_engine() {
         "tools/call",
         json!({"name": "assert", "arguments":
             {"check": "text-equals", "actual": "a", "expected": "b"}}),
-    )]);
-    let (env, is_error) = content_json(&resps[0]);
+    )])
+    .expect("mcp roundtrip");
+    let (env, is_error) = content_json(&resps[0]).expect("mcp content");
     assert!(!is_error);
     assert_eq!(env["result"]["passed"], false);
 
@@ -154,8 +167,9 @@ fn tools_call_runs_asserts_in_shared_engine() {
         6,
         "tools/call",
         json!({"name": "assert", "arguments": {"check": "nope"}}),
-    )]);
-    let (env, is_error) = content_json(&resps[0]);
+    )])
+    .expect("mcp roundtrip");
+    let (env, is_error) = content_json(&resps[0]).expect("mcp content");
     assert!(is_error);
     assert_eq!(env["ok"], false);
     assert_eq!(env["error"]["code"], "invalid-input");
@@ -167,7 +181,8 @@ fn unknown_tool_is_invalid_params() {
         7,
         "tools/call",
         json!({"name": "frobnicate", "arguments": {}}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32602);
 }
 
@@ -178,44 +193,49 @@ fn bad_params_are_invalid_params() {
         8,
         "tools/call",
         json!({"name": "spawn", "arguments": {}}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32602);
     // Non-object arguments.
     let resps = roundtrip(&[req(
         9,
         "tools/call",
         json!({"name": "version", "arguments": [1]}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32602);
     // Missing tool name.
-    let resps = roundtrip(&[req(10, "tools/call", json!({"arguments": {}}))]);
+    let resps =
+        roundtrip(&[req(10, "tools/call", json!({"arguments": {}}))]).expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32602);
     // Wrong field type: timeout_ms string instead of integer.
     let resps = roundtrip(&[req(
         11,
         "tools/call",
         json!({"name": "exit", "arguments": {"session": "s", "timeout_ms": "soon"}}),
-    )]);
+    )])
+    .expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32602);
 }
 
 #[test]
 fn unknown_method_is_method_not_found() {
-    let resps = roundtrip(&[req(12, "resources/read", json!({}))]);
+    let resps = roundtrip(&[req(12, "resources/read", json!({}))]).expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32601);
 }
 
 #[test]
 fn malformed_input_gets_jsonrpc_errors() {
     // Parse error: id null.
-    let resps = roundtrip_raw(&["{not json"]);
+    let resps = roundtrip_raw(&["{not json"]).expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32700);
     assert_eq!(resps[0]["id"], Value::Null);
     // Missing method with id: invalid request.
-    let resps = roundtrip_raw(&[r#"{"jsonrpc":"2.0","id":1}"#]);
+    let resps = roundtrip_raw(&[r#"{"jsonrpc":"2.0","id":1}"#]).expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32600);
     // Batch array: rejected (single-message server).
-    let resps = roundtrip_raw(&[r#"[{"jsonrpc":"2.0","id":1,"method":"ping"}]"#]);
+    let resps =
+        roundtrip_raw(&[r#"[{"jsonrpc":"2.0","id":1,"method":"ping"}]"#]).expect("mcp roundtrip");
     assert_eq!(resps[0]["error"]["code"], -32600);
 }
 
@@ -226,7 +246,8 @@ fn notifications_and_blank_lines_stay_silent() {
         r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
         "   ",
         r#"{"jsonrpc":"2.0","id":13,"method":"ping"}"#,
-    ]);
+    ])
+    .expect("mcp roundtrip");
     assert_eq!(resps.len(), 1);
     assert_eq!(resps[0]["id"], 13);
     assert_eq!(resps[0]["result"], json!({}));
@@ -236,14 +257,15 @@ fn notifications_and_blank_lines_stay_silent() {
 fn session_tools_present_and_callable() {
     // session-list runs against a temp runtime dir so the test is hermetic
     // (explicit override: `set_var` is an `unsafe fn` in edition 2024).
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("tempdir");
     tuiscotti::proto::set_runtime_dir_override(Some(dir.path().to_path_buf()));
     let resps = roundtrip(&[req(
         14,
         "tools/call",
         json!({"name": "session-list", "arguments": {}}),
-    )]);
-    let (env, is_error) = content_json(&resps[0]);
+    )])
+    .expect("mcp roundtrip");
+    let (env, is_error) = content_json(&resps[0]).expect("mcp content");
     assert!(!is_error, "{env}");
     assert_eq!(env["result"]["type"], "session-list");
     assert_eq!(env["result"]["sessions"], json!([]));
@@ -255,7 +277,7 @@ fn session_tools_present_and_callable() {
 
 #[test]
 fn schema_snapshot_matches_committed_json() {
-    let actual = serde_json::to_string_pretty(&mcp::tools_list_json()).unwrap() + "\n";
+    let actual = serde_json::to_string_pretty(&mcp::tools_list_json()).expect("tools json") + "\n";
     let committed = include_str!("agent_if_tools.json");
     assert_eq!(
         actual, committed,

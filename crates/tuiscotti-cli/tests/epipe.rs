@@ -16,65 +16,66 @@ fn bin() -> PathBuf {
 
 /// Spawn `tuisnap <args>` with a piped stdout whose read end is dropped
 /// immediately, then return (exit code, stderr).
-fn run_with_closed_stdout(args: &[&str]) -> (Option<i32>, String) {
+fn run_with_closed_stdout(args: &[&str]) -> std::io::Result<(Option<i32>, String)> {
     let mut child = std::process::Command::new(bin())
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn tuisnap");
+        .spawn()?;
     // Drop the read end before the child writes: the next stdout write
     // fails with EPIPE (Rust ignores SIGPIPE).
     drop(child.stdout.take());
-    let out = child.wait_with_output().expect("wait tuisnap");
-    (
+    let out = child.wait_with_output()?;
+    Ok((
         out.status.code(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
-    )
+    ))
 }
 
 /// [`run_with_closed_stdout`] with `stdin_text` fed on stdin first (for
 /// `machine`, which only writes after reading an op line).
-fn run_with_closed_stdout_and_stdin(args: &[&str], stdin_text: &str) -> (Option<i32>, String) {
+fn run_with_closed_stdout_and_stdin(
+    args: &[&str],
+    stdin_text: &str,
+) -> std::io::Result<(Option<i32>, String)> {
     let mut child = std::process::Command::new(bin())
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn tuisnap");
+        .spawn()?;
     child
         .stdin
         .take()
-        .expect("piped stdin")
-        .write_all(stdin_text.as_bytes())
-        .expect("write stdin");
+        .ok_or_else(|| std::io::Error::other("piped stdin"))?
+        .write_all(stdin_text.as_bytes())?;
     // stdin is EOF-closed by the dropped handle above; now drop the stdout
     // read end so envelope writes fail with EPIPE.
     drop(child.stdout.take());
-    let out = child.wait_with_output().expect("wait tuisnap");
-    (
+    let out = child.wait_with_output()?;
+    Ok((
         out.status.code(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
-    )
+    ))
 }
 
-fn assert_clean_exit_zero(label: &str, args: &[&str]) {
+fn assert_clean_exit_zero(label: &str, args: &[&str]) -> std::io::Result<()> {
     for _ in 0..3 {
-        let (code, stderr) = run_with_closed_stdout(args);
+        let (code, stderr) = run_with_closed_stdout(args)?;
         assert_eq!(code, Some(0), "{label} over closed stdout: {stderr}");
         assert!(
             !stderr.contains("panicked"),
             "{label} must not panic: {stderr}"
         );
     }
+    Ok(())
 }
 
 #[test]
 fn doctor_closed_stdout_exits_zero() {
     // Single iteration: `doctor` probes subprocesses before writing, so the
     // reader is always gone by flush time.
-    let (code, stderr) = run_with_closed_stdout(&["doctor"]);
+    let (code, stderr) = run_with_closed_stdout(&["doctor"]).expect("run over closed stdout");
     assert_eq!(code, Some(0), "doctor over closed stdout: {stderr}");
     assert!(
         !stderr.contains("panicked"),
@@ -85,7 +86,7 @@ fn doctor_closed_stdout_exits_zero() {
 #[test]
 fn schema_closed_stdout_exits_zero() {
     // Same writer path as `doctor`, without the slow toolchain probes.
-    assert_clean_exit_zero("schema", &["schema"]);
+    assert_clean_exit_zero("schema", &["schema"]).expect("closed-stdout check");
 }
 
 #[test]
@@ -94,7 +95,8 @@ fn machine_closed_stdout_exits_zero() {
     // Many op lines so at least one write lands after the read end drops.
     let input = "{\"type\":\"version\"}\n".repeat(50);
     for _ in 0..3 {
-        let (code, stderr) = run_with_closed_stdout_and_stdin(&["machine"], &input);
+        let (code, stderr) =
+            run_with_closed_stdout_and_stdin(&["machine"], &input).expect("run over closed stdout");
         assert_eq!(code, Some(0), "machine over closed stdout: {stderr}");
         assert!(
             !stderr.contains("panicked"),
@@ -140,9 +142,12 @@ fn offline_commands_closed_stdout_exit_zero() {
     let frame_arg = frame.to_string_lossy().into_owned();
     let render_out = tmp.path().join("shot").to_string_lossy().into_owned();
 
-    assert_clean_exit_zero("inspect", &["inspect", "--dir", &art_arg]);
-    assert_clean_exit_zero("trace", &["trace", "--input", &journal_arg]);
-    assert_clean_exit_zero("review", &["review", "--dir", &verdicts_arg]);
+    assert_clean_exit_zero("inspect", &["inspect", "--dir", &art_arg])
+        .expect("closed-stdout check");
+    assert_clean_exit_zero("trace", &["trace", "--input", &journal_arg])
+        .expect("closed-stdout check");
+    assert_clean_exit_zero("review", &["review", "--dir", &verdicts_arg])
+        .expect("closed-stdout check");
     assert_clean_exit_zero(
         "render",
         &[
@@ -154,5 +159,6 @@ fn offline_commands_closed_stdout_exit_zero() {
             "--out",
             &render_out,
         ],
-    );
+    )
+    .expect("closed-stdout check");
 }

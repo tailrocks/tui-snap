@@ -9,8 +9,8 @@ use tuiscotti::proto::{self, EXIT_OP_ERROR, EXIT_VERIFY_FAIL};
 
 #[test]
 fn cli_help_and_version() {
-    let out = run_cli(&["--help"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["--help"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     let h = stdout(&out);
     for cmd in [
         "init", "doctor", "schema", "capture", "inspect", "render", "diff", "review", "accept",
@@ -18,11 +18,11 @@ fn cli_help_and_version() {
     ] {
         assert!(h.contains(cmd), "help lists {cmd}:\n{h}");
     }
-    let out = run_cli(&["--version"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["--version"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     assert!(stdout(&out).contains("tuisnap"));
-    let out = run_cli(&["init", "--help"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["init", "--help"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     let h = stdout(&out);
     assert!(
         h.contains("tui-snap.toml"),
@@ -38,13 +38,13 @@ fn cli_help_and_version() {
 
 #[test]
 fn cli_schema_and_doctor() {
-    let out = run_cli(&["schema"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["schema"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("schema is JSON");
     assert!(v.get("definitions").is_some());
     assert!(stdout(&out).contains("session-start"));
-    let out = run_cli(&["doctor"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["doctor"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     let d = stdout(&out);
     assert!(d.contains("toolchain"), "doctor covers toolchain:\n{d}");
     assert!(d.contains("font"), "doctor covers fonts:\n{d}");
@@ -59,9 +59,9 @@ fn cli_schema_and_doctor() {
 fn cli_init_scaffolds() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let root = tmp.path().to_string_lossy().into_owned();
-    let out = run_cli(&["init", "--dir", &root], &[], None);
+    let out = run_cli(&["init", "--dir", &root], &[], None).expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -72,10 +72,10 @@ fn cli_init_scaffolds() {
     let toml = std::fs::read_to_string(tmp.path().join("tui-snap.toml")).expect("read");
     assert!(toml.contains("[capture]"));
     // second init refuses without --force
-    let out = run_cli(&["init", "--dir", &root], &[], None);
-    assert_eq!(code(&out), EXIT_OP_ERROR);
-    let out = run_cli(&["init", "--dir", &root, "--force"], &[], None);
-    assert_eq!(code(&out), 0);
+    let out = run_cli(&["init", "--dir", &root], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_OP_ERROR);
+    let out = run_cli(&["init", "--dir", &root, "--force"], &[], None).expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,16 +90,17 @@ fn cli_capture_passthrough() {
         &[
             "capture",
             "--out",
-            ok.to_str().unwrap(),
+            ok.to_str().expect("utf8 path"),
             "--",
             "echo",
             "cap-hi",
         ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -116,7 +117,7 @@ fn cli_capture_passthrough() {
         &[
             "capture",
             "--out",
-            fail.to_str().unwrap(),
+            fail.to_str().expect("utf8 path"),
             "--",
             "sh",
             "-c",
@@ -124,8 +125,13 @@ fn cli_capture_passthrough() {
         ],
         &[],
         None,
+    )
+    .expect("run tuisnap");
+    assert_eq!(
+        code(&out).expect("exit code"),
+        7,
+        "child exit code preserved"
     );
-    assert_eq!(code(&out), 7, "child exit code preserved");
 }
 
 #[test]
@@ -149,9 +155,14 @@ fn cli_inspect_never_executes() {
         std::fs::set_permissions(&trap, p).expect("chmod");
     }
     std::fs::write(dir.join("manifest.json"), r#"{"argv":["x"],"code":0}"#).expect("manifest");
-    let out = run_cli(&["inspect", "--dir", dir.to_str().unwrap()], &[], None);
+    let out = run_cli(
+        &["inspect", "--dir", dir.to_str().expect("utf8 path")],
+        &[],
+        None,
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -180,19 +191,20 @@ fn cli_render_and_diff() {
         &[
             "render",
             "--input",
-            a_frame.to_str().unwrap(),
+            a_frame.to_str().expect("utf8 path"),
             "--format",
             "txt",
             "--format",
             "png",
             "--out",
-            a_out.to_str().unwrap(),
+            a_out.to_str().expect("utf8 path"),
         ],
         &[],
         None,
-    );
+    )
+    .expect("run tuisnap");
     assert_eq!(
-        code(&out),
+        code(&out).expect("exit code"),
         0,
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
@@ -204,40 +216,43 @@ fn cli_render_and_diff() {
         &[
             "render",
             "--input",
-            b_frame.to_str().unwrap(),
+            b_frame.to_str().expect("utf8 path"),
             "--format",
             "png",
             "--out",
-            b_out.to_str().unwrap(),
+            b_out.to_str().expect("utf8 path"),
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 0);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0);
     // identical diff passes
     let out = run_cli(
         &[
             "diff",
             "--expected",
-            tmp.path().join("a.png").to_str().unwrap(),
+            tmp.path().join("a.png").to_str().expect("utf8 path"),
             "--actual",
-            tmp.path().join("a.png").to_str().unwrap(),
+            tmp.path().join("a.png").to_str().expect("utf8 path"),
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), 0, "{}", stdout(&out));
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), 0, "{}", stdout(&out));
     // differing diff fails with the verify-fail status
     let out = run_cli(
         &[
             "diff",
             "--expected",
-            tmp.path().join("a.png").to_str().unwrap(),
+            tmp.path().join("a.png").to_str().expect("utf8 path"),
             "--actual",
-            tmp.path().join("b.png").to_str().unwrap(),
+            tmp.path().join("b.png").to_str().expect("utf8 path"),
         ],
         &[],
         None,
-    );
-    assert_eq!(code(&out), EXIT_VERIFY_FAIL);
+    )
+    .expect("run tuisnap");
+    assert_eq!(code(&out).expect("exit code"), EXIT_VERIFY_FAIL);
 }

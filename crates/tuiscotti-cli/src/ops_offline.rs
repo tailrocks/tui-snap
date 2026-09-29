@@ -15,12 +15,12 @@ use tuiscotti::proto::{self, EXIT_OP_ERROR, EXIT_USAGE, EXIT_VERIFY_FAIL};
 use crate::cli::{RenderFormat, TraceKind};
 use crate::ops_offline_render::{RasterFonts, render_format_to};
 
-pub fn op_error(e: &proto::OpError) -> i32 {
+pub(crate) fn op_error(e: &proto::OpError) -> i32 {
     eprintln!("error: {e}");
     EXIT_OP_ERROR
 }
 
-pub fn cmd_inspect(dir: &Path) -> i32 {
+pub(crate) fn cmd_inspect(dir: &Path) -> i32 {
     let entries = match std::fs::read_dir(dir) {
         Ok(r) => r,
         Err(e) => {
@@ -37,7 +37,7 @@ pub fn cmd_inspect(dir: &Path) -> i32 {
                 return EXIT_OP_ERROR;
             }
         };
-        let len = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let len = entry.metadata().map_or(0, |m| m.len());
         files.push((entry.file_name().to_string_lossy().into_owned(), len));
     }
     files.sort();
@@ -92,7 +92,7 @@ pub fn cmd_inspect(dir: &Path) -> i32 {
     crate::write_stdout(&buf)
 }
 
-pub fn cmd_render(
+pub(crate) fn cmd_render(
     input: &Path,
     formats: &[RenderFormat],
     out: &str,
@@ -128,12 +128,11 @@ pub fn cmd_render(
     for format in formats {
         let ext = format.extension();
         let path = format!("{out}.{ext}");
-        if let Some(parent) = Path::new(&path).parent() {
-            if !parent.as_os_str().is_empty() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
-                }
-            }
+        if let Some(parent) = Path::new(&path).parent()
+            && !parent.as_os_str().is_empty()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            return crate::fail_flushed(&buf, &format!("mkdir {}: {e}", parent.display()));
         }
         if let Err(e) = render_format_to(&frame, &fonts, &mut renderer, *format, &path) {
             return crate::fail_flushed(&buf, &format!("render {ext}: {e}"));
@@ -143,7 +142,7 @@ pub fn cmd_render(
     crate::write_stdout(&buf)
 }
 
-pub fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
+pub(crate) fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
     let expected_bytes = match std::fs::read(expected) {
         Ok(b) => b,
         Err(e) => {
@@ -177,7 +176,7 @@ pub fn cmd_diff(expected: &Path, actual: &Path) -> i32 {
     }
 }
 
-pub fn cmd_review(dir: &Path) -> i32 {
+pub(crate) fn cmd_review(dir: &Path) -> i32 {
     let verdicts = match proto::read_verdicts(dir) {
         Ok(v) => v,
         Err(e) => return op_error(&e),
@@ -215,7 +214,7 @@ pub fn cmd_review(dir: &Path) -> i32 {
     if failed > 0 { EXIT_VERIFY_FAIL } else { 0 }
 }
 
-pub fn cmd_accept(store: &Path, name: &str) -> i32 {
+pub(crate) fn cmd_accept(store: &Path, name: &str) -> i32 {
     // Frozen roots (`Policy::Frozen` layout: `<name>.canonical.txt` approvals
     // directly in the root) reject acceptance unconditionally — route through
     // `frozen_accept` so the refusal stays in one place. Checked before
@@ -256,19 +255,18 @@ fn is_frozen_root(store: &Path) -> bool {
     })
 }
 
-pub fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {
+pub(crate) fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {
     let verdicts = match proto::read_verdicts(dir) {
         Ok(v) => v,
         Err(e) => return op_error(&e),
     };
     let html = proto::write_html_report(&verdicts, title);
-    if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!("error: mkdir {}: {e}", parent.display());
-                return EXIT_OP_ERROR;
-            }
-        }
+    if let Some(parent) = out.parent()
+        && !parent.as_os_str().is_empty()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("error: mkdir {}: {e}", parent.display());
+        return EXIT_OP_ERROR;
     }
     if let Err(e) = std::fs::write(out, html) {
         eprintln!("error: write {}: {e}", out.display());
@@ -284,7 +282,7 @@ pub fn cmd_report(dir: &Path, out: &Path, title: &str) -> i32 {
     crate::write_stdout(&buf)
 }
 
-pub fn cmd_import(dir: &Path) -> i32 {
+pub(crate) fn cmd_import(dir: &Path) -> i32 {
     match tuiscotti::assert::import_frozen_v1(dir) {
         Ok(tree) => {
             let mut buf = String::new();
@@ -308,7 +306,7 @@ pub fn cmd_import(dir: &Path) -> i32 {
     }
 }
 
-pub fn cmd_trace(input: &Path, kind: Option<TraceKind>) -> i32 {
+pub(crate) fn cmd_trace(input: &Path, kind: Option<TraceKind>) -> i32 {
     let events = match proto::read_journal(input) {
         Ok(e) => e,
         Err(e) => return op_error(&e),
@@ -316,10 +314,10 @@ pub fn cmd_trace(input: &Path, kind: Option<TraceKind>) -> i32 {
     // Streaming: journals are unbounded, so emit line-by-line through the
     // EPIPE-tolerant writer instead of buffering the whole view.
     for ev in events {
-        if let Some(k) = kind {
-            if ev.kind != k.as_str() {
-                continue;
-            }
+        if let Some(k) = kind
+            && ev.kind != k.as_str()
+        {
+            continue;
         }
         let line = format!("{} {} {}", ev.seq, ev.kind, ev.detail);
         if let Some(code) = crate::write_line(&line) {
