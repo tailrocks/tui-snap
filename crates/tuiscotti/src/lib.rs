@@ -44,7 +44,7 @@ pub use tuiscotti_runtime::tui::{
 // Purposeful advanced modules (also the pre-G6 compatibility surface).
 pub use tuiscotti_core::{frame, locate, names, ratatui, screen, semant};
 pub use tuiscotti_insta::{assert, insta_proto};
-pub use tuiscotti_render::{diff, export, profile, render};
+pub use tuiscotti_render::{diff, export, formats, profile, render};
 #[cfg(feature = "pty")]
 pub use tuiscotti_runtime::{bound_locator, keys, tui, tui_shell, waits};
 pub use tuiscotti_runtime::{

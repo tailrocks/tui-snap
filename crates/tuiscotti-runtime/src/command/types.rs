@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -99,15 +100,16 @@ impl SpawnError {
         &self.searched
     }
 
-    fn not_found(name: &OsStr, var: &str, searched: Vec<PathBuf>) -> Self {
+    fn not_found(name: &OsStr, vars: &[String], searched: Vec<PathBuf>) -> Self {
         Self {
             kind: SpawnErrorKind::BinaryNotFound,
             detail: format!(
-                "binary `{}` not found; set {var} or build it first (searched: {})",
+                "binary `{}` not found; set {} or build it first (searched: {})",
                 Path::new(name)
                     .file_name()
                     .unwrap_or(name)
                     .to_string_lossy(),
+                vars.join(" or "),
                 searched
                     .iter()
                     .map(|p| p.display().to_string())
@@ -219,37 +221,77 @@ impl ProcessOutput {
     }
 }
 
-/// Resolution of a `cargo_bin` target dir, for error messages.
+/// Canonical `CARGO_BIN_EXE_<name>` variable names for a binary, in lookup
+/// order: the exact name first, then the normalized form (`-` → `_`,
+/// uppercased) when it differs. Cargo sets the exact form; remapped builds
+/// and hand-written fixtures use the normalized one.
+///
+/// Every binary resolver in this crate consults these names through this
+/// function, so the lookup paths can never diverge again.
+#[must_use]
+pub fn cargo_bin_env_names(name: impl AsRef<OsStr>) -> Vec<String> {
+    let name = name.as_ref();
+    let file = Path::new(name).file_name().unwrap_or(name);
+    let exact = format!("CARGO_BIN_EXE_{}", file.to_string_lossy());
+    let normalized = format!(
+        "CARGO_BIN_EXE_{}",
+        file.to_string_lossy()
+            .replace('-', "_")
+            .to_ascii_uppercase()
+    );
+    if normalized == exact {
+        vec![exact]
+    } else {
+        vec![exact, normalized]
+    }
+}
+
+fn push_candidate(out: &mut Vec<PathBuf>, candidate: PathBuf) {
+    out.push(candidate.clone());
+    #[cfg(windows)]
+    {
+        let mut exe = candidate.into_os_string();
+        exe.push(".exe");
+        out.push(PathBuf::from(exe));
+    }
+}
+
+/// Filesystem fallback candidates for a `cargo_bin` lookup (steps 3–5 of
+/// [`cargo_bin_path`]): next to the current executable, next to its parent
+/// when the executable lives in a `deps/` directory (integration-test
+/// layout), then `target/debug/<name>` and `target/release/<name>` under the
+/// cwd (covers `cargo test` from the package root). On Windows each
+/// candidate is additionally tried with a `.exe` suffix.
 fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    // 1. Current executable's directory layout: tests live in
-    //    target/<profile>/deps/, binaries in target/<profile>/.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(deps) = exe.parent() {
-            out.push(deps.join(name));
+            push_candidate(&mut out, deps.join(name));
             if deps.file_name().is_some_and(|n| n == "deps") {
                 if let Some(profile) = deps.parent() {
-                    out.push(profile.join(name));
+                    push_candidate(&mut out, profile.join(name));
                 }
             }
         }
     }
-    // 2. target/<profile>/<name> relative to the process working directory
-    //    (covers `cargo test` from the package root).
     for profile in ["debug", "release"] {
-        out.push(PathBuf::from("target").join(profile).join(name));
+        push_candidate(&mut out, PathBuf::from("target").join(profile).join(name));
     }
     out
 }
 
 /// Resolve the path of a cargo-built binary named `name`.
 ///
-/// Lookup order (runtime only, so remapped paths are honored and no stale
-/// build-time absolute path is ever baked in — backlog N03):
-/// 1. `CARGO_BIN_EXE_<name>` from the process environment, when set.
-/// 2. Next to the current executable, then next to its parent when the
-///    executable lives in a `deps/` directory (integration-test layout).
-/// 3. `target/debug/<name>` and `target/release/<name>` under the cwd.
+/// Canonical lookup order (runtime only, so remapped paths are honored and
+/// no stale build-time absolute path is ever baked in — backlog N03):
+/// 1. `CARGO_BIN_EXE_<name>` (exact) from the process environment.
+/// 2. `CARGO_BIN_EXE_<NORMALIZED>` (`-` → `_`, uppercased), when different.
+/// 3. Next to the current executable.
+/// 4. Next to its parent, when the executable lives in a `deps/` directory.
+/// 5. `target/debug/<name>` and `target/release/<name>` under the cwd.
+///
+/// Every candidate must be an existing file ([`Path::is_file`]); set-but-missing
+/// env values are recorded in the error, never returned.
 ///
 /// Callers that prefer the test crate's compile-time path can instead write
 /// `Command::new(env!("CARGO_BIN_EXE_<name>"))` in the test itself; that
@@ -258,16 +300,29 @@ fn cargo_bin_candidates(name: &OsStr) -> Vec<PathBuf> {
 /// Returns the first candidate that exists, else a typed error listing every
 /// location that was searched.
 pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, SpawnError> {
+    let env: HashMap<String, String> = std::env::vars().collect();
+    cargo_bin_path_with_map(name, &env)
+}
+
+/// [`cargo_bin_path`] over an injected environment. The env steps consult
+/// `env`; the filesystem fallbacks still probe the live process layout.
+/// Deterministic for tests: an env hit returns before any probing.
+pub fn cargo_bin_path_with_map(
+    name: impl AsRef<OsStr>,
+    env: &HashMap<String, String>,
+) -> Result<PathBuf, SpawnError> {
     let name = name.as_ref();
     let file = Path::new(name).file_name().unwrap_or(name);
-    let var = format!("CARGO_BIN_EXE_{}", file.to_string_lossy());
+    let vars = cargo_bin_env_names(file);
     let mut searched = Vec::new();
-    if let Ok(p) = std::env::var(&var) {
-        let p = PathBuf::from(p);
-        if p.is_file() {
-            return Ok(p);
+    for var in &vars {
+        if let Some(value) = env.get(var) {
+            let p = PathBuf::from(value);
+            if p.is_file() {
+                return Ok(p);
+            }
+            searched.push(p);
         }
-        searched.push(p);
     }
     for c in cargo_bin_candidates(file) {
         if c.is_file() {
@@ -275,5 +330,5 @@ pub fn cargo_bin_path(name: impl AsRef<OsStr>) -> Result<PathBuf, SpawnError> {
         }
         searched.push(c);
     }
-    Err(SpawnError::not_found(file, &var, searched))
+    Err(SpawnError::not_found(file, &vars, searched))
 }

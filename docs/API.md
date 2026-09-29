@@ -47,6 +47,7 @@ facade paths. Status labels: **implemented** (shipped, tested),
 |---|---|---|
 | `profile::{Profile::default_profile, RenderProfile::strict/vendored, FontFaces, FallbackFace}` | implemented | Pinned: font SHA-256, 10×21 cells @16px, scale ×2. |
 | `render::{Renderer, render_png, render_svg, ansi_dump, frame_from_screen, redact_frame}` | implemented | PNG/SVG/ANSI/HTML + fidelity sidecars; `Renderer::with_fallbacks` for custom chains (pins verified at load). |
+| `formats::{capture_all, CaptureBundle, Generation, pipe_projection, …}` | implemented | Six-format contracts (ASCII/TXT/ANSI/PNG/HTML/canonical JSON) + piped-byte projections with generation binding. |
 | `diff::{compare_png, compare_png_with_alpha, perceptual_score, PerceptualPolicy}` | implemented | Exact decoded-pixel gate; `PerceptualPolicy::new` rejects NaN/out-of-range thresholds. |
 | `export::{cast_v2, gif, apng}` | implemented | asciicast/GIF/APNG evidence exports. |
 
@@ -54,7 +55,7 @@ facade paths. Status labels: **implemented** (shipped, tested),
 
 | Item | Status | Notes |
 |---|---|---|
-| `proto::{Op, OpResult, OpError, execute, run_machine_line}` | implemented | 17 typed ops (spawn/stdin/observe/snapshot/screenshot/wait/exit/assert/render/diff/session-*/version/capabilities); JSON envelopes over stdio. |
+| `proto::{Op, OpResult, OpError, execute, run_machine_line}` | implemented | 15 typed ops (spawn/stdin/observe/snapshot/screenshot/wait/exit/assert/render/diff/session-*/version/capabilities); JSON envelopes over stdio. |
 | `proto::{session_start, session_stop, session_list, session_prune, runtime_dir}` | implemented | Named sessions, versioned endpoints, owner-only runtime dir. |
 | `proto::{Recorder, read_journal, Verdict}` | implemented | Bounded event journals + offline verdicts. |
 | `mcp::{tools, tools_list_json, serve, run_stdio, handle_request}` | implemented | MCP stdio bridge over the op protocol. |

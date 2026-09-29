@@ -672,10 +672,10 @@ impl Tui {
         }
     }
 
-    /// Launch a cargo-built binary of this package by name. Resolved eagerly:
-    /// `CARGO_BIN_EXE_<name>` when set, else the binary next to the current
-    /// test executable's directory. Resolution failure is an error here (not
-    /// deferred to [`Tui::spawn`]), listing every location tried.
+    /// Launch a cargo-built binary of this package by name. Resolved eagerly
+    /// through the canonical [`crate::command::cargo_bin_path`] lookup.
+    /// Resolution failure is an error here (not deferred to [`Tui::spawn`]),
+    /// listing every location tried.
     pub fn cargo_bin(name: impl AsRef<OsStr>) -> Result<Self, TuiError> {
         let name = name.as_ref().to_os_string();
         resolve_cargo_bin(&name)?;
@@ -852,41 +852,26 @@ impl Tui {
     }
 }
 
-/// Resolve a cargo-built binary: `CARGO_BIN_EXE_<name>` when set, else next
-/// to the current test executable. Shared by eager [`Tui::cargo_bin`] and
-/// [`Tui::spawn`] so the two can never disagree on lookup order.
+/// Resolve a cargo-built binary through the canonical
+/// [`crate::command::cargo_bin_path`] lookup (env exact, env normalized,
+/// next-to-exe, deps-parent, cwd `target/debug`/`target/release`). Shared by
+/// eager [`Tui::cargo_bin`] and [`Tui::spawn`] so the two can never disagree
+/// on lookup order.
 fn resolve_cargo_bin(name: &OsStr) -> Result<OsString, TuiError> {
-    let display = name.to_string_lossy();
-    let var = format!(
-        "CARGO_BIN_EXE_{}",
-        display.replace('-', "_").to_ascii_uppercase()
-    );
-    let mut tried = Vec::new();
-    if let Some(p) = std::env::var_os(&var) {
-        return Ok(p);
-    }
-    tried.push(format!("env {var} (unset)"));
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(deps) = exe.parent() {
-            let dir = if deps.file_name().is_some_and(|n| n == "deps") {
-                deps.parent().unwrap_or(deps).to_path_buf()
-            } else {
-                deps.to_path_buf()
-            };
-            #[cfg(windows)]
-            let candidate = dir.join(format!("{display}.exe"));
-            #[cfg(not(windows))]
-            let candidate = dir.join(name);
-            tried.push(candidate.display().to_string());
-            if candidate.is_file() {
-                return Ok(candidate.into_os_string());
-            }
-        }
-    }
-    Err(TuiError::Spawn(format!(
-        "binary {display:?} not found; tried: {}",
-        tried.join(", ")
-    )))
+    crate::command::cargo_bin_path(name)
+        .map(|p| p.into_os_string())
+        .map_err(|e| TuiError::Spawn(e.to_string()))
+}
+
+/// [`resolve_cargo_bin`] over an injected environment (pure form for tests).
+#[cfg(test)]
+fn resolve_cargo_bin_with_map(
+    name: &OsStr,
+    env: &std::collections::HashMap<String, String>,
+) -> Result<OsString, TuiError> {
+    crate::command::cargo_bin_path_with_map(name, env)
+        .map(|p| p.into_os_string())
+        .map_err(|e| TuiError::Spawn(e.to_string()))
 }
 
 // ---------------------------------------------------------------------------
@@ -2912,5 +2897,35 @@ mod tests {
         let err = shared.teardown_error().expect("diagnostic recorded");
         assert!(err.contains("did not exit"), "{err}");
         assert!(err.contains("detached"), "{err}");
+    }
+
+    /// The PTY resolver delegates to the canonical `command` lookup: same
+    /// name plus same env must resolve identically through both paths.
+    #[test]
+    fn resolve_cargo_bin_matches_canonical_lookup() {
+        use std::collections::HashMap;
+        let dir = std::env::temp_dir().join(format!("tuisnap-tui-resolve-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("tmpdir");
+        let exe = dir.join("tuisnap-g6-probe-xyz");
+        std::fs::write(&exe, "fake").expect("write fake exe");
+        let exe_s = exe.to_str().expect("utf8 tmp path").to_string();
+
+        for var in crate::command::cargo_bin_env_names("tuisnap-g6-probe-xyz") {
+            let env = HashMap::from([(var, exe_s.clone())]);
+            let via_tui = resolve_cargo_bin_with_map(OsStr::new("tuisnap-g6-probe-xyz"), &env)
+                .expect("tui hit");
+            let via_command = crate::command::cargo_bin_path_with_map("tuisnap-g6-probe-xyz", &env)
+                .expect("command hit");
+            assert_eq!(via_tui, via_command.into_os_string());
+        }
+
+        // Missing everywhere: both paths fail, and the tui error still names
+        // the binary and the searched locations.
+        let env = HashMap::new();
+        let err = resolve_cargo_bin_with_map(OsStr::new("tuisnap-g6-probe-xyz"), &env).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("tuisnap-g6-probe-xyz"), "{msg}");
+        assert!(msg.contains("searched:"), "{msg}");
+        assert!(crate::command::cargo_bin_path_with_map("tuisnap-g6-probe-xyz", &env).is_err());
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::command::cargo_bin_env_names;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -63,10 +64,10 @@ impl std::error::Error for ResolveError {}
 
 /// Resolve a binary target's executable (N03, N04).
 ///
-/// Consults, in order, `NEXTEST_BIN_EXE_<bin>` (exact, then `-`→`_` form) and
-/// `CARGO_BIN_EXE_<bin>` (exact, then `-`→`_` form). Nextest remaps these when
-/// reusing archived builds, so they stay correct under archive/remap runs.
-/// Identical paths dedupe (nextest sets both hyphen and underscore forms).
+/// Consults, in order, `NEXTEST_BIN_EXE_<bin>` (exact, then `-`→`_` form —
+/// nextest sets both) and the canonical [`cargo_bin_env_names`] (exact, then
+/// normalized). Nextest remaps these when reusing archived builds, so they
+/// stay correct under archive/remap runs. Identical paths dedupe.
 ///
 /// There is deliberately no `target/debug` probing and no nested `cargo build`:
 /// both would silently use stale or source-relative paths.
@@ -83,14 +84,12 @@ pub fn resolve_bin_with_map(
     env: &HashMap<String, String>,
 ) -> Result<PathBuf, ResolveError> {
     let underscored = bin.replace('-', "_");
-    let mut names = vec![
-        format!("NEXTEST_BIN_EXE_{bin}"),
-        format!("CARGO_BIN_EXE_{bin}"),
-    ];
+    let cargo_names = cargo_bin_env_names(bin);
+    let mut names = vec![format!("NEXTEST_BIN_EXE_{bin}"), cargo_names[0].clone()];
     if underscored != bin {
         names.push(format!("NEXTEST_BIN_EXE_{underscored}"));
-        names.push(format!("CARGO_BIN_EXE_{underscored}"));
     }
+    names.extend(cargo_names.into_iter().skip(1));
     let mut values = Vec::new();
     let mut existing: Vec<PathBuf> = Vec::new();
     for name in &names {
