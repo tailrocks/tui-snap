@@ -66,7 +66,7 @@ watch = [
   "**/pyproject.toml",
 ]
 ci_tasks = ["alint"]
-mise_tools = ["cargo:alint"]
+mise_tools = ["rust", "cargo:alint"]
 
 # The xtask negative-enforcement tests shell out to `alint`; provision the
 # binary for that unit (override restates the scanned nextest tool and adds
@@ -75,4 +75,4 @@ mise_tools = ["cargo:alint"]
 # a unit to the legacy step.
 [[units]]
 id = "rust-xtask"
-mise_tools = ["aqua:nextest-rs/nextest/cargo-nextest", "cargo:alint"]
+mise_tools = ["rust", "aqua:nextest-rs/nextest/cargo-nextest", "cargo:alint"]

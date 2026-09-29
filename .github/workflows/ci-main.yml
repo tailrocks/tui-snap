@@ -735,7 +735,7 @@ jobs:
       plan_digest: ${{ needs.plan.outputs.plan_digest }}
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
-      mise_tools: "aqua:nextest-rs/nextest/cargo-nextest cargo:alint"
+      mise_tools: "aqua:nextest-rs/nextest/cargo-nextest rust cargo:alint"
       mbx_enabled: true
       mbx_compat: "4d0c83a96a28"
       mbx_dependency_files: |
@@ -782,7 +782,7 @@ jobs:
       plan_digest: ${{ needs.plan.outputs.plan_digest }}
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
-      mise_tools: "cargo:alint"
+      mise_tools: "rust cargo:alint"
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
