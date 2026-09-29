@@ -132,9 +132,16 @@ impl BaselineId {
             get(env, "NEXTEST_BINARY_ID").as_deref(),
             get(env, "CARGO_PKG_NAME").as_deref(),
         );
-        let workspace = get(env, "NEXTEST_WORKSPACE_ROOT")
-            .or_else(|| get(env, "CARGO_MANIFEST_DIR"))
-            .unwrap_or_else(|| fallback_workspace.to_string());
+        // `NEXTEST_WORKSPACE_ROOT` is authoritative. The cargo-test fallbacks
+        // name a package dir, so resolve the enclosing workspace root: scratch
+        // lives under the workspace `target/`, not the package's.
+        let workspace = get(env, "NEXTEST_WORKSPACE_ROOT").unwrap_or_else(|| {
+            let anchor =
+                get(env, "CARGO_MANIFEST_DIR").unwrap_or_else(|| fallback_workspace.to_string());
+            workspace_root_of(Path::new(&anchor))
+                .to_string_lossy()
+                .into_owned()
+        });
         Self {
             workspace,
             package,
@@ -181,6 +188,27 @@ fn parse_binary_id(binary_id: Option<&str>, cargo_pkg: Option<&str>) -> (String,
             (pkg.clone(), pkg)
         }
     }
+}
+
+/// Nearest enclosing cargo workspace root for `start` (a package manifest
+/// dir or cwd): the closest ancestor-or-self whose `Cargo.toml` declares
+/// `[workspace]`, matching cargo's own root discovery. Returns `start`
+/// unchanged when no workspace manifest is found, so synthetic test maps
+/// keep their verbatim values.
+fn workspace_root_of(start: &Path) -> PathBuf {
+    let mut cur = Some(start);
+    while let Some(dir) = cur {
+        if let Ok(text) = fs::read_to_string(dir.join("Cargo.toml")) {
+            if text
+                .lines()
+                .any(|l| l.trim_start().starts_with("[workspace"))
+            {
+                return dir.to_path_buf();
+            }
+        }
+        cur = dir.parent();
+    }
+    start.to_path_buf()
 }
 
 /// Per-attempt identity: which execution of the baseline (N02, N08).
