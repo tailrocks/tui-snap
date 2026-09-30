@@ -224,6 +224,89 @@ jobs:
       unit_dependencies: "rust-tuiscotti-core,rust-tuiscotti-insta,rust-tuiscotti-render,rust-tuiscotti-runtime"
       unit_admission: github-hosted
       validation_phases: "fmt,clippy,test,doctest"
+  github-hosted-rust-tuiscotti-bench:
+    name: "Rust · tuiscotti-bench · github-hosted — rust-tuiscotti-bench"
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"rust-tuiscotti-bench"') && (true) }}
+    needs: [plan]
+    uses: ./.github/workflows/ci-unit-rust.yml
+    with:
+      unit: rust-tuiscotti-bench
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: "aqua:nextest-rs/nextest/cargo-nextest"
+      mbx_enabled: true
+      mbx_compat: ca3ade0a5157
+      mbx_dependency_files: |
+        .cargo/**
+        Cargo.lock
+        rust-toolchain
+        rust-toolchain.toml
+      mbx_freshness_files: |
+        assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
+        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        assets/fonts/NotoSansCJKjp-subset.otf
+        assets/fonts/NotoSansSymbols-subset.ttf
+        assets/fonts/NotoSansSymbols2-subset.ttf
+        crates/tuiscotti-bench/**/*.rs
+        crates/tuiscotti-bench/benches/**
+        crates/tuiscotti-bench/examples/**
+        crates/tuiscotti-bench/src/**
+        crates/tuiscotti-bench/tests/**
+        crates/tuiscotti-core/**/*.rs
+        crates/tuiscotti-core/benches/**
+        crates/tuiscotti-core/examples/**
+        crates/tuiscotti-core/src/**
+        crates/tuiscotti-core/tests/**
+        crates/tuiscotti-fixtures/**/*.rs
+        crates/tuiscotti-fixtures/benches/**
+        crates/tuiscotti-fixtures/examples/**
+        crates/tuiscotti-fixtures/src/**
+        crates/tuiscotti-fixtures/tests/**
+        crates/tuiscotti-insta/**/*.rs
+        crates/tuiscotti-insta/benches/**
+        crates/tuiscotti-insta/examples/**
+        crates/tuiscotti-insta/src/**
+        crates/tuiscotti-insta/tests/**
+        crates/tuiscotti-render/**/*.rs
+        crates/tuiscotti-render/benches/**
+        crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/src/**
+        crates/tuiscotti-render/tests/**
+        crates/tuiscotti-runtime/**/*.rs
+        crates/tuiscotti-runtime/benches/**
+        crates/tuiscotti-runtime/examples/**
+        crates/tuiscotti-runtime/src/**
+        crates/tuiscotti-runtime/tests/**
+        crates/tuiscotti/**/*.rs
+        crates/tuiscotti/benches/**
+        crates/tuiscotti/examples/**
+        crates/tuiscotti/src/**
+        crates/tuiscotti/tests/**
+        mise.lock
+      cache_paths: |
+        ~/.cargo/registry
+        ~/.cargo/git
+      cache_key_files: |
+        .cargo/**
+        Cargo.lock
+        rust-toolchain.toml
+        rust-toolchain
+      cargo_root: "crates/tuiscotti-bench"
+      cargo_net_offline: true
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_dependencies: "rust-tuiscotti,rust-tuiscotti-fixtures"
+      unit_admission: github-hosted
+      validation_phases: "fmt,clippy,test,doctest"
   github-hosted-rust-tuiscotti-cli:
     name: "Rust · tuiscotti-cli · github-hosted — rust-tuiscotti-cli"
     if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"rust-tuiscotti-cli"') && (true) }}
@@ -676,7 +759,7 @@ jobs:
   ci-required:
     name: ci-required
     if: ${{ !cancelled() }}
-    needs: [plan, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask, github-hosted-repo-shape]
+    needs: [plan, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-bench, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask, github-hosted-repo-shape]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -761,7 +844,7 @@ jobs:
           SELECTED_UNITS: ${{ needs.plan.outputs.units }}
           PLAN_DIGEST: ${{ needs.plan.outputs.plan_digest }}
           EXCLUDED: ${{ needs.plan.outputs.excluded }}
-          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"},{\"job_id\":\"github-hosted-repo-shape\",\"provider\":\"github-hosted\",\"unit_id\":\"repo-shape\"}]"
+          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-bench\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-bench\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"},{\"job_id\":\"github-hosted-repo-shape\",\"provider\":\"github-hosted\",\"unit_id\":\"repo-shape\"}]"
           PROVIDER_ADMITTED_GITHUB_HOSTED: ${{ true }}
         shell: bash
         run: |
@@ -838,6 +921,29 @@ jobs:
               skipped) ;;
               success) echo "unexpected CI job github-hosted-rust-tuiscotti succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
               *) echo "unexpected CI job github-hosted-rust-tuiscotti ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "rust-tuiscotti-bench" "github-hosted"; then
+            result="$(result_for_job github-hosted-rust-tuiscotti-bench)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-rust-tuiscotti-bench was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-rust-tuiscotti-bench was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-rust-tuiscotti-bench did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-rust-tuiscotti-bench ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-rust-tuiscotti-bench)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-rust-tuiscotti-bench succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-rust-tuiscotti-bench ran outside the expected set: $result" >&2; exit 1 ;;
             esac
           fi
           if plan_expects "rust-tuiscotti-cli" "github-hosted"; then

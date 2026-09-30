@@ -10,7 +10,7 @@ default_dispatch_providers = ["github-hosted"]
 
 [analysis]
 method = "static-filesystem-and-manifest-inspection"
-detected = ["cargo-deny-policy", "cargo-lockfile", "cargo-nextest-policy", "mise-present", "renovate-configuration", "rust-binaries:tuiscotti-cli:1", "rust-binaries:tuiscotti-fixtures:3", "rust-features:tuiscotti-cli:2", "rust-features:tuiscotti-fixtures:2", "rust-features:tuiscotti-runtime:3", "rust-features:tuiscotti:3", "rust-test-targets:tuiscotti-cli:1", "rust-test-targets:tuiscotti-fixtures:1", "rust-test-targets:tuiscotti-insta:1", "rust-test-targets:tuiscotti-runtime:1", "rust-test-targets:tuiscotti:1", "rust-test-targets:xtask:1", "rust-workspace-members:8"]
+detected = ["cargo-deny-policy", "cargo-lockfile", "cargo-nextest-policy", "mise-present", "renovate-configuration", "rust-binaries:tuiscotti-cli:1", "rust-binaries:tuiscotti-fixtures:3", "rust-features:tuiscotti-cli:2", "rust-features:tuiscotti-fixtures:2", "rust-features:tuiscotti-runtime:3", "rust-features:tuiscotti:3", "rust-test-targets:tuiscotti-cli:1", "rust-test-targets:tuiscotti-fixtures:1", "rust-test-targets:tuiscotti-insta:1", "rust-test-targets:tuiscotti-runtime:1", "rust-test-targets:tuiscotti:1", "rust-test-targets:xtask:1", "rust-workspace-members:9"]
 limitations = ["Manifests nested under tests/ or benches/ directories are treated as test fixtures and ignored.", "Project code, build scripts, task runners, and commands are never executed during analysis.", "Release, signing, registry, deployment, branch-protection, and runner-capability contracts remain explicit manual inputs.", "Renovate credentials, runner placement, and write permissions cannot be inferred from repository files."]
 
 [workflow]
@@ -54,6 +54,31 @@ full_commands = ["cd -- 'crates/tuiscotti' && mbx fmt --manifest-path 'Cargo.tom
 phases = ["fmt", "clippy", "test", "doctest"]
 check_commands = ["cd -- 'crates/tuiscotti' && mbx check --locked --profile test --all-targets --all-features --package 'tuiscotti'"]
 depends_on = ["rust-tuiscotti-core", "rust-tuiscotti-insta", "rust-tuiscotti-render", "rust-tuiscotti-runtime"]
+platform = "linux-x64"
+trust = "untrusted-ok"
+[unit.capabilities]
+docker = true
+nested_privileged_docker = false
+buildx_compose = false
+testcontainers = true
+services_with_readiness = false
+browser_binaries = false
+native_macos_arm64 = false
+[unit.cache]
+key_files = [".cargo/**", "Cargo.lock", "rust-toolchain.toml", "rust-toolchain"]
+paths = ["~/.cargo/registry", "~/.cargo/git"]
+
+[[unit]]
+id = "rust-tuiscotti-bench"
+label = "Rust crate (tuiscotti-bench)"
+kind = "rust"
+root = "crates/tuiscotti-bench"
+watch = [".cargo/**", "Cargo.lock", "Cargo.toml", "crates/tuiscotti-bench/**/*.rs", "crates/tuiscotti-bench/Cargo.toml", "crates/tuiscotti-bench/benches/**", "crates/tuiscotti-bench/examples/**", "crates/tuiscotti-bench/src/**", "crates/tuiscotti-bench/tests/**", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml"]
+pr_commands = ["cd -- 'crates/tuiscotti-bench' && mbx fmt --manifest-path 'Cargo.toml' -- --check", "cd -- 'crates/tuiscotti-bench' && mbx clippy --locked --profile test --all-targets --all-features --package 'tuiscotti-bench' -- -D warnings", "cd -- 'crates/tuiscotti-bench' && mbx nextest run --locked --all-features --package 'tuiscotti-bench' --no-tests pass", "cd -- 'crates/tuiscotti-bench' && mbx test --locked --doc --all-features --package 'tuiscotti-bench'"]
+full_commands = ["cd -- 'crates/tuiscotti-bench' && mbx fmt --manifest-path 'Cargo.toml' -- --check", "cd -- 'crates/tuiscotti-bench' && mbx clippy --locked --profile test --all-targets --all-features --package 'tuiscotti-bench' -- -D warnings", "cd -- 'crates/tuiscotti-bench' && mbx nextest run --locked --all-features --package 'tuiscotti-bench' --no-tests pass", "cd -- 'crates/tuiscotti-bench' && mbx test --locked --doc --all-features --package 'tuiscotti-bench'"]
+phases = ["fmt", "clippy", "test", "doctest"]
+check_commands = ["cd -- 'crates/tuiscotti-bench' && mbx check --locked --profile test --all-targets --all-features --package 'tuiscotti-bench'"]
+depends_on = ["rust-tuiscotti", "rust-tuiscotti-fixtures"]
 platform = "linux-x64"
 trust = "untrusted-ok"
 [unit.capabilities]
