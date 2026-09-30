@@ -28,6 +28,20 @@ pub(super) const RESERVATION_TAKEOVER_SECS: u64 = 30;
 /// may not have finished writing yet).
 pub(super) const RESERVATION_CORRUPT_STALE_SECS: u64 = 120;
 
+/// Cap on concurrent live sessions (piped + PTY). Each retained PTY
+/// session pins a PTY pair, two threads, and a child; each piped session a
+/// child plus its endpoint record. 32 bounds the worst case (~100 fds, 64
+/// threads) while doubling the test suite's worst case (4 PTY-heavy tests
+/// in flight × ~4 sessions each). Enforced exactly at the PTY registry
+/// insert and best-effort (pre-spawn endpoint count) at piped start; both
+/// reject with [`SESSION_LIMIT_CODE`], never a silent queue.
+pub(crate) const MAX_CONCURRENT_SESSIONS: usize = 32;
+
+/// Typed rejection code when a start would exceed
+/// [`MAX_CONCURRENT_SESSIONS`]: the caller stops a session first and
+/// retries. No child spawns on this path.
+pub(crate) const SESSION_LIMIT_CODE: &str = "session-limit";
+
 /// Backend that owns the named session's child.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]

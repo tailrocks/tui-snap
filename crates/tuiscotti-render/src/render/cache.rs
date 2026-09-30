@@ -22,7 +22,7 @@
 
 use super::RenderError;
 use crate::profile::RenderProfile;
-use entry::{decode_entry, encode_entry, fully_valid_png};
+use entry::{decode_entry, encode_entry, evict_over_caps, fully_valid_png};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tuiscotti_core::screen::Screen;
@@ -31,6 +31,18 @@ mod entry;
 mod key;
 
 pub use key::{CACHE_FINGERPRINT_VERSION, CacheKey, screen_content_hash};
+
+/// Default cap on cache entries (files). A strict render is tens to
+/// hundreds of kilobytes of PNG, so 1024 entries bound the worst case near
+/// the byte cap below; the count cap binds first under tiny-entry floods.
+/// Enforced oldest-first after every [`RenderCache::put`].
+pub const MAX_CACHE_ENTRIES: usize = 1024;
+
+/// Default cap on total cache bytes on disk (entry files including their
+/// headers). 256 MiB holds thousands of typical renders while bounding a
+/// hostile or runaway writer; a single entry larger than the cap is refused
+/// outright rather than stored-then-evicted.
+pub const MAX_CACHE_BYTES: u64 = 256 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // No-cache mode (qualification): explicit context + process config.
@@ -72,13 +84,22 @@ pub struct CacheOptions {
 /// approved root (canonicalized, so aliases/symlinks cannot smuggle one
 /// tree inside the other), so review evidence can neither be read as cache
 /// hits nor overwritten by cache writes.
+///
+/// The cache is size-bounded: every [`RenderCache::put`] enforces the
+/// entry-count and byte caps oldest-first, so disk use stays under
+/// [`MAX_CACHE_ENTRIES`] files / [`MAX_CACHE_BYTES`] bytes (or the tighter
+/// [`RenderCache::set_limits`] values). Eviction removes whole entries
+/// only — survivors still decode-validate exactly as stored.
 #[derive(Debug)]
 pub struct RenderCache {
     dir: PathBuf,
     no_cache: bool,
+    max_entries: usize,
+    max_bytes: u64,
     rejected: u64,
     hits: u64,
     stores: u64,
+    evicted: u64,
 }
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -128,9 +149,12 @@ impl RenderCache {
         Ok(Self {
             dir,
             no_cache: options.no_cache,
+            max_entries: MAX_CACHE_ENTRIES,
+            max_bytes: MAX_CACHE_BYTES,
             rejected: 0,
             hits: 0,
             stores: 0,
+            evicted: 0,
         })
     }
 
@@ -188,12 +212,14 @@ impl RenderCache {
     /// leaves at most an orphaned temp file. Silently dropped when caching
     /// is disabled (qualification mode). Overwrites any previous entry for
     /// the key. The payload must fully decode within bounds — undecodable
-    /// bytes are refused, never stored.
+    /// bytes are refused, never stored. After the publish the entry-count
+    /// and byte caps are enforced oldest-first (see [`Self::evicted`]).
     ///
     /// # Errors
     ///
-    /// Returns `RenderError` when the payload is not a valid bounded PNG or
-    /// the entry cannot be published.
+    /// Returns `RenderError` when the payload is not a valid bounded PNG,
+    /// the entry alone exceeds the byte cap, or the entry cannot be
+    /// published.
     pub fn put(&mut self, key: &CacheKey, png: &[u8]) -> Result<(), RenderError> {
         if self.no_cache || render_cache_disabled() {
             return Ok(());
@@ -208,6 +234,13 @@ impl RenderCache {
             return Err(RenderError("cache key escapes the cache dir".to_string()));
         }
         let entry = encode_entry(key, png);
+        if u64::try_from(entry.len()).unwrap_or(u64::MAX) > self.max_bytes {
+            return Err(RenderError(format!(
+                "cache entry ({} bytes) exceeds the cache byte cap ({})",
+                entry.len(),
+                self.max_bytes
+            )));
+        }
         let tmp = self.dir.join(format!(
             ".{}.tmp-{}-{}",
             key.hex(),
@@ -234,7 +267,18 @@ impl RenderCache {
             return Err(RenderError(format!("cache write failed: {e}")));
         }
         self.stores += 1;
+        self.evicted += evict_over_caps(&self.dir, self.max_entries, self.max_bytes);
         Ok(())
+    }
+
+    /// Tighten (or loosen) the entry-count and byte caps from their
+    /// [`MAX_CACHE_ENTRIES`] / [`MAX_CACHE_BYTES`] defaults, enforcing the
+    /// new caps immediately. A zero entry cap evicts everything including
+    /// future stores (every `get` misses); prefer at least 1.
+    pub fn set_limits(&mut self, max_entries: usize, max_bytes: u64) {
+        self.max_entries = max_entries;
+        self.max_bytes = max_bytes;
+        self.evicted += evict_over_caps(&self.dir, self.max_entries, self.max_bytes);
     }
 
     /// Entries rejected as corrupt or version-incompatible (and removed).
@@ -253,6 +297,13 @@ impl RenderCache {
     #[must_use]
     pub fn stores(&self) -> u64 {
         self.stores
+    }
+
+    /// Entries evicted by the count/byte caps (whole entries only —
+    /// eviction never corrupts survivors).
+    #[must_use]
+    pub fn evicted(&self) -> u64 {
+        self.evicted
     }
 }
 

@@ -6,10 +6,10 @@
 use std::path::Path;
 
 use super::super::{
-    DaemonOp, NameReservation, OpError, SESSION_ENDPOINT_VERSION, SessionBackend, SessionEndpoint,
-    SessionInfo, SessionStatus, base64_encode, checked_aux_path, checked_endpoint_path,
-    current_uid, ensure_live, now_unix, pid_alive, read_endpoint, runtime_dir, transact,
-    validate_session_name, write_endpoint,
+    DaemonOp, MAX_CONCURRENT_SESSIONS, NameReservation, OpError, SESSION_ENDPOINT_VERSION,
+    SESSION_LIMIT_CODE, SessionBackend, SessionEndpoint, SessionInfo, SessionStatus, base64_encode,
+    checked_aux_path, checked_endpoint_path, current_uid, ensure_live, now_unix, pid_alive,
+    read_endpoint, runtime_dir, transact, validate_session_name, write_endpoint,
 };
 use super::prune::prune_via_daemon;
 use super::stop::{session_result, session_stop};
@@ -56,6 +56,7 @@ pub fn session_start_os(
     let dir = runtime_dir()?;
     let reservation = NameReservation::acquire(&dir, name)?;
     clear_existing_endpoint(&dir, name, force)?;
+    admit_session_slot(&dir)?;
     let child = spawn_session_child(&dir, name, argv, &argv_display)?;
     let info = publish_new_endpoint(&dir, name, &argv_display, child)?;
     reservation.release();
@@ -178,6 +179,49 @@ fn clear_existing_endpoint(dir: &Path, name: &str, force: bool) -> Result<(), Op
     Ok(())
 }
 
+/// Admission control: refuse a start past [`MAX_CONCURRENT_SESSIONS`]
+/// live sessions with a typed [`SESSION_LIMIT_CODE`] rejection — never a
+/// silent queue, no child spawns. Best-effort across processes (the PTY
+/// registry enforces the same cap exactly at insert).
+fn admit_session_slot(dir: &Path) -> Result<(), OpError> {
+    if live_session_count(dir)? >= MAX_CONCURRENT_SESSIONS {
+        return Err(OpError::new(
+            SESSION_LIMIT_CODE,
+            format!("at the session limit ({MAX_CONCURRENT_SESSIONS}); stop one first"),
+        ));
+    }
+    Ok(())
+}
+
+/// Live sessions occupying slots: valid endpoints with a live child pid,
+/// both backends (pid reuse can only refuse a start). Mirrors
+/// [`super::session_list`]: foreign/symlink/dir entries never count.
+fn live_session_count(dir: &Path) -> Result<usize, OpError> {
+    let mut live = 0;
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| OpError::new("io", format!("list {}: {e}", dir.display())))?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(stem) = name.strip_suffix(".json") else {
+            continue;
+        };
+        if validate_session_name(stem).is_err() {
+            continue;
+        }
+        // Unstatable entries fall through to `read_endpoint`, which
+        // fails closed (same verdict as `session_list`).
+        if entry.file_type().is_ok_and(|t| !t.is_file()) {
+            continue;
+        }
+        if let Some(ep) = read_endpoint(dir, stem)?
+            && pid_alive(ep.pid)
+        {
+            live += 1;
+        }
+    }
+    Ok(live)
+}
+
 /// Spawn the session child with piped output to the session log. The log path
 /// is containment-checked and never created through a symlink.
 fn spawn_session_child(
@@ -273,4 +317,83 @@ fn publish_new_endpoint(
         status: SessionStatus::Running,
         started_unix: ep.started_unix,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(unix)]
+    use crate::proto::{
+        SESSION_ENDPOINT_VERSION, SessionBackend, current_uid, now_unix, set_runtime_dir_override,
+    };
+    #[cfg(unix)]
+    use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[cfg(unix)]
+    static CTR: AtomicU64 = AtomicU64::new(0);
+
+    #[cfg(unix)]
+    fn scratch() -> std::path::PathBuf {
+        let n = CTR.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("tuiscotti-admit-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("test dir");
+        dir
+    }
+
+    #[cfg(unix)]
+    fn seed(dir: &Path, name: &str, pid: u32, owner: u32) {
+        let ep = SessionEndpoint {
+            version: SESSION_ENDPOINT_VERSION,
+            name: name.to_string(),
+            pid,
+            argv: vec!["sleep".to_string()],
+            backend: SessionBackend::Process,
+            started_unix: now_unix(),
+            owner,
+            daemon_pid: None,
+        };
+        write_endpoint(dir, &ep).expect("seed endpoint");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn piped_start_refuses_at_cap_and_cleans_up_below_it() {
+        struct OverrideClear;
+        impl Drop for OverrideClear {
+            fn drop(&mut self) {
+                set_runtime_dir_override(None);
+            }
+        }
+        let dir = scratch();
+        set_runtime_dir_override(Some(dir.clone()));
+        let _clear = OverrideClear;
+        let owner = current_uid().expect("uid");
+        for i in 0..MAX_CONCURRENT_SESSIONS {
+            seed(&dir, &format!("live-{i}"), std::process::id(), owner);
+        }
+        // Highest valid pid: dead on every platform (pid_max ≪ 2³¹−1).
+        seed(&dir, "dead", 2_147_483_647, owner);
+        std::fs::write(dir.join("foreign.txt"), b"x").expect("seed foreign");
+        // Full: typed rejection, nothing spawned or published.
+        let before = std::fs::read_dir(&dir).expect("list dir").count();
+        let argv = [OsString::from("/bin/sleep"), OsString::from("30")];
+        let err = session_start_os("newbie", &argv, false).expect_err("full dir must refuse");
+        assert_eq!(err.code, SESSION_LIMIT_CODE, "{err}");
+        let after = std::fs::read_dir(&dir).expect("list dir").count();
+        assert_eq!(after, before, "refused start spawns nothing");
+        assert!(!dir.join("newbie.json").exists(), "nothing published");
+        assert!(!dir.join("newbie.lock").exists(), "reservation released");
+        // Dead records and foreign files occupy no slot; the start below cleans up fully.
+        std::fs::remove_file(dir.join("live-0.json")).expect("free a slot");
+        let info = session_start_os("newbie", &argv, false).expect("slot reopens");
+        assert!(pid_alive(info.pid), "started child must be alive");
+        session_stop("newbie").expect("stop succeeds");
+        assert!(!dir.join("newbie.json").exists(), "endpoint removed");
+        assert!(!pid_alive(info.pid), "stray child survived");
+        if std::fs::remove_dir_all(&dir).is_err() {
+            // Leftover scratch in the temp dir is harmless.
+        }
+    }
 }

@@ -17,14 +17,16 @@ leak-timeout = { period = "500ms", result = "fail" }
 path = "junit.xml"
 
 [test-groups]
-# Genuinely scarce resource: concurrent PTY sessions. Initial tuning,
-# not a universal optimum. Only heavy PTY binaries join this group.
+# Genuinely scarce resource: concurrent PTY sessions. Only heavy PTY
+# binaries join this group (`runner` is env-map/context tests with no PTY
+# and must stay on the default lane). max-threads = 4 is a placeholder
+# pending measurement; the PTY benchmark suite (planned) will qualify it.
 terminal-e2e = { max-threads = 4 }
 
 [[profile.default.overrides]]
-filter = 'binary(tui) | binary(journey) | binary(runner)'
+filter = 'binary(tui) | binary(journey) | binary(flood) | binary(tui_shell) | binary(interaction_contracts)'
 test-group = 'terminal-e2e'
 
 [[profile.ci.overrides]]
-filter = 'binary(tui) | binary(journey) | binary(runner)'
+filter = 'binary(tui) | binary(journey) | binary(flood) | binary(tui_shell) | binary(interaction_contracts)'
 test-group = 'terminal-e2e'

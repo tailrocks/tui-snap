@@ -4,6 +4,7 @@
 //! behavior is unchanged.
 
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 use super::key::CacheKey;
 
@@ -88,4 +89,55 @@ pub(super) fn decode_entry(key: &CacheKey, bytes: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     Some(png.to_vec())
+}
+
+/// Evict oldest-first until `dir` holds at most `max_entries` `.cache`
+/// files and `max_bytes` total. Ordering is (mtime, name), so ties break
+/// deterministically. Only regular `.cache` files participate — temp
+/// files, symlinks, directories, and foreign files are never counted and
+/// never removed. Validity is orthogonal: corrupt entries count until a
+/// read rejects them. Best-effort (an unreadable dir or failed removal
+/// just stops the sweep); returns the number of entries removed.
+pub(super) fn evict_over_caps(dir: &Path, max_entries: usize, max_bytes: u64) -> u64 {
+    use std::time::SystemTime;
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut entries: Vec<(PathBuf, u64, SystemTime)> = Vec::new();
+    let mut bytes: u64 = 0;
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        if name
+            .to_str()
+            .is_none_or(|n| n.strip_suffix(".cache").is_none())
+        {
+            continue;
+        }
+        let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        bytes = bytes.saturating_add(meta.len());
+        entries.push((
+            entry.path(),
+            meta.len(),
+            meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+        ));
+    }
+    entries.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
+    let mut evicted = 0;
+    let mut count = entries.len();
+    for (path, size, _) in &entries {
+        if count <= max_entries && bytes <= max_bytes {
+            break;
+        }
+        if std::fs::remove_file(path).is_ok() {
+            count -= 1;
+            bytes = bytes.saturating_sub(*size);
+            evicted += 1;
+        }
+    }
+    evicted
 }

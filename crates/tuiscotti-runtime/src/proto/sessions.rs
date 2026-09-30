@@ -32,7 +32,7 @@ pub(crate) use runtime_dir::current_uid;
 pub use runtime_dir::runtime_dir;
 #[cfg(any(test, feature = "test-overrides"))]
 pub use runtime_dir::set_runtime_dir_override;
-pub(crate) use types::SessionEndpoint;
+pub(crate) use types::{MAX_CONCURRENT_SESSIONS, SESSION_LIMIT_CODE, SessionEndpoint};
 pub use types::{SESSION_ENDPOINT_VERSION, SessionBackend, SessionInfo, SessionStatus};
 #[cfg(unix)]
 pub(crate) use validate::checked_daemon_path;
