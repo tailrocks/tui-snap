@@ -578,11 +578,6 @@ jobs:
         crates/tuiscotti-core/examples/**
         crates/tuiscotti-core/src/**
         crates/tuiscotti-core/tests/**
-        crates/tuiscotti-insta/**/*.rs
-        crates/tuiscotti-insta/benches/**
-        crates/tuiscotti-insta/examples/**
-        crates/tuiscotti-insta/src/**
-        crates/tuiscotti-insta/tests/**
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
@@ -606,7 +601,7 @@ jobs:
       cargo_net_offline: true
       unit_platform: linux-x64
       unit_trust: untrusted-ok
-      unit_dependencies: "rust-tuiscotti-core,rust-tuiscotti-insta,rust-tuiscotti-render"
+      unit_dependencies: "rust-tuiscotti-core,rust-tuiscotti-render"
       unit_admission: github-hosted
       validation_phases: "fmt,clippy,test,doctest"
   github-hosted-rust-xtask:
