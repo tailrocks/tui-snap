@@ -286,6 +286,7 @@ jobs:
         rust-toolchain
         rust-toolchain.toml
       mbx_freshness_files: |
+        assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
@@ -358,6 +359,7 @@ jobs:
         rust-toolchain
         rust-toolchain.toml
       mbx_freshness_files: |
+        assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
@@ -558,6 +560,7 @@ jobs:
         rust-toolchain
         rust-toolchain.toml
       mbx_freshness_files: |
+        assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
         assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
