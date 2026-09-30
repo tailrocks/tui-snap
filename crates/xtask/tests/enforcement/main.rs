@@ -75,14 +75,78 @@ fn counted_fn(count: usize) -> String {
 ///
 /// Stays in the inherited package directory so tool shims resolve their
 /// versions from the repo; the miniature root travels as explicit args.
+/// Falls back to mise provisioning when `alint` is not on PATH (CI crate
+/// jobs install only rust+nextest before tests; the `alint` custom task
+/// runs after). The mise.toml pin stays the single version source.
 fn run_alint(root: &Path) -> Result<Output, String> {
-    Command::new("alint")
+    let mut command = alint_command()?;
+    command
         .arg("check")
         .arg("--config")
         .arg(root.join(".alint.yml"))
         .arg(root)
         .output()
         .map_err(|error| format!("spawn alint: {error}"))
+}
+
+/// `alint` from PATH, else provisioned once through the repo mise pin.
+fn alint_command() -> Result<Command, String> {
+    if command_exists("alint") {
+        return Ok(Command::new("alint"));
+    }
+    // Nested mise must see the repo config: CI test steps export the
+    // --no-config isolation as env (MISE_NO_CONFIG=1 etc.), which nested
+    // mise would inherit. Strip it (backend-qualified install keeps the
+    // version single-sourced in mise.toml; only the backend id is named).
+    let unisolate = |command: &mut Command| {
+        command
+            .env_remove("MISE_NO_CONFIG")
+            .env_remove("MISE_NO_ENV")
+            .env_remove("MISE_NO_HOOKS")
+            .env_remove("MISE_LOCKFILE")
+            .env_remove("MISE_AUTO_INSTALL")
+            .env_remove("MISE_EXEC_AUTO_INSTALL");
+    };
+    let mut install_cmd = Command::new("mise");
+    unisolate(&mut install_cmd);
+    let install = install_cmd
+        .args(["install", "github:asamarts/alint"])
+        .output()
+        .map_err(|error| format!("spawn mise install alint: {error}"))?;
+    if !install.status.success() {
+        return Err(format!(
+            "mise install alint failed:\n{}",
+            String::from_utf8_lossy(&install.stderr)
+        ));
+    }
+    let mut which_cmd = Command::new("mise");
+    unisolate(&mut which_cmd);
+    let which = which_cmd
+        .args(["which", "alint"])
+        .output()
+        .map_err(|error| format!("spawn mise which alint: {error}"))?;
+    if !which.status.success() {
+        return Err(format!(
+            "mise which alint failed:\n{}",
+            String::from_utf8_lossy(&which.stderr)
+        ));
+    }
+    let path = String::from_utf8_lossy(&which.stdout);
+    let path = path.lines().next().unwrap_or("").trim();
+    if path.is_empty() {
+        return Err("mise which alint printed no path".to_owned());
+    }
+    Ok(Command::new(path))
+}
+
+/// Probe PATH for `tool` without depending on a `which` crate.
+fn command_exists(tool: &str) -> bool {
+    Command::new(tool)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok()
 }
 
 /// Run `cargo clippy` in `dir`; cargo resolves through the build.
