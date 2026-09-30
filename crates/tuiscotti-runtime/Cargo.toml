@@ -19,11 +19,6 @@ test-overrides = []
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
 tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
-# DEAD since F12 (no runtime code names tuiscotti_insta; the canonical
-# projection moved to core): kept only because removing it rewrites
-# Cargo.lock, which the dep-graph owner currently owns. Delete with the
-# lockfile.
-tuiscotti-insta = { version = "0.2.0", path = "../tuiscotti-insta" }
 base64.workspace = true
 serde.workspace = true
 serde_json.workspace = true

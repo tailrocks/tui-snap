@@ -199,6 +199,102 @@ fn obs_with_text(row: &str, revision: u64) -> Result<Observation, String> {
 }
 
 #[test]
+fn click_refuses_a_target_shifted_by_resize() {
+    // Live-session StaleTarget refusal: resolve at one revision, shift the
+    // target with a resize (deterministic: resize blocks for its worker
+    // reply, which always advances the revision), then delivery against the
+    // new revision must fail StaleTarget with the sink never running.
+    let s = mouse_session().expect("spawn succeeds");
+    s.get_by_text("Ready")
+        .expect_visible()
+        .expect("target draws");
+    let before = s.observe_now().expect("observe at N");
+    let pending = Locator::text("Ready")
+        .prepare_action(&before)
+        .expect("target ready at N");
+    s.resize(41, 8).expect("resize shifts the target");
+    let after = s.observe_now().expect("observe at N+1");
+    assert!(
+        after.revision > before.revision,
+        "resize must advance the revision ({} -> {})",
+        before.revision,
+        after.revision
+    );
+    let mut delivered = 0;
+    let err = pending
+        .click(&after, &mut |_| delivered += 1)
+        .expect_err("shifted target must be refused");
+    assert_eq!(
+        err,
+        LocateError::StaleTarget {
+            expected: before.revision,
+            current: after.revision,
+        },
+        "wrong refusal"
+    );
+    assert_eq!(delivered, 0, "the sink never ran");
+    s.close().expect("close succeeds");
+}
+
+/// Mouse session with PTY echo off: without this, each click's SGR bytes
+/// echo back as literal `^[[<...` cells (ECHOCTL) and a long click series
+/// buries the target under its own echo. Full-screen apps run echoless;
+/// the churn test needs the same to click 100 times at one target.
+fn quiet_mouse_session() -> Result<tuiscotti_runtime::tui::Session, tuiscotti_runtime::tui::TuiError>
+{
+    Tui::new([
+        "/bin/sh",
+        "-c",
+        "stty -echo; printf '\\033[?1000h\\033[?1006hReady\\n'; sleep 30",
+    ])
+    .size(40, 8)
+    .spawn()
+}
+
+#[test]
+fn clicks_stay_fresh_under_resize_churn() {
+    // Worker-atomicity proof (F11 revert detector): the owning worker
+    // resolves each click at its own current revision and delivers press +
+    // release with no interleaving op, so EVERY click succeeds fresh no
+    // matter how many resizes land around it. The old two-reads shape fails
+    // here: any revision shift between its two observations surfaces as a
+    // spurious StaleTarget. Bounded fixed counts, no sleeps: resize() and
+    // click() both block for their worker replies; the scope join is the
+    // only sync.
+    const CLICKS: usize = 100;
+    const RESIZES: usize = 600;
+    let s = quiet_mouse_session().expect("spawn succeeds");
+    s.get_by_text("Ready")
+        .expect_visible()
+        .expect("target draws");
+    let first_rev = s.revision();
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            for i in 0..RESIZES {
+                let cols = if i % 2 == 0 { 41 } else { 40 };
+                s.resize(cols, 8).expect("resize succeeds");
+            }
+        });
+        for _ in 0..CLICKS {
+            // Success-only assertion: keeps compiling against the old
+            // `Result<(), _>` click shape so the revert trial fails
+            // behaviorally (StaleTarget), not at build time.
+            let _span = s
+                .get_by_text("Ready")
+                .click()
+                .expect("atomic click delivers under churn");
+        }
+    });
+    assert!(
+        s.revision() >= first_rev + RESIZES as u64,
+        "churn landed during the clicks ({} -> {})",
+        first_rev,
+        s.revision()
+    );
+    s.close().expect("close succeeds");
+}
+
+#[test]
 fn pending_action_refuses_an_update_injected_before_delivery() {
     // The detached primitive behind the atomic click: readiness at one
     // revision, an update injected before delivery, refusal without effect.
