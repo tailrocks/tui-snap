@@ -152,3 +152,32 @@ AGENT PATH (no PTY required):
 
 Public API design: [API.md](API.md). Snapshot semantics:
 [SNAPSHOTS.md](SNAPSHOTS.md). Durable rationale: [DECISIONS.md](DECISIONS.md).
+
+## Retained PTY sessions (F08-F2)
+
+Named sessions come in two backends. `Process` is a piped child nobody
+owns (liveness via `kill -0`). `Pty` (`session start --pty`) is a live
+`tui::Session` held by a per-runtime-dir daemon (`tuiscotti __daemon`,
+hidden, auto-started): the daemon is authoritative for liveness
+(`poll_exit` on the owned handle — no pid-reuse window while it lives),
+and the endpoint names it via `daemon_pid`. The daemon speaks
+newline-delimited JSON over a `0600` Unix socket (requests ≤1 MiB, 15 s
+timeouts); at most one serves a runtime dir (`daemon.lock`
+single-flight, stale takeover when the owner is dead). CLI surface:
+`--pty` (+`--cols`/`--rows`) on `start`, `input`, `observe`, and an
+observe-poll + stdin-forward `attach`; the versioned machine protocol is
+deliberately untouched (CLI-only).
+
+Honest limits: the daemon holds `tui::Session`, not termpane (unreleased;
+no path/git import exists — the migration is a mechanical handle swap
+documented in `proto/daemon.rs`). PTY children inherit the daemon's
+environment. A dead owner orphans its children (they survive): orphans
+list `Exited` and die only through the validated pid path
+(absolute `/bin/kill`, no `PATH`) on prune/force/stop; a recorded owner
+that is alive but silent is never guessed about (error, state kept). A
+crash between spawn and endpoint publish leaks one child (no record
+exists yet). The daemon exits 60 s after its registry empties
+(`TUISCOTTI_DAEMON_IDLE_SECS` overrides for tests), or at once when its
+runtime dir vanishes (closing its orphaned sessions); exited entries
+keep it alive until pruned or stopped, so final-frame `observe` keeps
+working.

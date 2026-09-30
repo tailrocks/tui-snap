@@ -10,6 +10,8 @@
 //! else (version, capabilities, assert, render, diff, named sessions, record,
 //! review, report) is feature-independent.
 
+mod daemon;
+mod daemon_proto;
 mod execute;
 mod journal;
 mod log_tail;
@@ -19,6 +21,8 @@ mod sessions;
 mod types_a;
 mod types_b;
 
+pub use daemon::*;
+pub(crate) use daemon_proto::*;
 pub use execute::*;
 pub use journal::*;
 pub use log_tail::*;

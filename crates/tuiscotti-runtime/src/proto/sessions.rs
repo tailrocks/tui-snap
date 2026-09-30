@@ -45,10 +45,11 @@ const RESERVATION_CORRUPT_STALE_SECS: u64 = 120;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum SessionBackend {
-    /// Plain piped child (this version). PTY-backed named sessions arrive
-    /// with the daemon transport; the enum reserves the shape.
+    /// Plain piped child, owned by no one (liveness via `pid_alive`).
     Process,
-    /// PTY-backed session (reserved shape; not constructed here).
+    /// PTY-backed session owned by the retained-session daemon (F08-F2):
+    /// the daemon holds the live `tui::Session` handle and is
+    /// authoritative for liveness; the endpoint names it via `daemon_pid`.
     Pty,
 }
 
@@ -92,6 +93,13 @@ pub(crate) struct SessionEndpoint {
     pub(crate) started_unix: u64,
     /// Owner uid (required: records without it are corrupt, never adopted).
     pub(crate) owner: u32,
+    /// Owning daemon's pid. Required if and only if `backend` is `Pty`
+    /// (F08-F2): a `Pty` record without one is corrupt, and a `Process`
+    /// record carrying one is corrupt. `Default` keeps pre-F2 records
+    /// (which lack the field) parsing as `Process` with `None`, so no
+    /// format version bump was needed.
+    #[serde(default)]
+    pub(crate) daemon_pid: Option<u32>,
 }
 
 /// Runtime dir: `$TUISCOTTI_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/tuiscotti`, else a
@@ -245,6 +253,16 @@ pub(crate) fn validate_session_name(name: &str) -> Result<(), OpError> {
             "session name must be 1..=64 chars",
         ));
     }
+    // `daemon` is reserved for the retained-session daemon's own files
+    // (`daemon.lock` single-flight, `daemon.pid`, `daemon.sock`): a session
+    // by that name would collide with them (`daemon.lock` doubles as its
+    // start reservation).
+    if name == "daemon" {
+        return Err(OpError::new(
+            "invalid-input",
+            "session name \"daemon\" is reserved",
+        ));
+    }
     if !name
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
@@ -299,6 +317,15 @@ pub(crate) fn checked_endpoint_path(dir: &Path, name: &str) -> Result<PathBuf, O
 pub(crate) fn checked_aux_path(dir: &Path, name: &str, suffix: &str) -> Result<PathBuf, OpError> {
     validate_session_name(name)?;
     checked_join(dir, &format!("{name}.{suffix}"))
+}
+
+/// Containment-checked daemon file path (`daemon.{suffix}` for the fixed
+/// `sock`/`pid`/`err`/`lock` literals). Bypasses [`validate_session_name`],
+/// which reserves `daemon` for exactly these files; containment is still
+/// proven by [`checked_join`].
+#[cfg(unix)]
+pub(crate) fn checked_daemon_path(dir: &Path, suffix: &str) -> Result<PathBuf, OpError> {
+    checked_join(dir, &format!("daemon.{suffix}"))
 }
 
 /// Read one endpoint record as untrusted metadata: no symlink following, a
@@ -377,6 +404,7 @@ fn validate_endpoint_payload(path: &Path, name: &str, ep: &SessionEndpoint) -> R
         ));
     }
     validate_pid(ep.pid)?;
+    validate_daemon_pid(path, ep)?;
     if ep.argv.is_empty() {
         return Err(OpError::new(
             "invalid-input",
@@ -406,6 +434,36 @@ fn validate_endpoint_payload(path: &Path, name: &str, ep: &SessionEndpoint) -> R
         }
     }
     Ok(())
+}
+
+/// `daemon_pid` is required if and only if the backend is `Pty`, and a
+/// present value must itself be a signalable pid (never 0: PID 0 selects
+/// process groups in `kill`, so a tampered `daemon_pid: 0` must fail here,
+/// before any liveness probe could consult it).
+fn validate_daemon_pid(path: &Path, ep: &SessionEndpoint) -> Result<(), OpError> {
+    match (&ep.backend, ep.daemon_pid) {
+        (SessionBackend::Pty, Some(pid)) => validate_pid(pid).map_err(|_| {
+            OpError::new(
+                "invalid-input",
+                format!("{} has an unusable daemon pid", path.display()),
+            )
+        }),
+        (SessionBackend::Pty, None) => Err(OpError::new(
+            "invalid-input",
+            format!(
+                "{} is a PTY session without an owning daemon",
+                path.display()
+            ),
+        )),
+        (SessionBackend::Process, None) => Ok(()),
+        (SessionBackend::Process, Some(_)) => Err(OpError::new(
+            "invalid-input",
+            format!(
+                "{} is a piped session carrying a daemon pid",
+                path.display()
+            ),
+        )),
+    }
 }
 
 /// Counter disambiguating our publish tempfiles within this process.
@@ -477,6 +535,20 @@ pub(crate) struct NameReservation {
 impl NameReservation {
     pub(crate) fn acquire(dir: &Path, name: &str) -> Result<Self, OpError> {
         let lock_path = checked_aux_path(dir, name, "lock")?;
+        Self::acquire_at(dir, name, lock_path)
+    }
+
+    /// Single-flight daemon autostart lock (`daemon.lock`). Bypasses
+    /// [`validate_session_name`] (which reserves `daemon` for exactly the
+    /// daemon's files); exclusivity, stale takeover, and the pid-tagged
+    /// drop guard are identical to session reservations.
+    #[cfg(all(unix, feature = "pty"))]
+    pub(crate) fn acquire_daemon(dir: &Path) -> Result<Self, OpError> {
+        let lock_path = checked_daemon_path(dir, "lock")?;
+        Self::acquire_at(dir, "daemon", lock_path)
+    }
+
+    fn acquire_at(dir: &Path, name: &str, lock_path: PathBuf) -> Result<Self, OpError> {
         for _ in 0..4 {
             match std::fs::OpenOptions::new()
                 .write(true)
@@ -547,9 +619,13 @@ impl Drop for NameReservation {
 }
 
 /// A live same-name starter reports the running pid; otherwise the name is
-/// briefly busy. Both are `session-exists`: the caller never spawns.
+/// briefly busy. Both are `session-exists`: the caller never spawns. The
+/// daemon lock (`daemon`) has no endpoint by construction (`daemon` is a
+/// reserved name), so it skips the probe — probing would fail name
+/// validation and mask the `session-exists` the starter retries on.
 fn lock_busy_error(dir: &Path, name: &str) -> Result<OpError, OpError> {
-    if let Some(ep) = read_endpoint(dir, name)?
+    if name != "daemon"
+        && let Some(ep) = read_endpoint(dir, name)?
         && pid_alive(ep.pid)
     {
         return Ok(OpError::new(
@@ -668,6 +744,42 @@ fn signal_pid(pid: u32, sig: &str) -> Result<(), OpError> {
     Err(OpError::new("unsupported", "session stop needs Unix"))
 }
 
+/// SIGTERM a validated pid, grace, SIGKILL, then verify dead. Any failure
+/// returns before the caller removes state, so a failed stop preserves the
+/// endpoint (piped sessions) or the endpoint plus the daemon entry (PTY
+/// orphans). The single pid-stop implementation for both backends.
+#[cfg(unix)]
+pub(crate) fn stop_pid(pid: u32) -> Result<(), OpError> {
+    kill_pid(pid)?;
+    wait_until_dead(pid, std::time::Duration::from_millis(500));
+    if pid_alive(pid) {
+        kill9_pid(pid)?;
+        wait_until_dead(pid, std::time::Duration::from_millis(500));
+    }
+    if pid_alive(pid) {
+        return Err(OpError::new(
+            "op-failed",
+            format!("pid {pid} survived SIGKILL; endpoint preserved"),
+        ));
+    }
+    Ok(())
+}
+
+/// Non-Unix builds cannot stop pids; every pid stop fails closed.
+#[cfg(not(unix))]
+pub(crate) fn stop_pid(pid: u32) -> Result<(), OpError> {
+    let _ = pid;
+    Err(OpError::new("unsupported", "session stop needs Unix"))
+}
+
+#[cfg(unix)]
+fn wait_until_dead(pid: u32, timeout: std::time::Duration) {
+    let deadline = std::time::Instant::now() + timeout;
+    while pid_alive(pid) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
 pub(crate) fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -706,6 +818,25 @@ mod tests {
             backend: SessionBackend::Process,
             started_unix: now_unix(),
             owner,
+            daemon_pid: None,
+        }
+    }
+
+    fn sample_pty_endpoint(
+        name: &str,
+        pid: u32,
+        owner: u32,
+        daemon_pid: Option<u32>,
+    ) -> SessionEndpoint {
+        SessionEndpoint {
+            version: SESSION_ENDPOINT_VERSION,
+            name: name.to_string(),
+            pid,
+            argv: vec!["sh".to_string()],
+            backend: SessionBackend::Pty,
+            started_unix: now_unix(),
+            owner,
+            daemon_pid,
         }
     }
 
@@ -727,6 +858,7 @@ mod tests {
             "",
             ".",
             "..",
+            "daemon",
             "a/b",
             "../evil",
             "a\\b",
@@ -1002,6 +1134,58 @@ mod tests {
         let again = NameReservation::acquire(&dir, "n").expect("reacquire");
         again.release();
         assert!(!dir.join("n.lock").exists(), "release removes");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn endpoint_daemon_pid_required_iff_pty() {
+        let dir = test_dir("daemonpid");
+        let me = std::process::id();
+        // Pty with a live daemon pid round-trips.
+        let ep = sample_pty_endpoint("p", me, sample_owner(), Some(me));
+        write_endpoint(&dir, &ep).expect("write");
+        let back = read_endpoint(&dir, "p").expect("read").expect("some");
+        assert_eq!(back.daemon_pid, Some(me));
+        // Pty without one is corrupt.
+        let ep = sample_pty_endpoint("p", me, sample_owner(), None);
+        write_endpoint(&dir, &ep).expect("write");
+        assert_eq!(
+            read_endpoint(&dir, "p")
+                .expect_err("pidless Pty accepted")
+                .code,
+            "invalid-input"
+        );
+        // Pty with pid 0 is corrupt (never a signal target).
+        let ep = sample_pty_endpoint("p", me, sample_owner(), Some(0));
+        write_endpoint(&dir, &ep).expect("write");
+        assert_eq!(
+            read_endpoint(&dir, "p")
+                .expect_err("pid-0 daemon accepted")
+                .code,
+            "invalid-input"
+        );
+        // Process carrying one is corrupt.
+        let mut ep = sample_endpoint("q", me, sample_owner());
+        ep.daemon_pid = Some(me);
+        write_endpoint(&dir, &ep).expect("write");
+        assert_eq!(
+            read_endpoint(&dir, "q")
+                .expect_err("daemon pid on Process accepted")
+                .code,
+            "invalid-input"
+        );
+        // Pre-F2 records (no daemon_pid field) still parse as Process.
+        std::fs::write(
+            dir.join("old.json"),
+            format!(
+                r#"{{"version":{SESSION_ENDPOINT_VERSION},"name":"old","pid":{me},"argv":["sleep"],"backend":"process","started_unix":{},"owner":{}}}"#,
+                now_unix(),
+                sample_owner()
+            ),
+        )
+        .expect("seed");
+        let back = read_endpoint(&dir, "old").expect("read").expect("some");
+        assert_eq!(back.daemon_pid, None);
         cleanup(&dir);
     }
 

@@ -204,6 +204,9 @@ pub(crate) enum Cmd {
     /// Machine interface: op JSON per line on stdin, one envelope per line
     /// on stdout. Exit 0 when every op succeeded, else 3.
     Machine,
+    /// Retained-session daemon entry (hidden: autostarted, never typed).
+    #[command(name = "__daemon", hide = true)]
+    DaemonInternal,
 }
 
 #[derive(Subcommand, Debug)]
@@ -214,6 +217,16 @@ pub(crate) enum SessionCmd {
         name: String,
         #[arg(long, default_value_t = false)]
         force: bool,
+        /// Retain a PTY session behind the daemon (input/observe/attach
+        /// across invocations) instead of a piped child.
+        #[arg(long, default_value_t = false)]
+        pty: bool,
+        /// PTY width in cells (pairs with `--rows`; default 80x24).
+        #[arg(long)]
+        cols: Option<u16>,
+        /// PTY height in cells (pairs with `--cols`).
+        #[arg(long)]
+        rows: Option<u16>,
         /// Child argv after `--` (never parsed as tool flags).
         #[arg(last = true)]
         argv: Vec<OsString>,
@@ -229,6 +242,25 @@ pub(crate) enum SessionCmd {
     Prune,
     /// Attach to a named session (best-effort human view; EOF detaches).
     Attach {
+        #[arg(long)]
+        name: String,
+    },
+    /// Send input to a retained PTY session (exactly one payload).
+    Input {
+        #[arg(long)]
+        name: String,
+        /// Literal text to type.
+        #[arg(long)]
+        text: Option<String>,
+        /// Key chord to press.
+        #[arg(long)]
+        chord: Option<String>,
+        /// Raw bytes, base64.
+        #[arg(long)]
+        bytes_b64: Option<String>,
+    },
+    /// Print a retained PTY session's current screen text.
+    Observe {
         #[arg(long)]
         name: String,
     },
@@ -266,5 +298,6 @@ pub(crate) fn run(cli: Cli) -> i32 {
         } => crate::ops_run::cmd_record(&out, max_events, max_bytes, &argv),
         Cmd::Trace { input, kind } => crate::ops_offline::cmd_trace(&input, kind),
         Cmd::Machine => crate::machine::machine_main(),
+        Cmd::DaemonInternal => crate::ops_run::cmd_daemon(),
     }
 }

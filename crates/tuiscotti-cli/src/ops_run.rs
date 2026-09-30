@@ -75,21 +75,51 @@ pub(crate) fn cmd_capture(out: &Path, timeout_ms: u64, argv: &[OsString]) -> i32
     }
 }
 
+pub(crate) fn cmd_daemon() -> i32 {
+    proto::daemon_main()
+}
+
+/// Start a named session: piped by default, retained PTY with `--pty`.
+fn cmd_session_start(
+    name: &str,
+    force: bool,
+    pty: bool,
+    cols: Option<u16>,
+    rows: Option<u16>,
+    argv: &[OsString],
+) -> i32 {
+    if argv.is_empty() {
+        eprintln!("error: pass the command after `--`");
+        return EXIT_USAGE;
+    }
+    let started = if pty {
+        proto::session_start_pty(name, argv, force, cols, rows)
+    } else {
+        if cols.is_some() || rows.is_some() {
+            eprintln!("error: --cols/--rows need --pty");
+            return EXIT_USAGE;
+        }
+        proto::session_start_os(name, argv, force)
+    };
+    match started {
+        Ok(info) => {
+            let buf = format!("started: {} (pid {})\n", info.name, info.pid);
+            crate::write_stdout(&buf)
+        }
+        Err(e) => op_error(&e),
+    }
+}
+
 pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
     match cmd {
-        SessionCmd::Start { name, force, argv } => {
-            if argv.is_empty() {
-                eprintln!("error: pass the command after `--`");
-                return EXIT_USAGE;
-            }
-            match proto::session_start_os(&name, &argv, force) {
-                Ok(info) => {
-                    let buf = format!("started: {} (pid {})\n", info.name, info.pid);
-                    crate::write_stdout(&buf)
-                }
-                Err(e) => op_error(&e),
-            }
-        }
+        SessionCmd::Start {
+            name,
+            force,
+            pty,
+            cols,
+            rows,
+            argv,
+        } => cmd_session_start(&name, force, pty, cols, rows, &argv),
         SessionCmd::Stop { name } => match proto::session_stop(&name) {
             Ok(info) => {
                 let buf = format!("stopped: {} (pid {})\n", info.name, info.pid);
@@ -107,8 +137,8 @@ pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
                     crate::push_line(
                         &mut buf,
                         &format!(
-                            "{} pid={} {:?} started={} argv={:?}",
-                            s.name, s.pid, s.status, s.started_unix, s.argv
+                            "{} pid={} {:?}/{:?} started={} argv={:?}",
+                            s.name, s.pid, s.backend, s.status, s.started_unix, s.argv
                         ),
                     );
                 }
@@ -128,6 +158,32 @@ pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
             Err(e) => op_error(&e),
         },
         SessionCmd::Attach { name } => cmd_session_attach(&name),
+        SessionCmd::Input {
+            name,
+            text,
+            chord,
+            bytes_b64,
+        } => match proto::session_input(&name, text, chord, bytes_b64) {
+            Ok(()) => {
+                let buf = format!("input accepted: {name}\n");
+                crate::write_stdout(&buf)
+            }
+            Err(e) => op_error(&e),
+        },
+        SessionCmd::Observe { name } => match proto::session_observe(&name) {
+            Ok(obs) => {
+                let mut buf = format!(
+                    "revision={} reason={} {}x{}\n",
+                    obs.revision, obs.reason, obs.screen.cols, obs.screen.rows
+                );
+                buf.push_str(&obs.screen.text);
+                if !obs.screen.text.ends_with('\n') {
+                    buf.push('\n');
+                }
+                crate::write_stdout(&buf)
+            }
+            Err(e) => op_error(&e),
+        },
     }
 }
 
@@ -162,6 +218,114 @@ fn spawn_stdin_drain() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
 }
 
 fn cmd_session_attach(name: &str) -> i32 {
+    // Piped sessions tail the log; retained PTY sessions poll observe
+    // frames and forward stdin. Unknown names take the piped path so a
+    // hostile `--name` still fails name validation first (exit 3).
+    let backend = match proto::session_list() {
+        Ok(list) => list
+            .into_iter()
+            .find(|s| s.name == *name)
+            .map(|s| s.backend),
+        Err(e) => return op_error(&e),
+    };
+    match backend {
+        Some(proto::SessionBackend::Pty) => cmd_session_attach_pty(name),
+        _ => cmd_session_attach_process(name),
+    }
+}
+
+/// Best-effort human view of a retained PTY session: observe frames on
+/// revision change, stdin bytes forwarded as input. EOF or session end
+/// detaches. Assertions remain on `Observation`s, never on this output.
+fn cmd_session_attach_pty(name: &str) -> i32 {
+    use std::sync::atomic::Ordering;
+    if let Some(code) = crate::write_line(&format!(
+        "attached: {name} (pty) — best-effort human view; assertions stay on Observations"
+    )) {
+        return code;
+    }
+    if let Some(code) = crate::write_line("stdin is forwarded to the session; EOF detaches") {
+        return code;
+    }
+    let eof = spawn_stdin_forward(name);
+    let mut last_revision = None;
+    loop {
+        // Observe first so an attach that opens on EOF still renders one
+        // frame before detaching.
+        match proto::session_observe(name) {
+            Ok(obs) => {
+                if last_revision != Some(obs.revision) {
+                    last_revision = Some(obs.revision);
+                    let mut frame = obs.screen.text;
+                    if !frame.ends_with('\n') {
+                        frame.push('\n');
+                    }
+                    if let Some(code) = crate::write_bytes(frame.as_bytes()) {
+                        return code;
+                    }
+                }
+            }
+            Err(e) if e.code == "not-found" => {
+                // Exited or orphaned between polls; the status check below
+                // reports which.
+            }
+            Err(e) => return op_error(&e),
+        }
+        if eof.load(Ordering::SeqCst) {
+            return detach_verdict(name, "detached: stdin EOF");
+        }
+        if !pty_running(name) {
+            return crate::write_line("detached: session ended").unwrap_or(0);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+/// EOF arrived (or forwarding broke): say which if the session is gone.
+fn detach_verdict(name: &str, eof_msg: &str) -> i32 {
+    if pty_running(name) {
+        crate::write_line(eof_msg).unwrap_or(0)
+    } else {
+        crate::write_line("detached: session ended").unwrap_or(0)
+    }
+}
+
+/// True while the named session lists as `Running`.
+fn pty_running(name: &str) -> bool {
+    proto::session_list().is_ok_and(|l| {
+        l.iter()
+            .any(|s| s.name == *name && s.status == proto::SessionStatus::Running)
+    })
+}
+
+/// Forward stdin bytes to the PTY session until EOF or delivery failure;
+/// returns the flag set when forwarding stops.
+fn spawn_stdin_forward(name: &str) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    use std::io::Read;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let done = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&done);
+    let name = name.to_string();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        let mut stdin = std::io::stdin().lock();
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if proto::session_input_bytes(&name, &buf[..n]).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+        flag.store(true, Ordering::SeqCst);
+    });
+    done
+}
+
+fn cmd_session_attach_process(name: &str) -> i32 {
     use std::sync::atomic::Ordering;
     // Validated + containment-checked first: a hostile `--name` must not
     // steer the log path outside the runtime dir.
