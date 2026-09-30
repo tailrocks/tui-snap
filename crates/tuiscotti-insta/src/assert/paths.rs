@@ -75,8 +75,15 @@ pub(crate) fn description_for(binding: &str, location: Location) -> String {
 /// blink frozen-visible, placeholder missing-glyphs). The identity and the
 /// frozen-gate cache key derive from this ONE profile, so they can never
 /// describe different render inputs than the sample renderer consumes.
+///
+/// Built once per process: every input is a `&'static` asset, so a cached
+/// value is identical to a fresh one (and [`RenderProfile::vendored`] itself
+/// verifies its pins on first construction).
 pub(crate) fn default_sample_profile() -> RenderProfile<'static> {
-    RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder)
+    static PROFILE: std::sync::OnceLock<RenderProfile<'static>> = std::sync::OnceLock::new();
+    PROFILE
+        .get_or_init(|| RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder))
+        .clone()
 }
 
 /// Render identity the PNG verdict depends on, for an explicit strict
@@ -99,9 +106,16 @@ pub fn render_identity_for(rp: &RenderProfile<'_>) -> String {
 
 /// Render identity of the pinned sample path
 /// ([`render_identity_for`] over the legacy-mirror strict profile).
+///
+/// Deterministic over static inputs, so it is rendered once per process:
+/// every `assert_screenshot!` calls this three times (bundle binding plus
+/// two snapshot descriptions) and every `assert_snapshot!` once.
 #[must_use]
 pub fn render_identity() -> String {
-    render_identity_for(&default_sample_profile())
+    static IDENTITY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    IDENTITY
+        .get_or_init(|| render_identity_for(&default_sample_profile()))
+        .clone()
 }
 
 /// One resolved snapshot identity: the absolute directory Insta reads/writes

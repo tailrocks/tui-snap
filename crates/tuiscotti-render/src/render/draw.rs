@@ -150,7 +150,9 @@ fn draw_fallback_glyph(
 ) -> bool {
     // Chain length is capped at 255 at load; always succeeds.
     let idx = FaceIdx::Fallback(u8::try_from(fi).unwrap_or(u8::MAX));
-    let Some((m, bmp)) = cached_raster(cache, &set.fallbacks[fi], idx, c).cloned() else {
+    // Borrowed like `draw_primary`: the cache outlives the blit, so the
+    // per-cell bitmap clone bought nothing (same bytes read, pixel-identical).
+    let Some((m, bmp)) = cached_raster(cache, &set.fallbacks[fi], idx, c) else {
         return false;
     };
     // Center the glyph's advance box in the cell span; clip ink

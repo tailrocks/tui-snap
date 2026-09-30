@@ -157,22 +157,16 @@ fn read_approved(path: &Path) -> Result<Vec<u8>, FrozenError> {
     }
 }
 
-/// Check canonical state against a frozen root. Fails on missing/corrupt files
-/// and on content mismatch. Reads only.
-///
-/// # Errors
-///
-/// Returns [`FrozenError`] when the name is invalid, the approval is missing
-/// or corrupt, or its content differs from the actual screen.
-pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result<(), FrozenError> {
+/// Validate, read, and compare the approved canonical against a precomputed
+/// actual. The actual stays the caller's job, so holders never recompute it.
+fn check_approved_canonical(root: &Path, name: &str, actual: &str) -> Result<(), FrozenError> {
     check_scenario_name(name).map_err(FrozenError::InvalidName)?;
     let path = frozen_canonical_path(root, name);
-    let approved = read_approved(&path)?;
-    let approved_text = String::from_utf8(approved).map_err(|e| FrozenError::Corrupt {
-        path: path.clone(),
-        reason: format!("canonical is not UTF-8: {e}"),
-    })?;
-    let actual = canonical_string(screen);
+    let approved_text =
+        String::from_utf8(read_approved(&path)?).map_err(|e| FrozenError::Corrupt {
+            path: path.clone(),
+            reason: format!("canonical is not UTF-8: {e}"),
+        })?;
     if approved_text != actual {
         return Err(FrozenError::Mismatch {
             name: name.to_string(),
@@ -184,6 +178,17 @@ pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result
         });
     }
     Ok(())
+}
+
+/// Check canonical state against a frozen root. Fails on missing/corrupt files
+/// and on content mismatch. Reads only.
+///
+/// # Errors
+///
+/// Returns [`FrozenError`] when the name is invalid, the approval is missing
+/// or corrupt, or its content differs from the actual screen.
+pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result<(), FrozenError> {
+    check_approved_canonical(root, name, &canonical_string(screen))
 }
 
 /// Approved PNG plus its path (error context) for the screenshot gates.
@@ -200,7 +205,16 @@ fn load_frozen_screenshot(
     name: &str,
     screen: &Screen,
 ) -> Result<LoadedScreenshot, FrozenError> {
-    check_frozen_snapshot(root, name, screen)?;
+    load_frozen_screenshot_with_canonical(root, name, &canonical_string(screen))
+}
+
+/// [`load_frozen_screenshot`] over a precomputed canonical (same checks, no recompute).
+fn load_frozen_screenshot_with_canonical(
+    root: &Path,
+    name: &str,
+    canonical: &str,
+) -> Result<LoadedScreenshot, FrozenError> {
+    check_approved_canonical(root, name, canonical)?;
     let path = frozen_png_path(root, name);
     let approved_png = read_approved(&path)?;
     image::load_from_memory(&approved_png).map_err(|e| FrozenError::Corrupt {
@@ -291,11 +305,14 @@ pub fn check_frozen_screenshot_with_cache(
     screen: &Screen,
     cache: &mut RenderCache,
 ) -> Result<(), FrozenError> {
-    let approved = load_frozen_screenshot(root, name, screen)?;
+    // One canonical per check, reused by the approval check, hit branch,
+    // and binding verdict (the hit path projected the screen 3x before).
+    let canonical = canonical_string(screen);
+    let approved = load_frozen_screenshot_with_canonical(root, name, &canonical)?;
     let key = RenderCache::key_for(screen, &default_sample_profile());
     let cached = cache.get(&key);
-    let (canonical, actual_png) = if let Some(hit) = cached {
-        (canonical_string(screen), hit)
+    let actual_png = if let Some(hit) = cached {
+        hit
     } else {
         let sample = render_sample(screen).map_err(|e| FrozenError::Corrupt {
             path: approved.path.clone(),
@@ -304,7 +321,7 @@ pub fn check_frozen_screenshot_with_cache(
         // Advisory: a store failure must not fail the gate (cached and
         // uncached verdicts are proven identical).
         let _stored = cache.put(&key, &sample.png);
-        (sample.canonical, sample.png)
+        sample.png
     };
     verify_screenshot_sample(name, &approved, &canonical, &actual_png)
 }

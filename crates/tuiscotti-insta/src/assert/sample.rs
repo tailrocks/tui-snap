@@ -90,7 +90,8 @@ impl From<tuiscotti_render::render::RenderError> for AssertError {
 /// Returns [`AssertError::Render`] when a face pin mismatches or the pinned
 /// renderer refuses the frame.
 pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
-    render_sample_with_faces(screen, &VENDORED_FACES)
+    verify_vendored_pins()?;
+    render_sample_with_verified_faces(screen, &VENDORED_FACES)
 }
 
 /// [`render_sample`] over explicit primary faces: every face is verified
@@ -106,6 +107,15 @@ pub fn render_sample_with_faces(
     faces: &FontFaces<'_>,
 ) -> Result<Sample, AssertError> {
     verify_primary_pins(faces)?;
+    render_sample_with_verified_faces(screen, faces)
+}
+
+/// Shared render tail for [`render_sample`] / [`render_sample_with_faces`]:
+/// the caller has already verified its faces against the vendored pins.
+fn render_sample_with_verified_faces(
+    screen: &Screen,
+    faces: &FontFaces<'_>,
+) -> Result<Sample, AssertError> {
     let frame = frame_from_screen(screen);
     let profile = Profile::default_profile();
     let artifacts =
@@ -119,9 +129,43 @@ pub fn render_sample_with_faces(
     })
 }
 
-/// Verify the four primary faces against the vendored pins (regular, bold,
-/// italic, bold-italic): a pin mismatch refuses to render, never silently
-/// substitutes.
+/// SHA-256 digests of the four vendored primary faces, hashed once per
+/// process over fixed immutable inputs (value-identical to re-hashing; no
+/// pointer-identity gate, which `const` slices cannot guarantee across CGUs).
+fn vendored_primary_digests() -> &'static [String; 4] {
+    static DIGESTS: std::sync::OnceLock<[String; 4]> = std::sync::OnceLock::new();
+    DIGESTS.get_or_init(|| {
+        [
+            font_sha256(VENDORED_FACES.regular),
+            font_sha256(VENDORED_FACES.bold),
+            font_sha256(VENDORED_FACES.italic),
+            font_sha256(VENDORED_FACES.bold_italic),
+        ]
+    })
+}
+
+/// [`verify_primary_pins`] over the fixed vendored faces: digests hash once
+/// per process (~10.3MB saved per call). Only [`render_sample`] may use this.
+fn verify_vendored_pins() -> Result<(), AssertError> {
+    let cached = vendored_primary_digests();
+    let slots = [
+        ("regular", &cached[0], VENDORED_FONT_SHA256),
+        ("bold", &cached[1], VENDORED_FONT_BOLD_SHA256),
+        ("italic", &cached[2], VENDORED_FONT_ITALIC_SHA256),
+        ("bold-italic", &cached[3], VENDORED_FONT_BOLD_ITALIC_SHA256),
+    ];
+    for (label, actual, pin) in slots {
+        if actual != pin {
+            return Err(AssertError::Render(format!(
+                "{label} face sha256 mismatch: pinned {pin}, got {actual} — refusing to render"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Verify caller-supplied faces against the vendored pins, hashing the given
+/// bytes fully: the fail-closed path for swapped faces, never cached.
 fn verify_primary_pins(faces: &FontFaces<'_>) -> Result<(), AssertError> {
     let slots = [
         ("regular", faces.regular, VENDORED_FONT_SHA256),
@@ -310,4 +354,43 @@ pub fn png_snapshot_base(name: &str) -> String {
 #[must_use]
 pub fn screenshot_png_comparator() -> PngPixelComparator {
     png_comparator(AlphaPolicy::StraightRgba)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vendored_pins_use_the_cached_path() {
+        // Cached digests verify, agree with a fresh full check, and render
+        // byte-identical samples across calls (the second serves the cache).
+        verify_vendored_pins().expect("vendored pins verify");
+        verify_primary_pins(&VENDORED_FACES).expect("full verification agrees");
+        verify_vendored_pins().expect("cached pins verify");
+        let screen = Screen::blank(20, 5);
+        let a = render_sample(&screen).expect("vendored sample renders");
+        let b = render_sample(&screen).expect("cached sample renders");
+        assert_eq!(a.png, b.png);
+        assert_eq!(a.canonical, b.canonical);
+    }
+
+    #[test]
+    fn tampered_faces_fail_closed_on_a_warm_cache() {
+        // Warm the cache, then tamper: caller faces always hash fully, so a
+        // hot cache can never mask a swap.
+        render_sample(&Screen::blank(20, 5)).expect("vendored sample warms the cache");
+        let mut tampered = VENDORED_FACES.regular.to_vec();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01;
+        let faces = FontFaces {
+            regular: &tampered,
+            ..VENDORED_FACES
+        };
+        let err = verify_primary_pins(&faces).expect_err("tampered face must refuse");
+        assert!(err.to_string().contains("sha256 mismatch"), "{err}");
+        let screen = Screen::blank(20, 5);
+        let err =
+            render_sample_with_faces(&screen, &faces).expect_err("tampered sample must refuse");
+        assert!(err.to_string().contains("sha256 mismatch"), "{err}");
+    }
 }

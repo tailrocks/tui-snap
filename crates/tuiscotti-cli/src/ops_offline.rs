@@ -307,13 +307,18 @@ pub(crate) fn cmd_import(dir: &Path) -> i32 {
 }
 
 pub(crate) fn cmd_trace(input: &Path, kind: Option<TraceKind>) -> i32 {
-    let events = match proto::read_journal(input) {
-        Ok(e) => e,
+    // Truly streaming: decode event-by-event (bounded) and emit line-by-line
+    // through the EPIPE-tolerant writer — the journal is never materialized
+    // as a whole. Small journals print exactly as before.
+    let reader = match proto::iter_journal(input) {
+        Ok(r) => r,
         Err(e) => return op_error(&e),
     };
-    // Streaming: journals are unbounded, so emit line-by-line through the
-    // EPIPE-tolerant writer instead of buffering the whole view.
-    for ev in events {
+    for ev in reader {
+        let ev = match ev {
+            Ok(ev) => ev,
+            Err(e) => return op_error(&e),
+        };
         if let Some(k) = kind
             && ev.kind != k.as_str()
         {

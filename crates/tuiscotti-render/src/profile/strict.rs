@@ -1,12 +1,13 @@
 //! Strict [`RenderProfile`] construction and hashing.
 
 use super::{
-    BlinkPhase, CursorPolicy, FallbackFace, FontFaces, MissingGlyphPolicy, PalettePolicy, Profile,
-    ProfileError, RENDERER_VERSION, RenderProfile, VENDORED_FACES, VENDORED_FALLBACK_FACES,
-    VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256,
-    VENDORED_FONT_SHA256, font_sha256,
+    BlinkPhase, CursorPolicy, FallbackFace, FontFaces, IndexedPalette, MissingGlyphPolicy,
+    PalettePolicy, Profile, ProfileError, RENDERER_VERSION, RenderProfile, VENDORED_FACES,
+    VENDORED_FALLBACK_FACES, VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256,
+    VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256, font_sha256,
 };
 use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
 
 impl<'a> RenderProfile<'a> {
     /// Strict constructor: verifies every pin, substitutes nothing.
@@ -103,30 +104,40 @@ impl<'a> RenderProfile<'a> {
     /// chain, strict missing policy, blink sampled on, cursor shown.
     /// Panics only if the vendored pins disagree with the vendored bytes
     /// (a build-time inconsistency, not a runtime condition).
+    ///
+    /// The strict construction (pin verification over ~11MB of static font
+    /// bytes) runs once per process: every input is a `&'static` asset, so a
+    /// cached verified value is identical to a fresh one. [`RenderProfile::strict`]
+    /// itself always re-verifies caller bytes and is never cached.
     #[must_use]
     pub fn vendored() -> RenderProfile<'static> {
-        RenderProfile::strict(
-            "tuiscotti-default".to_string(),
-            VENDORED_FACES,
-            [
-                VENDORED_FONT_SHA256,
-                VENDORED_FONT_BOLD_SHA256,
-                VENDORED_FONT_ITALIC_SHA256,
-                VENDORED_FONT_BOLD_ITALIC_SHA256,
-            ],
-            VENDORED_FALLBACK_FACES.to_vec(),
-            16.0,
-            10,
-            21,
-            12,
-            2,
-            PalettePolicy::xterm(),
-            CursorPolicy::Show,
-            BlinkPhase::On,
-            MissingGlyphPolicy::Strict,
-            RENDERER_VERSION,
-        )
-        .unwrap_or_else(|e| unreachable!("vendored pins must match vendored bytes: {e}"))
+        static VENDORED: OnceLock<RenderProfile<'static>> = OnceLock::new();
+        VENDORED
+            .get_or_init(|| {
+                RenderProfile::strict(
+                    "tuiscotti-default".to_string(),
+                    VENDORED_FACES,
+                    [
+                        VENDORED_FONT_SHA256,
+                        VENDORED_FONT_BOLD_SHA256,
+                        VENDORED_FONT_ITALIC_SHA256,
+                        VENDORED_FONT_BOLD_ITALIC_SHA256,
+                    ],
+                    VENDORED_FALLBACK_FACES.to_vec(),
+                    16.0,
+                    10,
+                    21,
+                    12,
+                    2,
+                    PalettePolicy::xterm(),
+                    CursorPolicy::Show,
+                    BlinkPhase::On,
+                    MissingGlyphPolicy::Strict,
+                    RENDERER_VERSION,
+                )
+                .unwrap_or_else(|e| unreachable!("vendored pins must match vendored bytes: {e}"))
+            })
+            .clone()
     }
 
     /// Same profile sampling the other blink phase (V07 stills).
@@ -251,10 +262,10 @@ impl<'a> RenderProfile<'a> {
         let p = &self.palette;
         h.update([p.default_fg.r, p.default_fg.g, p.default_fg.b]);
         h.update([p.default_bg.r, p.default_bg.g, p.default_bg.b]);
-        h.update(format!("{:?}", p.indexed).as_bytes());
-        h.update(format!("{:?}", self.cursor).as_bytes());
-        h.update(format!("{:?}", self.blink_phase).as_bytes());
-        h.update(format!("{:?}", self.missing).as_bytes());
+        h.update(indexed_policy_bytes(p.indexed));
+        h.update(cursor_policy_bytes(self.cursor));
+        h.update(blink_phase_bytes(self.blink_phase));
+        h.update(missing_policy_bytes(self.missing));
         h.update(self.renderer_version.to_le_bytes());
         let digest = h.finalize();
         crate::hex_bytes(&digest)
@@ -288,5 +299,99 @@ impl<'a> RenderProfile<'a> {
             (u32::from(cols) * self.cell_w + self.pad * 2) * self.scale,
             (u32::from(rows) * self.cell_h + self.pad * 2) * self.scale,
         )
+    }
+}
+
+/// Explicit pre-image bytes for the policy enums hashed by
+/// [`RenderProfile::hash`]. Each arm feeds byte-for-byte what `{:?}`
+/// rendered before (the enums are fieldless with derived `Debug`, so the
+/// rendering is the variant name): digests are unchanged, only the
+/// per-hash `format!` allocations are gone. Exhaustive matches keep new
+/// variants from silently reusing another arm's bytes.
+fn indexed_policy_bytes(indexed: IndexedPalette) -> &'static [u8] {
+    match indexed {
+        IndexedPalette::Xterm => b"Xterm",
+    }
+}
+
+/// Explicit pre-image bytes for [`CursorPolicy`] (see [`indexed_policy_bytes`]).
+fn cursor_policy_bytes(cursor: CursorPolicy) -> &'static [u8] {
+    match cursor {
+        CursorPolicy::Show => b"Show",
+        CursorPolicy::Hide => b"Hide",
+    }
+}
+
+/// Explicit pre-image bytes for [`BlinkPhase`] (see [`indexed_policy_bytes`]).
+fn blink_phase_bytes(phase: BlinkPhase) -> &'static [u8] {
+    match phase {
+        BlinkPhase::On => b"On",
+        BlinkPhase::Off => b"Off",
+    }
+}
+
+/// Explicit pre-image bytes for [`MissingGlyphPolicy`] (see [`indexed_policy_bytes`]).
+fn missing_policy_bytes(missing: MissingGlyphPolicy) -> &'static [u8] {
+    match missing {
+        MissingGlyphPolicy::Strict => b"Strict",
+        MissingGlyphPolicy::Placeholder => b"Placeholder",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn policy_bytes_match_debug_rendering() {
+        // Guards the no-alloc refactor: if a `Debug` impl ever stops
+        // rendering as the bare variant name, the digest would silently
+        // change — this fails first.
+        assert_eq!(indexed_policy_bytes(IndexedPalette::Xterm), b"Xterm");
+        assert_eq!(
+            indexed_policy_bytes(IndexedPalette::Xterm),
+            format!("{:?}", IndexedPalette::Xterm).as_bytes()
+        );
+        for cursor in [CursorPolicy::Show, CursorPolicy::Hide] {
+            assert_eq!(
+                cursor_policy_bytes(cursor),
+                format!("{cursor:?}").as_bytes()
+            );
+        }
+        for phase in [BlinkPhase::On, BlinkPhase::Off] {
+            assert_eq!(blink_phase_bytes(phase), format!("{phase:?}").as_bytes());
+        }
+        for missing in [MissingGlyphPolicy::Strict, MissingGlyphPolicy::Placeholder] {
+            assert_eq!(
+                missing_policy_bytes(missing),
+                format!("{missing:?}").as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn vendored_is_cached_and_verified() {
+        // Same value across calls (the second serves the cache), and the
+        // pins still describe the vendored bytes exactly.
+        let a = RenderProfile::vendored();
+        let b = RenderProfile::vendored();
+        assert_eq!(a.hash(), b.hash());
+        assert_eq!(
+            a.face_hashes(),
+            &[
+                VENDORED_FONT_SHA256.to_string(),
+                VENDORED_FONT_BOLD_SHA256.to_string(),
+                VENDORED_FONT_ITALIC_SHA256.to_string(),
+                VENDORED_FONT_BOLD_ITALIC_SHA256.to_string(),
+            ]
+        );
+        for (bytes, pin) in [
+            (a.faces().regular, VENDORED_FONT_SHA256),
+            (a.faces().bold, VENDORED_FONT_BOLD_SHA256),
+            (a.faces().italic, VENDORED_FONT_ITALIC_SHA256),
+            (a.faces().bold_italic, VENDORED_FONT_BOLD_ITALIC_SHA256),
+        ] {
+            assert_eq!(font_sha256(bytes), pin);
+        }
     }
 }

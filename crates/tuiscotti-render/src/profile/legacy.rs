@@ -1,6 +1,6 @@
 //! Legacy [`Profile`]: geometry, palette, cursor policy.
 
-use super::{FontFaces, VENDORED_FONT};
+use super::{FontFaces, VENDORED_FONT_SHA256};
 use sha2::{Digest, Sha256};
 
 /// Rendering profile. [`Profile::default_profile`] is the reproducible gate.
@@ -37,6 +37,11 @@ impl Profile {
     /// The reproducible gate profile. Geometry is measured from the vendored
     /// font at init (see [`crate::render::measure`]) and then pinned here as
     /// constants so a font change fails loudly instead of shifting pixels.
+    ///
+    /// The font identity is the vendored pin itself rather than a fresh hash
+    /// of the font bytes: [`RenderProfile::vendored`](super::RenderProfile::vendored)
+    /// and the Insta pin check verify bytes-against-pin on their own paths,
+    /// so re-hashing ~2.5MB here on every construction bought no verification.
     #[must_use]
     pub fn default_profile() -> Self {
         Self {
@@ -48,7 +53,7 @@ impl Profile {
             scale: 2,
             default_fg: tuiscotti_core::frame::Rgb::new(0xd0, 0xd0, 0xd0),
             default_bg: tuiscotti_core::frame::Rgb::new(0x00, 0x00, 0x00),
-            font_sha256: font_sha256(VENDORED_FONT),
+            font_sha256: VENDORED_FONT_SHA256.to_string(),
             font_desc: "vendored JetBrainsMonoNerdFontMono-Regular (SIL OFL 1.1)".to_string(),
             cursor_visible: true,
         }
@@ -66,20 +71,25 @@ impl Profile {
     /// field equals [`Profile::default_profile`]. The shared-renderer
     /// fast path ([`crate::render::Renderer::with_profile`]) serves only
     /// these; anything else renders through a fresh instance.
+    ///
+    /// Compares against the pinned constants directly (font identity against
+    /// [`VENDORED_FONT_SHA256`]) instead of constructing a fresh default:
+    /// no ~2.5MB re-hash per call. The values below mirror
+    /// [`Profile::default_profile`] field-for-field; the `default_gate`
+    /// test pins the two together.
     #[must_use]
     pub fn is_default_gate(&self) -> bool {
-        let d = Self::default_profile();
-        self.name == d.name
-            && self.font_px.to_bits() == d.font_px.to_bits()
-            && self.cell_w == d.cell_w
-            && self.cell_h == d.cell_h
-            && self.pad == d.pad
-            && self.scale == d.scale
-            && self.default_fg == d.default_fg
-            && self.default_bg == d.default_bg
-            && self.font_sha256 == d.font_sha256
-            && self.font_desc == d.font_desc
-            && self.cursor_visible == d.cursor_visible
+        self.name == "tuiscotti-default"
+            && self.font_px.to_bits() == 16.0f32.to_bits()
+            && self.cell_w == 10
+            && self.cell_h == 21
+            && self.pad == 12
+            && self.scale == 2
+            && self.default_fg == tuiscotti_core::frame::Rgb::new(0xd0, 0xd0, 0xd0)
+            && self.default_bg == tuiscotti_core::frame::Rgb::new(0x00, 0x00, 0x00)
+            && self.font_sha256 == VENDORED_FONT_SHA256
+            && self.font_desc == "vendored JetBrainsMonoNerdFontMono-Regular (SIL OFL 1.1)"
+            && self.cursor_visible
     }
 
     /// A reusable [`crate::render::Renderer`] pinned to this profile: faces
@@ -111,4 +121,29 @@ impl Profile {
 #[must_use]
 pub fn font_sha256(bytes: &[u8]) -> String {
     crate::hex_bytes(&Sha256::digest(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{VENDORED_FONT, VENDORED_FONT_SHA256};
+    use super::*;
+
+    #[test]
+    fn default_gate_matches_default_profile() {
+        // Pins `is_default_gate` to `default_profile` field-for-field: the
+        // gate compares against literals (no per-call hash), so any drift
+        // between the two must fail here, not silently fork the fast path.
+        let d = Profile::default_profile();
+        assert!(d.is_default_gate());
+        assert_eq!(d.font_sha256, VENDORED_FONT_SHA256);
+        // The pin still describes the vendored bytes exactly: the const
+        // substitution is value-identical to the hash it replaced.
+        assert_eq!(font_sha256(VENDORED_FONT), VENDORED_FONT_SHA256);
+        let mut scaled = d.clone();
+        scaled.scale = 1;
+        assert!(!scaled.is_default_gate());
+        let mut renamed = d;
+        renamed.font_sha256 = "00".repeat(32);
+        assert!(!renamed.is_default_gate());
+    }
 }
