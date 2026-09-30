@@ -7,14 +7,13 @@ use std::time::Duration;
 use tuiscotti_core::locate::{Locator, Span};
 
 use super::error::TuiError;
-use super::exit::process_exists;
 use super::input_types::{
     Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Signal, Wheel, parse_chord,
 };
 use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 use super::session::Session;
 use super::session_teardown::recv_reply;
-use super::worker::{Input, MouseAction, Op};
+use super::worker::{CtlOp, Input, MouseAction, Op};
 use crate::bound_locator::ActionError;
 
 impl Session {
@@ -294,41 +293,17 @@ impl Session {
         recv_reply(&rx, "resize")
     }
 
-    /// Deliver a signal to the direct child (Unix only).
+    /// Deliver a signal to the direct child (Unix only). Delivery runs on
+    /// the worker — the sole reaper — over the priority control channel, so
+    /// the pid is verified unreaped at delivery time and no recycled pid
+    /// can be signalled (LIFE-2).
     ///
     /// # Errors
     ///
     /// Returns `TuiError` if the child exited or the signal failed.
-    #[cfg(unix)]
     pub fn signal(&self, signal: Signal) -> Result<(), TuiError> {
-        let pid = self
-            .pid
-            .ok_or_else(|| TuiError::Signal("child PID unknown on this platform".to_string()))?;
-        if self.shared.exit().is_some() {
-            return Err(TuiError::ChildExited("child already exited".to_string()));
-        }
-        // No libc: `kill(1)` exit status follows the `pid_alive` convention
-        // (the workspace forbids `unsafe`). A failed signal against a dead
-        // pid still maps to `ChildExited`, matching the old ESRCH branch.
-        let delivered = std::process::Command::new("kill")
-            .arg(format!("-{}", signal.number()))
-            .arg(pid.to_string())
-            .status()
-            .is_ok_and(|s| s.success());
-        if delivered {
-            return Ok(());
-        }
-        if !process_exists(pid) {
-            return Err(TuiError::ChildExited(format!(
-                "child {pid} no longer exists"
-            )));
-        }
-        Err(TuiError::Signal(format!("kill({pid}) failed")))
-    }
-
-    /// Non-Unix stub: signals are unsupported.
-    #[cfg(not(unix))]
-    pub fn signal(&self, _signal: Signal) -> Result<(), TuiError> {
-        Err(TuiError::Unsupported("signals require a Unix platform"))
+        let (tx, rx) = mpsc::channel();
+        self.send_ctl(CtlOp::Signal { signal, reply: tx })?;
+        recv_reply(&rx, "signal")
     }
 }

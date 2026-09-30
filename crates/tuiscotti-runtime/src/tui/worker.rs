@@ -13,7 +13,7 @@ use tuiscotti_core::screen::Observation;
 use crate::bound_locator::ActionError;
 
 use super::error::TuiError;
-use super::input_types::{Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Wheel};
+use super::input_types::{Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Signal, Wheel};
 use super::limits::{COALESCE_BYTES, KILL_GRACE, PTY_LIFECYCLE, WORKER_TICK};
 use super::shared::Shared;
 use super::worker_ctx::WorkerCtx;
@@ -47,7 +47,12 @@ pub(crate) enum Input {
 
 pub(crate) enum Op {
     Feed(Vec<u8>),
-    Eof(Option<String>),
+    /// Clean reader EOF (`read` returned 0). Read errors travel as
+    /// [`Op::ReadError`] instead — never conflated (LIFE-3).
+    Eof,
+    /// The reader died with an error (e.g. Linux EIO after child death).
+    /// Recorded as evidence; the reaped exit status stays authoritative.
+    ReadError(String),
     Observe {
         reply: mpsc::Sender<Result<Observation, TuiError>>,
     },
@@ -70,7 +75,17 @@ pub(crate) enum Op {
         rows: u16,
         reply: mpsc::Sender<Result<(), TuiError>>,
     },
+}
+
+/// Priority control ops (LIFE-7): stdin close, signal delivery, and
+/// shutdown bypass the mixed op queue on a dedicated channel, so they stay
+/// serviceable under flood or while a write is stuck.
+pub(crate) enum CtlOp {
     CloseInput {
+        reply: mpsc::Sender<Result<(), TuiError>>,
+    },
+    Signal {
+        signal: Signal,
         reply: mpsc::Sender<Result<(), TuiError>>,
     },
     Shutdown,
@@ -126,12 +141,13 @@ impl WorkerEventState {
 pub(crate) struct WorkerParams {
     pub(crate) master: Box<dyn MasterPty + Send>,
     pub(crate) child: Box<dyn PtyChild + Send + Sync>,
-    pub(crate) writer: Box<dyn std::io::Write + Send>,
+    pub(crate) writer: super::encode::WriteHandle,
     pub(crate) term_config: TermConfig,
     pub(crate) cols: u16,
     pub(crate) rows: u16,
     pub(crate) pid: Option<u32>,
     pub(crate) op_rx: mpsc::Receiver<Op>,
+    pub(crate) ctl_rx: mpsc::Receiver<CtlOp>,
     pub(crate) shared: Arc<Shared>,
 }
 
@@ -145,6 +161,7 @@ pub(crate) fn run_worker(p: WorkerParams) {
         rows,
         pid,
         op_rx,
+        ctl_rx,
         shared,
     } = p;
     let (event_tx, event_rx) = mpsc::channel::<Event>();
@@ -157,9 +174,14 @@ pub(crate) fn run_worker(p: WorkerParams) {
     ctx.publish_initial(cols, rows);
 
     loop {
+        // Control first (LIFE-7): shutdown/close/signal never wait behind
+        // a flooded op queue.
+        if ctx.service_ctl(&ctl_rx, &op_rx) {
+            return;
+        }
         match op_rx.recv_timeout(WORKER_TICK) {
             Ok(op) => {
-                if dispatch(&mut ctx, op, &op_rx) {
+                if dispatch(&mut ctx, op, &op_rx, &ctl_rx) {
                     return;
                 }
             }
@@ -169,12 +191,20 @@ pub(crate) fn run_worker(p: WorkerParams) {
                 return;
             }
         }
+        if ctx.service_ctl(&ctl_rx, &op_rx) {
+            return;
+        }
         ctx.poll_exit_progress();
     }
 }
 
 /// Dispatch one op; returns true when the loop must exit.
-fn dispatch(ctx: &mut WorkerCtx, op: Op, op_rx: &mpsc::Receiver<Op>) -> bool {
+fn dispatch(
+    ctx: &mut WorkerCtx,
+    op: Op,
+    op_rx: &mpsc::Receiver<Op>,
+    ctl_rx: &mpsc::Receiver<CtlOp>,
+) -> bool {
     match op {
         Op::Feed(bytes) => {
             // Coalesce (F12): merge immediately-pending `Feed` batches up
@@ -196,53 +226,48 @@ fn dispatch(ctx: &mut WorkerCtx, op: Op, op_rx: &mpsc::Receiver<Op>) -> bool {
             }
             ctx.handle_feed(&merged);
             match pending {
-                Some(next) => dispatch_one(ctx, next),
+                Some(next) => dispatch_one(ctx, next, op_rx, ctl_rx),
                 None => false,
             }
         }
-        other => dispatch_one(ctx, other),
+        other => dispatch_one(ctx, other, op_rx, ctl_rx),
     }
 }
 
 /// Dispatch one op without coalescing; true requests loop exit.
-fn dispatch_one(ctx: &mut WorkerCtx, op: Op) -> bool {
+fn dispatch_one(
+    ctx: &mut WorkerCtx,
+    op: Op,
+    op_rx: &mpsc::Receiver<Op>,
+    ctl_rx: &mpsc::Receiver<CtlOp>,
+) -> bool {
     match op {
         Op::Feed(bytes) => {
             ctx.handle_feed(&bytes);
             false
         }
-        Op::Eof(read_err) => {
-            ctx.handle_eof(read_err.as_deref());
+        Op::Eof => {
+            ctx.handle_eof();
+            false
+        }
+        Op::ReadError(msg) => {
+            ctx.handle_read_error(&msg);
             false
         }
         Op::Observe { reply } => {
             ctx.handle_observe(&reply);
             false
         }
-        Op::Input { input, reply } => {
-            ctx.handle_input(&input, &reply);
-            false
-        }
+        Op::Input { input, reply } => ctx.handle_input(&input, &reply, op_rx, ctl_rx),
         Op::ClickTarget {
             locator,
             button,
             mods,
             reply,
-        } => {
-            ctx.handle_click_target(&locator, button, mods, &reply);
-            false
-        }
+        } => ctx.handle_click_target(&locator, button, mods, &reply, op_rx, ctl_rx),
         Op::Resize { cols, rows, reply } => {
             ctx.handle_resize(cols, rows, &reply);
             false
-        }
-        Op::CloseInput { reply } => {
-            ctx.handle_close_input(&reply);
-            false
-        }
-        Op::Shutdown => {
-            ctx.handle_shutdown();
-            true
         }
     }
 }

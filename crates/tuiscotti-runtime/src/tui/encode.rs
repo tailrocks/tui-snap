@@ -1,4 +1,11 @@
 //! Input encoding, worker side: bytes derived from the live `TermMode`.
+//!
+//! Writes never run on the worker (LIFE-6): a dedicated writer thread owns
+//! the raw PTY writer, so a child that stops reading wedges only that
+//! thread. The worker sends acknowledged write requests with a bound and
+//! keeps servicing control ops while waiting.
+
+use std::sync::mpsc;
 
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions as GridDims;
@@ -8,34 +15,129 @@ use portable_pty::{MasterPty, PtySize};
 use super::encode_key::encode_key;
 use super::error::TuiError;
 use super::input_types::{MouseButton, MouseMods, Wheel};
+use super::limits::WRITE_QUEUE_LIMIT;
 use super::worker::{Input, MouseAction, WorkerDims};
 
-pub(crate) fn apply_input<T: EventListener>(
-    term: &mut Term<T>,
-    input: &Input,
-    writer: Option<&mut (dyn std::io::Write + Send + 'static)>,
-    exited: bool,
-) -> Result<(), TuiError> {
-    if exited {
-        return Err(TuiError::ChildExited("child already exited".to_string()));
+/// One writer-thread request. `Bytes` is acknowledged (the worker waits
+/// with a bound); `Reply` is best-effort (dropped when the queue is full,
+/// so query replies never stall the worker); `Close` drops the PTY writer
+/// (stdin EOF) after all earlier requests complete.
+pub(crate) enum WriteReq {
+    Bytes {
+        bytes: Vec<u8>,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
+    Reply(Vec<u8>),
+    Close,
+}
+
+/// Worker-side handle to the writer thread. Cloneable; the writer thread
+/// exits once every handle is dropped (or is detached with a diagnostic
+/// when stuck in a write — see teardown).
+#[derive(Clone)]
+pub(crate) struct WriteHandle {
+    pub(crate) tx: mpsc::SyncSender<WriteReq>,
+}
+
+impl WriteHandle {
+    /// Best-effort terminal-query reply: never blocks the worker.
+    pub(crate) fn reply_best_effort(&self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        // Full queue means a stuck writer; dropping one reply keeps the
+        // worker responsive, which is the point of the split.
+        if self.tx.try_send(WriteReq::Reply(bytes.to_vec())).is_err() {
+            // Writer stuck or gone; the reply is moot.
+        }
     }
-    let writer = writer.ok_or_else(|| TuiError::Closed("stdin is closed".to_string()))?;
+
+    /// Enqueue stdin close (stdin EOF once earlier writes complete).
+    /// Spins briefly: the worker is serial, so at close time no write of
+    /// ours is outstanding and room appears as soon as the writer drains.
+    pub(crate) fn close_input(&self) -> Result<(), TuiError> {
+        let mut req = WriteReq::Close;
+        for _ in 0..1000 {
+            match self.tx.try_send(req) {
+                Ok(()) => return Ok(()),
+                Err(mpsc::TrySendError::Disconnected(_)) => {
+                    return Err(TuiError::Closed("writer thread is gone".to_string()));
+                }
+                Err(mpsc::TrySendError::Full(returned)) => {
+                    req = returned;
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+        }
+        Err(TuiError::Timeout(
+            "close stdin: writer queue stayed full".to_string(),
+        ))
+    }
+}
+
+/// Spawn the writer thread owning `writer`. The thread serves requests in
+/// order until every [`WriteHandle`] is dropped.
+pub(crate) fn spawn_writer_thread(
+    writer: Box<dyn std::io::Write + Send>,
+) -> Result<(WriteHandle, std::thread::JoinHandle<()>), String> {
+    let (tx, rx) = mpsc::sync_channel::<WriteReq>(WRITE_QUEUE_LIMIT);
+    let thread = std::thread::Builder::new()
+        .name("tuiscotti-tui-writer".to_string())
+        .spawn(move || run_writer(writer, &rx))
+        .map_err(|e| format!("writer spawn failed: {e}"))?;
+    Ok((WriteHandle { tx }, thread))
+}
+
+fn run_writer(mut writer: Box<dyn std::io::Write + Send>, rx: &mpsc::Receiver<WriteReq>) {
+    let mut open = true;
+    for req in rx {
+        match req {
+            WriteReq::Bytes { bytes, reply } => {
+                let r = if open {
+                    writer.write_all(&bytes).map_err(|e| e.to_string())
+                } else {
+                    Err("stdin is closed".to_string())
+                };
+                // The worker may have timed out waiting; the write outcome
+                // still stands, and the reply is then moot.
+                if reply.send(r).is_err() {
+                    // Worker moved on; the write outcome stands.
+                }
+            }
+            WriteReq::Reply(bytes) => {
+                if open && writer.write_all(&bytes).is_err() {
+                    // A failed reply write means the PTY is gone; later
+                    // requests report it through their own outcomes.
+                }
+            }
+            WriteReq::Close => {
+                open = false;
+                // Drop the raw writer now: EOF to the child even though the
+                // thread itself lives until the handles drop. Assignment
+                // drops the old writer; the sink is never written (`open`
+                // gates every path above).
+                writer = Box::new(std::io::sink());
+            }
+        }
+    }
+}
+
+/// Encode one input against the live `TermMode` (pure: no I/O). `None` or
+/// empty means a successful no-op (e.g. a release without kitty).
+pub(crate) fn encode_input<T: EventListener>(
+    term: &Term<T>,
+    input: &Input,
+) -> Result<Option<Vec<u8>>, TuiError> {
     let mode = *term.mode();
-    let bytes: Option<Vec<u8>> = match input {
-        Input::Bytes(b) => Some(b.clone()),
-        Input::Paste(text) => Some(encode_paste(text, mode)?),
-        Input::Key { key, mods, kind } => encode_key(key, *mods, *kind, mode)?,
+    match input {
+        Input::Bytes(b) => Ok(Some(b.clone())),
+        Input::Paste(text) => Ok(Some(encode_paste(text, mode)?)),
+        Input::Key { key, mods, kind } => encode_key(key, *mods, *kind, mode),
         Input::Mouse { action, x, y, mods } => {
             let (cols, rows) = (term.columns(), term.screen_lines());
-            Some(encode_mouse(action, *x, *y, *mods, mode, cols, rows)?)
+            Ok(Some(encode_mouse(action, *x, *y, *mods, mode, cols, rows)?))
         }
-        Input::Focus(focused) => Some(encode_focus(*focused, mode)?),
-    };
-    match bytes {
-        Some(b) if !b.is_empty() => writer
-            .write_all(&b)
-            .map_err(|e| TuiError::Io(format!("pty write failed: {e}"))),
-        _ => Ok(()),
+        Input::Focus(focused) => Ok(Some(encode_focus(*focused, mode)?)),
     }
 }
 

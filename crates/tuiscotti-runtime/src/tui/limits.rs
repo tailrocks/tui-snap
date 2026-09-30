@@ -46,3 +46,18 @@ pub(crate) const OP_SEND_TIMEOUT: Duration = Duration::from_secs(10);
 /// per cap instead of one per 8 KiB batch. Larger floods keep the remainder
 /// queued (bounded by [`OP_QUEUE_LIMIT`]) for the next advance.
 pub(crate) const COALESCE_BYTES: usize = 256 * 1024;
+/// Capacity of the worker→writer request queue (LIFE-6): the worker
+/// processes ops serially, so at most one acknowledged write plus a few
+/// best-effort query replies are ever outstanding; the bound keeps a
+/// stuck writer from piling unbounded input behind it.
+pub(crate) const WRITE_QUEUE_LIMIT: usize = 16;
+/// Bound for one worker-side PTY write, enqueue plus acknowledgement
+/// (LIFE-6). Healthy PTY writes complete in microseconds; past this bound
+/// the writer is genuinely stuck and the input fails instead of wedging
+/// the worker. Control ops stay serviceable while waiting (LIFE-7): the
+/// worker pumps the control channel in [`WORKER_TICK`] slices.
+pub(crate) const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Capacity of the session→worker control channel (LIFE-7):
+/// `CloseInput`/`Signal`/`Shutdown` bypass the mixed op queue so teardown
+/// and signals stay serviceable under flood or a stuck write.
+pub(crate) const CTL_QUEUE_LIMIT: usize = 8;

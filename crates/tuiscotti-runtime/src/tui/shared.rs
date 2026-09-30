@@ -23,12 +23,34 @@ pub struct SessionMeta {
     pub rows: u16,
     /// Why the latest capture was taken.
     pub reason: CaptureReason,
+    /// How the final drain completed, once the exit revision is published
+    /// (LIFE-8). `None` until then; later manual observations preserve it.
+    pub drain: Option<DrainCause>,
+}
+
+/// How the worker's final output drain completed (LIFE-3/LIFE-8):
+/// reader EOF, drain-grace expiry, or forced shutdown. Never conflated:
+/// a PTY read error is reported separately (see
+/// [`Session::read_error`](super::session::Session::read_error)) and the
+/// reaped child status stays authoritative for the exit cause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrainCause {
+    /// The reader observed clean EOF before the drain completed.
+    Eof,
+    /// The drain grace expired without reader EOF (a grandchild may still
+    /// hold the PTY open, or the reader died with an error).
+    GraceExpiry,
+    /// Forced teardown published the final revision.
+    Shutdown,
 }
 
 struct SharedState {
     latest: Option<Observation>,
     meta: Option<SessionMeta>,
     exit: Option<ExitStatus>,
+    exit_observation: Option<Observation>,
+    drain: Option<DrainCause>,
+    read_error: Option<String>,
     closed: bool,
     teardown_error: Option<String>,
 }
@@ -45,6 +67,9 @@ impl Shared {
                 latest: None,
                 meta: None,
                 exit: None,
+                exit_observation: None,
+                drain: None,
+                read_error: None,
                 closed: false,
                 teardown_error: None,
             }),
@@ -60,19 +85,61 @@ impl Shared {
         if exit.is_some() {
             s.exit = exit;
         }
+        // A manual observation after the exit revision must not clobber
+        // the recorded drain cause (LIFE-8).
+        let drain = s.drain;
         s.meta = Some(SessionMeta {
             revision: obs.revision,
             cols: obs.screen.cols(),
             rows: obs.screen.rows(),
             reason: obs.reason,
+            drain,
         });
         s.latest = Some(obs);
         drop(s);
         self.changed.notify_all();
     }
 
-    pub(crate) fn publish_exit(&self, status: ExitStatus, obs: Observation) {
+    pub(crate) fn publish_exit(&self, status: ExitStatus, obs: Observation, drain: DrainCause) {
+        {
+            let mut s = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            s.drain = Some(drain);
+            s.exit_observation = Some(obs.clone());
+        }
         self.publish(obs, Some(status));
+    }
+
+    /// The exit-revision observation, if published. [`Session::wait_exit`]
+    /// returns this — never a later manual observation (LIFE-8).
+    pub(crate) fn exit_observation(&self) -> Option<Observation> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .exit_observation
+            .clone()
+    }
+
+    /// Record a PTY read error distinctly from EOF (LIFE-3). First error
+    /// wins; routine post-exit EIO is evidence, never a teardown failure.
+    pub(crate) fn record_read_error(&self, msg: &str) {
+        let mut s = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if s.read_error.is_none() {
+            s.read_error = Some(msg.to_string());
+        }
+    }
+
+    pub(crate) fn read_error(&self) -> Option<String> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .read_error
+            .clone()
     }
 
     pub(crate) fn latest(&self) -> Option<Observation> {

@@ -7,15 +7,20 @@ use std::time::{Duration, Instant};
 
 use super::error::{CancelToken, TuiError, WaitError};
 use super::exit::ExitStatus;
-use super::limits::JOIN_GRACE;
-use super::session::Session;
+use super::limits::{JOIN_GRACE, OP_SEND_TIMEOUT};
+use super::session::{Session, send_bounded};
 use super::shared::Shared;
-use super::worker::Op;
+use super::worker::CtlOp;
 
 impl Session {
     /// Graceful shutdown: EOF stdin, wait for natural exit until `deadline`,
     /// reap. On timeout the child is killed and a timeout error (with the
     /// final evidence revision noted) is returned; teardown still completes.
+    ///
+    /// Mode note (LIFE-1): the EOF is delivered as a VEOF byte, which the
+    /// line discipline only interprets in canonical mode. A child in raw
+    /// mode consumes it as input data and will not exit from it — `finish`
+    /// then reports a timeout and kills the child during teardown.
     ///
     /// # Errors
     ///
@@ -85,8 +90,25 @@ impl Session {
 
     pub(crate) fn close_input(&self) -> Result<(), TuiError> {
         let (tx, rx) = mpsc::channel();
-        self.send(Op::CloseInput { reply: tx })?;
+        self.send_ctl(CtlOp::CloseInput { reply: tx })?;
         recv_reply(&rx, "close stdin")
+    }
+
+    /// Send one priority control op, bypassing the mixed op queue (LIFE-7).
+    pub(crate) fn send_ctl(&self, op: CtlOp) -> Result<(), TuiError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(TuiError::Closed("session is closed".to_string()));
+        }
+        // Clone under the lock, send outside it (same discipline as `send`).
+        let tx = self
+            .ctl_tx
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        match tx {
+            Some(tx) => send_bounded(&tx, op, OP_SEND_TIMEOUT),
+            None => Err(TuiError::Closed("session is closed".to_string())),
+        }
     }
 
     /// Run teardown exactly once; never panics (safe from `Drop`).
@@ -97,16 +119,25 @@ impl Session {
             self.join_threads();
             return;
         }
-        let tx = self
-            .op_tx
+        // Drop the op sender first: only the reader still sends then, so
+        // the worker's post-shutdown queue drain ends at reader exit.
+        drop(
+            self.op_tx
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take(),
+        );
+        let ctl = self
+            .ctl_tx
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
-        if let Some(tx) = tx {
-            // Bounded: the worker usually drains immediately, but a stuck
-            // worker must never hang teardown — the joins below still reap,
-            // and the dropped sender disconnects the worker once it drains.
-            if super::session::send_bounded(&tx, Op::Shutdown, JOIN_GRACE).is_err() {
+        if let Some(tx) = ctl {
+            // Bounded: the worker usually drains control immediately (it
+            // pumps the channel even mid-write), but a stuck worker must
+            // never hang teardown — the joins below still reap, and the
+            // dropped senders disconnect the worker once it drains.
+            if send_bounded(&tx, CtlOp::Shutdown, JOIN_GRACE).is_err() {
                 // Worker stuck or gone; join_threads below still reaps.
             }
         }
@@ -116,11 +147,15 @@ impl Session {
     pub(crate) fn join_threads(&self) {
         let worker = self.worker.lock().map_or(None, |mut g| g.take());
         let reader = self.reader.lock().map_or(None, |mut g| g.take());
+        let writer = self.writer.lock().map_or(None, |mut g| g.take());
         if let Some(h) = worker {
             join_one(h, &self.shared, "worker", JOIN_GRACE);
         }
         if let Some(h) = reader {
             join_one(h, &self.shared, "reader", JOIN_GRACE);
+        }
+        if let Some(h) = writer {
+            join_one(h, &self.shared, "writer", JOIN_GRACE);
         }
         self.shared.mark_closed();
     }

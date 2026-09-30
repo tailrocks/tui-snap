@@ -9,11 +9,10 @@ use tuiscotti_core::locate::{LocateError, Locator, Span};
 use tuiscotti_core::screen::CaptureReason;
 
 use super::super::capture::drain_term_events;
-use super::super::encode::apply_input;
 use super::super::error::TuiError;
 use super::super::frame::build_observation;
 use super::super::input_types::{MouseButton, MouseMods};
-use super::super::worker::{Input, MouseAction, cols_of, rows_of};
+use super::super::worker::{CtlOp, Input, MouseAction, Op, cols_of, rows_of};
 use super::WorkerCtx;
 use crate::bound_locator::ActionError;
 
@@ -36,12 +35,78 @@ impl WorkerCtx {
         button: MouseButton,
         mods: MouseMods,
         reply: &mpsc::Sender<Result<Span, ActionError>>,
-    ) {
+        op_rx: &mpsc::Receiver<Op>,
+        ctl_rx: &mpsc::Receiver<CtlOp>,
+    ) -> bool {
+        let Some((span, x, y)) = self.resolve_click_target(locator, reply) else {
+            return false;
+        };
+        let down = Input::Mouse {
+            action: MouseAction::Press(button),
+            x,
+            y,
+            mods,
+        };
+        match self.apply_encoded(&down, op_rx, ctl_rx) {
+            Ok(true) => return Self::shutdown_during_click(reply),
+            Ok(false) => {}
+            Err(e) => {
+                if reply.send(Err(ActionError::Session(e))).is_err() {
+                    // Requester gone; nothing was delivered.
+                }
+                return false;
+            }
+        }
+        let up = Input::Mouse {
+            action: MouseAction::Release,
+            x,
+            y,
+            mods,
+        };
+        match self.apply_encoded(&up, op_rx, ctl_rx) {
+            Ok(true) => return Self::shutdown_during_click(reply),
+            Ok(false) => {}
+            Err(e) => {
+                // The press WAS delivered: name the partial state so the caller
+                // does not retry. (Only a PTY I/O failure can land here — the
+                // mode gate cannot change mid-op — but report whatever came.)
+                let partial = match e {
+                    TuiError::Io(msg) => TuiError::Io(format!(
+                        "click press delivered but release failed ({msg}); do not retry"
+                    )),
+                    other => other,
+                };
+                if reply.send(Err(ActionError::Session(partial))).is_err() {
+                    // Requester gone; the partial delivery stands.
+                }
+                return false;
+            }
+        }
         drain_term_events(
             &mut self.term,
             &self.event_rx,
             &mut self.events,
-            self.writer.as_deref_mut(),
+            self.writer.as_ref(),
+        );
+        if reply.send(Ok(span)).is_err() {
+            // Requester gone; the delivered click stands.
+        }
+        false
+    }
+
+    /// Build one fresh observation at the worker's current revision and
+    /// resolve the locator's unique viewport target against it. Replies on
+    /// every failure path; `None` means the reply was already sent.
+    fn resolve_click_target(
+        &mut self,
+        locator: &Locator,
+        reply: &mpsc::Sender<Result<Span, ActionError>>,
+    ) -> Option<(Span, u16, u16)> {
+        drain_term_events(
+            &mut self.term,
+            &self.event_rx,
+            &mut self.events,
+            self.writer.as_ref(),
         );
         let (cols, rows) = (cols_of(&self.term), rows_of(&self.term));
         let obs = match build_observation(
@@ -59,7 +124,7 @@ impl WorkerCtx {
                 if reply.send(Err(ActionError::Session(e))).is_err() {
                     // Requester gone; nothing was delivered.
                 }
-                return;
+                return None;
             }
         };
         self.shared.publish(obs.clone(), None);
@@ -69,7 +134,7 @@ impl WorkerCtx {
                 if reply.send(Err(ActionError::Locate(e))).is_err() {
                     // Requester gone; nothing was delivered.
                 }
-                return;
+                return None;
             }
         };
         let span = pending.span().clone();
@@ -84,50 +149,23 @@ impl WorkerCtx {
             {
                 // Requester gone; nothing was delivered.
             }
-            return;
+            return None;
         };
-        let exited = self.exited.is_some();
-        let down = Input::Mouse {
-            action: MouseAction::Press(button),
-            x,
-            y,
-            mods,
-        };
-        if let Err(e) = apply_input(&mut self.term, &down, self.writer.as_deref_mut(), exited) {
-            if reply.send(Err(ActionError::Session(e))).is_err() {
-                // Requester gone; nothing was delivered.
-            }
-            return;
-        }
-        let up = Input::Mouse {
-            action: MouseAction::Release,
-            x,
-            y,
-            mods,
-        };
-        if let Err(e) = apply_input(&mut self.term, &up, self.writer.as_deref_mut(), exited) {
-            // The press WAS delivered: name the partial state so the caller
-            // does not retry. (Only a PTY I/O failure can land here — the
-            // mode gate cannot change mid-op — but report whatever came.)
-            let partial = match e {
-                TuiError::Io(msg) => TuiError::Io(format!(
-                    "click press delivered but release failed ({msg}); do not retry"
-                )),
-                other => other,
-            };
-            if reply.send(Err(ActionError::Session(partial))).is_err() {
-                // Requester gone; the partial delivery stands.
-            }
-            return;
-        }
-        drain_term_events(
-            &mut self.term,
-            &self.event_rx,
-            &mut self.events,
-            self.writer.as_deref_mut(),
+        Some((span, x, y))
+    }
+
+    /// A shutdown landed mid-click and was serviced: the press or release
+    /// may already be delivered, so the reply names the partial state and
+    /// forbids retry. Always requests loop exit.
+    fn shutdown_during_click(reply: &mpsc::Sender<Result<Span, ActionError>>) -> bool {
+        let partial = TuiError::Closed(
+            "shutdown during click; press or release may already have been delivered, \
+             do not retry"
+                .to_string(),
         );
-        if reply.send(Ok(span)).is_err() {
-            // Requester gone; the delivered click stands.
+        if reply.send(Err(ActionError::Session(partial))).is_err() {
+            // Requester gone; the partial delivery stands.
         }
+        true
     }
 }

@@ -3,18 +3,17 @@
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
 
 use alacritty_terminal::term::Config as TermConfig;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::CommandBuilder;
 
-use super::capture::run_reader;
 use super::error::TuiError;
-use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, OP_QUEUE_LIMIT, PTY_LIFECYCLE};
+use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 use super::profile::TerminalProfile;
 use super::session::Session;
 use super::shared::Shared;
-use super::worker::{Op, WorkerParams, run_worker};
+use super::spawn::{StartedThreads, spawn_pty_child, start_session_threads};
 
 #[derive(Debug, Clone)]
 enum Program {
@@ -31,7 +30,10 @@ pub struct Tui {
     program: Program,
     extra_args: Vec<OsString>,
     size: (u16, u16),
-    env: Vec<(OsString, OsString)>,
+    /// Ordered child-env ops: `Some` sets, `None` removes (LIFE-9, mirroring
+    /// the piped `Command` surface).
+    env: Vec<(OsString, Option<OsString>)>,
+    env_clear: bool,
     cwd: Option<PathBuf>,
     profile: TerminalProfile,
 }
@@ -41,13 +43,23 @@ impl std::fmt::Debug for Tui {
         let redacted_env: Vec<(OsString, &str)> = self
             .env
             .iter()
-            .map(|(k, _)| (k.clone(), "<redacted>"))
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    if v.is_some() {
+                        "<redacted>"
+                    } else {
+                        "<removed>"
+                    },
+                )
+            })
             .collect();
         f.debug_struct("Tui")
             .field("program", &self.program)
             .field("extra_args", &self.extra_args)
             .field("size", &self.size)
             .field("env", &redacted_env)
+            .field("env_clear", &self.env_clear)
             .field("cwd", &self.cwd)
             .field("profile", &self.profile)
             .finish()
@@ -71,6 +83,7 @@ impl Tui {
             extra_args: Vec::new(),
             size: (80, 24),
             env: Vec::new(),
+            env_clear: false,
             cwd: None,
             profile: TerminalProfile::default(),
         }
@@ -92,6 +105,7 @@ impl Tui {
             extra_args: Vec::new(),
             size: (80, 24),
             env: Vec::new(),
+            env_clear: false,
             cwd: None,
             profile: TerminalProfile::default(),
         })
@@ -127,8 +141,41 @@ impl Tui {
     /// Child-only environment entry. Never touches the parent environment.
     #[must_use]
     pub fn env(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
-        self.env
-            .push((key.as_ref().to_os_string(), value.as_ref().to_os_string()));
+        self.env.push((
+            key.as_ref().to_os_string(),
+            Some(value.as_ref().to_os_string()),
+        ));
+        self
+    }
+
+    /// Child-only environment entries. Never touches the parent environment.
+    #[must_use]
+    pub fn envs<I, K, V>(mut self, vars: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in vars {
+            self.env
+                .push((k.as_ref().to_os_string(), Some(v.as_ref().to_os_string())));
+        }
+        self
+    }
+
+    /// Remove one variable from the child's environment.
+    #[must_use]
+    pub fn env_remove(mut self, key: impl AsRef<OsStr>) -> Self {
+        self.env.push((key.as_ref().to_os_string(), None));
+        self
+    }
+
+    /// Start the child with an empty environment (then apply `.env(...)`).
+    /// Unlike the default path, no implicit `TERM` is added: a cleared
+    /// environment carries exactly what the caller sets.
+    #[must_use]
+    pub fn env_clear(mut self, clear: bool) -> Self {
+        self.env_clear = clear;
         self
     }
 
@@ -149,6 +196,8 @@ impl Tui {
     }
 
     /// Spawn the child in a new PTY and start the session threads.
+    /// Every failure after the child exists rolls back (kill + reap) so a
+    /// failed spawn never orphans a live child (LIFE-4).
     ///
     /// # Errors
     ///
@@ -170,53 +219,41 @@ impl Tui {
         if argv.is_empty() {
             return Err(TuiError::Spawn("empty argv".to_string()));
         }
+        // The backend does not fail a bad cwd (the child would silently run
+        // in the parent directory), so validate up front: a session that
+        // cannot start in its requested directory must not start at all.
+        if let Some(cwd) = &self.cwd
+            && !cwd.is_dir()
+        {
+            return Err(TuiError::Spawn(format!(
+                "cwd {} is not a usable directory",
+                cwd.display()
+            )));
+        }
 
         let cmd = self.prepare_command(&argv);
-        let SpawnedPty {
-            master,
-            child,
-            reader,
-            writer,
-            pid,
-        } = spawn_pty_child(cmd, cols, rows)?;
-
-        // Bounded (F12): a flooding child blocks the reader on a full
-        // queue — backpressure through the PTY, like a real terminal —
-        // instead of piling unbounded `Feed` batches in memory.
-        let (op_tx, op_rx) = mpsc::sync_channel::<Op>(OP_QUEUE_LIMIT);
+        let spawned = spawn_pty_child(cmd, cols, rows)?;
+        let pid = spawned.pid;
         let shared = Arc::new(Shared::new());
         let term_config = TermConfig {
             kitty_keyboard: self.profile.kitty_keyboard,
             ..TermConfig::default()
         };
-
-        let params = WorkerParams {
-            master,
-            child,
-            writer,
-            term_config,
-            cols,
-            rows,
-            pid,
-            op_rx,
-            shared: Arc::clone(&shared),
-        };
-        let worker = std::thread::Builder::new()
-            .name("tuiscotti-tui-worker".to_string())
-            .spawn(move || run_worker(params))
-            .map_err(|e| TuiError::Spawn(format!("worker spawn failed: {e}")))?;
-
-        let feed_tx = op_tx.clone();
-        let reader_thread = std::thread::Builder::new()
-            .name("tuiscotti-tui-reader".to_string())
-            .spawn(move || run_reader(reader, &feed_tx))
-            .map_err(|e| TuiError::Spawn(format!("reader spawn failed: {e}")))?;
+        let StartedThreads {
+            op_tx,
+            ctl_tx,
+            worker,
+            reader_thread,
+            writer_thread,
+        } = start_session_threads(spawned, term_config, cols, rows, Arc::clone(&shared))?;
 
         let session = Session {
             op_tx: Mutex::new(Some(op_tx)),
+            ctl_tx: Mutex::new(Some(ctl_tx)),
             shared,
             worker: Mutex::new(Some(worker)),
             reader: Mutex::new(Some(reader_thread)),
+            writer: Mutex::new(Some(writer_thread)),
             closed: AtomicBool::new(false),
             pid,
         };
@@ -233,16 +270,23 @@ impl Tui {
     }
 
     /// Build the child command: program args, child-only env (with a
-    /// default `TERM` unless overridden), and the child cwd.
+    /// default `TERM` unless overridden or the environment was cleared),
+    /// and the child cwd.
     fn prepare_command(&self, argv: &[OsString]) -> CommandBuilder {
         let mut cmd = CommandBuilder::new(&argv[0]);
         for a in argv.iter().skip(1).chain(self.extra_args.iter()) {
             cmd.arg(a);
         }
-        for (k, v) in &self.env {
-            cmd.env(k, v);
+        if self.env_clear {
+            cmd.env_clear();
         }
-        if cmd.get_env("TERM").is_none() {
+        for (k, v) in &self.env {
+            match v {
+                Some(value) => cmd.env(k, value),
+                None => cmd.env_remove(k),
+            }
+        }
+        if cmd.get_env("TERM").is_none() && !self.env_clear {
             cmd.env("TERM", self.profile.term.clone());
         }
         if let Some(cwd) = &self.cwd {
@@ -250,57 +294,6 @@ impl Tui {
         }
         cmd
     }
-}
-
-/// An opened PTY pair with the child spawned and I/O handles taken.
-struct SpawnedPty {
-    master: Box<dyn portable_pty::MasterPty + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
-    reader: Box<dyn std::io::Read + Send>,
-    writer: Box<dyn std::io::Write + Send>,
-    pid: Option<u32>,
-}
-
-/// Open the PTY, spawn the child, and take I/O handles — all under the
-/// process-global lifecycle guard, released before the threads start.
-fn spawn_pty_child(cmd: CommandBuilder, cols: u16, rows: u16) -> Result<SpawnedPty, TuiError> {
-    let guard = PTY_LIFECYCLE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| TuiError::Spawn(format!("openpty failed: {e:#}")))?;
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| TuiError::Spawn(format!("spawn failed: {e:#}")))?;
-    // Drain discipline: take I/O handles before any wait can run.
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| TuiError::Spawn(format!("pty reader failed: {e:#}")))?;
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|e| TuiError::Spawn(format!("pty writer failed: {e:#}")))?;
-    child
-        .try_wait()
-        .map_err(|e| TuiError::Spawn(format!("child poll failed: {e:#}")))?;
-    let pid = child.process_id();
-    drop(guard);
-    Ok(SpawnedPty {
-        master: pair.master,
-        child,
-        reader,
-        writer,
-        pid,
-    })
 }
 
 /// Resolve a cargo-built binary through the canonical

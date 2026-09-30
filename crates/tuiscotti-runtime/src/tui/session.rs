@@ -14,15 +14,17 @@ use super::exit::{ExitStatus, ExitWait};
 use super::limits::{DEFAULT_STABLE_QUIET, OP_SEND_TIMEOUT};
 use super::session_teardown::recv_reply;
 use super::shared::{SessionMeta, Shared};
-use super::worker::{Input, Op};
+use super::worker::{CtlOp, Input, Op};
 
-/// Owned PTY session: the child, its emulator, and both I/O threads.
+/// Owned PTY session: the child, its emulator, and the I/O threads.
 /// `Send + Sync`; concurrent sessions are fully independent (R07).
 pub struct Session {
     pub(crate) op_tx: Mutex<Option<mpsc::SyncSender<Op>>>,
+    pub(crate) ctl_tx: Mutex<Option<mpsc::SyncSender<CtlOp>>>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) worker: Mutex<Option<std::thread::JoinHandle<()>>>,
     pub(crate) reader: Mutex<Option<std::thread::JoinHandle<()>>>,
+    pub(crate) writer: Mutex<Option<std::thread::JoinHandle<()>>>,
     pub(crate) closed: AtomicBool,
     pub(crate) pid: Option<u32>,
 }
@@ -75,6 +77,14 @@ impl Session {
     #[must_use]
     pub fn poll_exit(&self) -> Option<ExitStatus> {
         self.shared.exit()
+    }
+
+    /// First PTY read error observed by the reader thread, if any (LIFE-3).
+    /// Reported distinctly from EOF: a post-exit EIO is routine evidence,
+    /// never a teardown failure, and never changes the exit status.
+    #[must_use]
+    pub fn read_error(&self) -> Option<String> {
+        self.shared.read_error()
     }
 
     // -- observation ------------------------------------------------------
@@ -206,7 +216,9 @@ impl Session {
         })
     }
 
-    /// Wait until the direct child exits and is reaped.
+    /// Wait until the direct child exits and is reaped. The returned
+    /// observation is the published exit revision itself — never a later
+    /// manual observation (LIFE-8).
     ///
     /// # Errors
     ///
@@ -224,9 +236,15 @@ impl Session {
                 });
             }
             if let Some(status) = self.shared.exit() {
+                // Exit status and exit observation publish together; fall
+                // back to latest only if the store disagrees (unreachable).
+                let observation = self
+                    .shared
+                    .exit_observation()
+                    .map_or_else(|| self.latest_or_closed(), Ok)?;
                 return Ok(ExitWait {
                     status,
-                    observation: self.latest_or_closed()?,
+                    observation,
                 });
             }
             if Instant::now() >= deadline {
@@ -339,14 +357,15 @@ impl Session {
     }
 }
 
-/// Send one op on the bounded channel, waiting at most `bound` for the
-/// worker to drain (`SyncSender::send_timeout` is still unstable, so this
-/// spins on the stable `try_send`). A full queue past the bound means the
-/// worker is genuinely stuck — draining a flood is fast — so the send
-/// fails instead of blocking forever.
-pub(crate) fn send_bounded(
-    tx: &mpsc::SyncSender<Op>,
-    op: Op,
+/// Send one message on a bounded channel, waiting at most `bound` for
+/// the worker to drain (`SyncSender::send_timeout` is still unstable, so
+/// this spins on the stable `try_send`). A full queue past the bound means
+/// the worker is genuinely stuck — draining a flood is fast — so the send
+/// fails instead of blocking forever. Serves both the op queue (`Op`) and
+/// the priority control channel (`CtlOp`).
+pub(crate) fn send_bounded<T>(
+    tx: &mpsc::SyncSender<T>,
+    op: T,
     bound: Duration,
 ) -> Result<(), TuiError> {
     let deadline = Instant::now() + bound;
@@ -361,7 +380,7 @@ pub(crate) fn send_bounded(
                 op = returned;
                 if Instant::now() >= deadline {
                     return Err(TuiError::Timeout(
-                        "worker overloaded: op queue stayed full past the send bound".to_string(),
+                        "worker overloaded: queue stayed full past the send bound".to_string(),
                     ));
                 }
                 std::thread::sleep(Duration::from_millis(1));

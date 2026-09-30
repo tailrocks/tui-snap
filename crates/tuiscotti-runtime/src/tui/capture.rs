@@ -6,23 +6,24 @@ use alacritty_terminal::event::{Event, EventListener, WindowSize};
 use alacritty_terminal::term::Term;
 use alacritty_terminal::vte::ansi::Rgb as VteRgb;
 use tuiscotti_core::frame::Rgb;
-use tuiscotti_core::screen::CaptureReason;
 
-use super::exit::ExitStatus;
-use super::frame::build_observation;
-use super::shared::Shared;
+use super::encode::WriteHandle;
 use super::worker::{Op, WorkerEventState, cols_of, rows_of};
 
 /// Blocking PTY reads forwarded as ops. The channel is bounded (F12):
 /// a flooding child blocks this send — backpressure through the PTY,
 /// like a real terminal — instead of queueing unbounded batches.
+///
+/// Termination causes stay separated (LIFE-3): clean EOF (`Ok(0)`)
+/// reports [`Op::Eof`], a read error reports [`Op::ReadError`], and
+/// `Interrupted` retries — a signal never masquerades as EOF.
 pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::SyncSender<Op>) {
     let mut buf = vec![0u8; 8192];
     loop {
         match reader.read(&mut buf) {
             Ok(0) => {
                 // The worker may be gone already; then EOF is moot.
-                if tx.send(Op::Eof(None)).is_err() {
+                if tx.send(Op::Eof).is_err() {
                     // Worker gone; the reader still exits.
                 }
                 return;
@@ -32,9 +33,10 @@ pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::S
                     return;
                 }
             }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
             Err(e) => {
-                // The worker may be gone already; then EOF is moot.
-                if tx.send(Op::Eof(Some(e.to_string()))).is_err() {
+                // The worker may be gone already; then the error is moot.
+                if tx.send(Op::ReadError(e.to_string())).is_err() {
                     // Worker gone; the reader still exits.
                 }
                 return;
@@ -43,12 +45,14 @@ pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::S
     }
 }
 
-/// Query replies go back to the PTY; title/bells recorded.
+/// Query replies go back to the PTY; title/bells recorded. Replies are
+/// best-effort through the writer thread: a stuck writer drops them
+/// rather than stalling the worker (LIFE-6).
 pub(crate) fn drain_term_events<T: EventListener>(
     term: &mut Term<T>,
     event_rx: &mpsc::Receiver<Event>,
     events: &mut WorkerEventState,
-    mut writer: Option<&mut (dyn std::io::Write + Send + 'static)>,
+    writer: Option<&WriteHandle>,
 ) {
     while let Ok(event) = event_rx.try_recv() {
         match event {
@@ -56,28 +60,20 @@ pub(crate) fn drain_term_events<T: EventListener>(
             Event::ResetTitle => events.title = None,
             Event::Bell => events.bells += 1,
             Event::PtyWrite(text) => {
-                if let Some(w) = writer.as_deref_mut() {
-                    // A failed reply write means the PTY is gone; the drain
-                    // continues so remaining events still update state.
-                    if w.write_all(text.as_bytes()).is_err() {
-                        // PTY write failed; keep draining.
-                    }
+                if let Some(w) = writer {
+                    w.reply_best_effort(text.as_bytes());
                 }
             }
             Event::ClipboardLoad(_, respond) => {
                 // The harness holds no clipboard: answer honestly empty.
-                if let Some(w) = writer.as_deref_mut()
-                    && w.write_all(respond("").as_bytes()).is_err()
-                {
-                    // PTY write failed; keep draining.
+                if let Some(w) = writer {
+                    w.reply_best_effort(respond("").as_bytes());
                 }
             }
             Event::ColorRequest(index, respond) => {
                 let rgb = resolve_color(term, index);
-                if let Some(w) = writer.as_deref_mut()
-                    && w.write_all(respond(rgb).as_bytes()).is_err()
-                {
-                    // PTY write failed; keep draining.
+                if let Some(w) = writer {
+                    w.reply_best_effort(respond(rgb).as_bytes());
                 }
             }
             Event::TextAreaSizeRequest(respond) => {
@@ -88,10 +84,8 @@ pub(crate) fn drain_term_events<T: EventListener>(
                     cell_width: 8,
                     cell_height: 16,
                 };
-                if let Some(w) = writer.as_deref_mut()
-                    && w.write_all(respond(size).as_bytes()).is_err()
-                {
-                    // PTY write failed; keep draining.
+                if let Some(w) = writer {
+                    w.reply_best_effort(respond(size).as_bytes());
                 }
             }
             Event::ClipboardStore(_, _)
@@ -122,32 +116,5 @@ fn resolve_color<T: EventListener>(term: &Term<T>, index: usize) -> VteRgb {
         0..=255 => def(u8::try_from(index).unwrap_or(u8::MAX)),
         256 | 258 => def(7),
         _ => def(0),
-    }
-}
-
-pub(crate) fn publish_exit<T: EventListener>(
-    term: &mut Term<T>,
-    events: &mut WorkerEventState,
-    event_rx: &mpsc::Receiver<Event>,
-    shared: &Shared,
-    revision: u64,
-    pid: Option<u32>,
-    status: ExitStatus,
-) {
-    // Drain without the writer: replies have nowhere to go, but title and
-    // bell state still belong in the final observation.
-    while let Ok(event) = event_rx.try_recv() {
-        match event {
-            Event::Title(t) => events.title = Some(t),
-            Event::ResetTitle => events.title = None,
-            Event::Bell => events.bells += 1,
-            _ => {}
-        }
-    }
-    let cols = cols_of(term);
-    let rows = rows_of(term);
-    match build_observation(term, events, revision, CaptureReason::Exit, pid, cols, rows) {
-        Ok(obs) => shared.publish_exit(status, obs),
-        Err(e) => shared.record_teardown(&format!("exit observation build failed: {e}")),
     }
 }

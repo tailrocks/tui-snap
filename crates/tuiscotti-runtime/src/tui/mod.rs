@@ -6,13 +6,16 @@
 //!
 //! ## Thread model (R06, R07)
 //!
-//! Each [`Session`] owns exactly two threads:
+//! Each [`Session`] owns exactly three threads:
 //!
 //! - a **reader thread** that blocks on the PTY master and forwards byte
 //!   batches to the worker over the op channel;
-//! - a **worker thread** that owns the `alacritty_terminal::Term`, the PTY
-//!   writer, and the child handle. ALL `Term` access happens on this thread.
-//!   The session handle only sends ops and receives replies over channels.
+//! - a **worker thread** that owns the `alacritty_terminal::Term` and the
+//!   child handle. ALL `Term` access happens on this thread. The session
+//!   handle only sends ops and receives replies over channels;
+//! - a **writer thread** that owns the raw PTY writer and serves the
+//!   worker's acknowledged write requests, so a child that stops reading
+//!   wedges only that thread — never the worker (LIFE-6).
 //!
 //! The worker publishes every new [`Observation`](tuiscotti_core::screen::Observation)
 //! (grid + cursor + palette + modes captured together at one revision) into
@@ -60,6 +63,7 @@ mod session;
 mod session_input;
 mod session_teardown;
 mod shared;
+mod spawn;
 #[cfg(test)]
 mod tests;
 mod worker;
@@ -74,4 +78,5 @@ pub use input_types::{
 pub use limits::{DEFAULT_STABLE_QUIET, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 pub use profile::{MouseProfile, TerminalProfile, TrackedModes};
 pub use session::Session;
+pub use shared::DrainCause;
 pub use shared::SessionMeta;
