@@ -16,3 +16,6 @@ vendor/termlens/Cargo.lock
 crates/tuiscotti-fixtures/tests/visual/report-media/
 __pycache__/
 .DS_Store
+# Benchmark run output (regenerable; see docs/PERFORMANCE.md):
+# envelopes, JSONL samples, and gate reports are never committed.
+benches/results/

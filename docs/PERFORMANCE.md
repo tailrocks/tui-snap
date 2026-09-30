@@ -1,108 +1,283 @@
 # Performance
 
-Local-only measurements. Not CI results, not a fast-lane proof.
-Rows 1–10/M1–M4 were measured at head `0f14262`; row 11 re-measures
-the full nextest run at head `75ff479` on the same machine class.
-Unmeasured at the current head: cold/warm builds, serial `cargo
-test`, per-suite splits, artifact sizes, peak RSS — quoted below
-only as prior-head evidence, not current numbers.
+One current performance report for Tuiscotti: methodology, the committed
+reproducible benchmark suite, budget scoreboards, and this-host numbers.
+It replaces all prior scratch-harness notes (the F12 `/tmp` harness and the
+`0f14262`/`75ff479` rows are retired; nothing below depends on them).
 
-## Method
+Status: **not final acceptance evidence.** All recorded runs measured a
+dirty tree (31–34 modified/untracked files) with sibling agents compiling
+and testing concurrently, and the suite was red in every full run (4
+`tuiscotti-runtime` PTY-test failures at the primary head; a harness env
+bug additionally voided the g8 verdict in runs 1–2 — both disclosed
+below). Re-run `cargo xtask bench` on the exact final PR head, on a quiet
+tree, before quoting any number as acceptance.
 
-- Date (UTC): 2026-09-28 (rows 1–10, M1–M4), re-verified
-  2026-09-29 for method only. Branch:
-  `redesign/rust-first-testing-platform`, head `0f14262` at rewrite.
-- Hardware: Apple M5 Max, 18 CPUs, 128 GiB RAM, macOS 27.0.
-- Toolchain: `rustc 1.98.1`, `cargo-nextest 0.9.143`,
-  `rust-toolchain.toml` pins `channel = "1.98.1"`.
-- Registry warm (`~/.cargo` populated); all runs `--locked
-  --offline`. `cargo` on PATH is a cache shim (mbx); "true cold"
-  rows bypassed it via the direct toolchain cargo.
-- Wall times via `date +%s` (1 s resolution; ms rows via
-  `date +%s%N`). Peak RSS via single-sample `/usr/bin/time -l`
-  (debug builds).
-- Caveat: other agents edited the tree concurrently during
-  measurement; suite totals are "as observed". Re-run on a quiet
-  tree before quoting.
+E2 compliance: the harness is zero-`unsafe` first-party code under the
+intact workspace lints (`unsafe_code` deny, no exceptions). A prior
+revision measured per-op allocation via a counting global allocator and
+peak RSS via `getrusage`; that unsafe instrumentation was removed in full
+— per-op allocator counters no longer exist, and RSS is sampled from
+Linux `VmHWM` only. Timing methodology (`Instant` around the documented
+operation) is unchanged, so the wall-time tables below stay comparable
+across the rework; the retired allocator rows do not, and are marked as
+such. Nothing below is final until the clean-head rerun.
 
-## Results
+## How to run
 
-| # | Measurement | Wall | Detail |
-|---|-------------|------|--------|
-| 1 | Cold build, clean target, shim bypassed, warm registry | 11 s | cargo: 11.59 s |
-| 2 | Cold target, warm cache | 7 s | cargo: 6.35 s |
-| 3 | Warm no-op build | 4 s | cargo: 3.15 s |
-| 4 | Full `cargo test --locked --offline`, exit 0 | 129 s | slowest suite: `visual` 17.73 s test-time |
-| 5 | Full `cargo nextest run --locked --offline --all-features` | 52 s | 415/415 pass (1 leaky) at measure time; current tree holds 413 `#[test]` (see TESTING.md) |
-| 6 | `cargo test --test tui` (PTY suite) | 2 s | test-time 1.12 s → ~45 ms/test avg |
-| 7 | Single PTY test (`tui-* chord_press_sends_key --exact`) | 63 ms | test-time 0.06 s |
-| 8 | Single piped capture (`tuiscotti capture --out … -- echo hello`) | 10 ms | child `Exit(0)` + artifacts |
-| 9 | `cargo test --test render_qual` (render throughput) | 17 s | test-time 15.93 s → ~760 ms/test avg (font rasterization heavy) |
-| 10 | `cargo test --test render` | 13 s | test-time 11.09 s |
-| 11 | Full `cargo nextest run --locked --offline --all-features` at `75ff479` | 21 s | 519/519 pass, 0 skipped; warm build cache |
+```sh
+cargo xtask bench                      # full suite, ~5 min on the reference host
+cargo xtask bench --quick              # reduced samples, same suites
+cargo xtask bench --suite views        # views|pty|cli|builds|nextest, or all
+cargo xtask bench --out /tmp/bench-out # results dir (default benches/results/)
+```
 
-## Artifact sizes
+Exit 0 when every measured budget passes, 1 otherwise. `xtask` stays
+zero-dependency: stats (p50/p95/tail/throughput) and JSON are hand-rolled.
 
-| Artifact | Size |
-|----------|------|
-| Committed insta snapshots + PNGs | 388 K |
-| `target/debug/tuiscotti` (debug CLI) | 69 M |
-| Full debug target dir (true-cold) | 1.4 G |
-| nextest archive (31 binaries + std) | 310 M |
+## Suite layout
 
-## Peak RSS (single samples, debug builds)
+- `crates/tuiscotti-bench/` — measurement harness (publish=false,
+  zero-`unsafe`). Two binaries emit raw per-sample JSONL; shared `rss`
+  (Linux `VmHWM` peak-RSS sampling, std-only), `emit` (JSONL writer),
+  `fixtures`
+  (fixed 80x24/120x40/200x60 screens × plain/dense/unicode/scroll/overlay/
+  cursor/resize journeys through the real production view functions),
+  `driver` (`Instant` timing + CLI), and scenario modules.
+  - `bench_views` — `canonical` (fresh capture + canonicalize + string
+    compare), `full` (fresh capture + fresh `render_sample` + exact
+    decoded-pixel `compare_png`; no content cache is consulted, every
+    sample records `fresh_candidate=true cache_hits=0`), `compare`
+    (equal/changed/corrupt/missing via `compare_png`), `cached`
+    (fresh-renderer / warm-shared / empty-cache / populated / no-cache),
+    `sweep` (W-thread medium-screen full verify + `WALL_NS` throughput).
+  - `bench_pty` — `readiness` (deterministic 80x24 printf fixture:
+    explicit-predicate readiness, then fresh observe + text check + render
+    both + exact compare; reports readiness→verdict and spawn→verdict),
+    `journey` (output-gated 3-transition `sh` drive + exit + reap +
+    close), `cleanup` (close-idle / 1 MiB close-paste / `seq 1 200000`
+    flood-drain / cancel-close, each gated at 2 s with a reap check),
+    `sweep` (W concurrent readiness sessions; tagged `sweep` so scaling
+    load never pools into the g4a latency gate).
+- `crates/xtask/src/bench*.rs` — orchestrator: builds release bins, runs
+  scenarios and probes, parses JSONL, scores gates, writes the envelope.
+- `benches/results/<stamp>-*.jsonl` — raw per-sample JSONL (one object per
+  line: suite/scenario/size/journey/case/cache/worker/iter/elapsed_ns/
+  rss/rss_units/ok/detail).
+- `benches/results/<stamp>-envelope.json` — repro envelope: command,
+  corpus SHA-256 (bench sources + fixture views + `Cargo.lock`), source
+  SHA + dirty-file count, toolchain, profile, hardware, cache states,
+  concurrency, limits, per-group stats, walls, notes, and the budget
+  scoreboard. `<stamp>-nextest-full.log` keeps the full-suite transcript.
 
-| # | Measurement | Peak RSS |
-|---|-------------|----------|
-| M1 | Pure-view snapshot test incl. PNG render/compare | ~333 MiB |
-| M2 | Piped `tuiscotti capture -- echo hello` | ~6.2 MiB |
-| M3 | One PTY session test | ~4.1 MiB |
-| M4 | One 200×60 mixed-script render → 4048×2568 PNG (5.6 MiB) + sidecar | ~380 MiB |
+## Methodology
 
-M1/M4 peaks are font rasterization + PNG encode of debug builds,
-not a release profile. Re-run before quoting.
+- Timers: `Instant` (monotonic) around the documented operation only;
+  harness overhead (JSONL writes, RSS file reads) stays outside the
+  timed region. Percentiles use the nearest-rank method over `ok` samples;
+  failures are counted, never silently dropped, and any `fail > 0` fails
+  the gate.
+- Cache states: canonical/full never consult the content cache; the
+  `cached` matrix isolates renderer reuse (fresh construct vs thread-local
+  shared) from cache behavior (empty miss+store vs populated steady-state
+  hit with full PNG-decode validation vs `no_cache` instance, `stores=0`
+  asserted). Per-cache `CacheOptions` select the mode; no env globals.
+- Concurrency: views/PTY sweeps at 1/2/4/8/16 workers plus a bounded
+  32-worker views oversubscription case; nextest sweeps via `--test-threads`
+  on the CPU-bound `render_qual` suite and the PTY-bound `tui` suite.
+- Memory: sampled process peak RSS only. On Linux the harness reads
+  `VmHWM` from `/proc/self/status` (kibibytes) with plain file I/O after
+  the clock stops; on every other OS there is no portable std-only
+  peak-RSS source, so samples honestly record `rss=0` with
+  `rss_units="unknown"` instead of guessing. Per-op allocator counters
+  were removed with the unsafe counting allocator (E2) and are not
+  measured. Aggregates report maxima; independent process peaks are
+  never summed into a fake "total peak".
+- Budgets g7/g8 additionally require a green verdict (`exit_ok`): a red
+  run's wall time is recorded but cannot pass, since skipped/failed targets
+  distort it. g3 discards nothing: one recorded warm-up absorbs first-exec
+  OS costs (notably macOS first-run verification, ~700 ms observed) and is
+  kept as `cli-warmup`; the gate scores the 25 warm fresh-process samples.
+- Test-runner children run WITHOUT the xtask recursion guard (they may
+  legitimately invoke `xtask` helpers; no test invokes `bench`, so no
+  cycle can form). Runs 1–2 predate this fix: their g8 verdicts are void.
+- Noise policy: a single run never establishes a regression. The report
+  keeps every run's raw data; gates are per-run, and cross-run variance is
+  quantified below. Reference numbers come from the primary run; older and
+  contended runs stay on record as labeled history.
 
-## Fast-lane assessment vs the 120 s target
+## Reference host
 
-- Full `cargo test`: **129 s — misses** the 120 s CI fast-lane
-  target on this machine by ~9 s (serial test binaries;
-  render/visual suites dominate); not re-run at `75ff479`.
-- Full `cargo nextest run`: **52 s at `0f14262`, 21 s at `75ff479`
-  — passes** with wide headroom (row 11, warm cache).
-- Verdict: the fast lane must run nextest, not `cargo test`. These
-  are local Apple-silicon numbers; CI runs `linux-x64`
-  GitHub-hosted runners, so the 120 s budget must be re-proven
-  with CI timings, not this file.
+All numbers below were measured on this host (labeled H1):
 
-### F12 before/after (all fixes: rows 13-18)
+- Apple M5 Max (`Mac17,6`), 18 CPUs, 128 GiB RAM (`hw.memsize`
+  137438953472), page size 16384, macOS 27.0, APFS
+  (`/dev/disk3s5`, ~2.0 TiB free of ~3.6 TiB at measure time).
+- Toolchain: `rustc 1.98.1 (48a229cea 2026-09-01)`,
+  `cargo 1.98.1 (797e8a9bc 2026-08-05)`,
+  `cargo-nextest 0.9.143 (60fa45f63 2026-08-04)`, `--offline` throughout,
+  warm `~/.cargo` registry. Micro-bench profile: release; builds/nextest:
+  normal dev/test profiles.
 
-Same machine class as row 12 (Apple M5 Max, 18 CPUs, 128 GiB,
-macOS 27, rustc 1.98.1): "before" is the F11/F12 base tree,
-"after" adds the bounded op channel + `Feed` coalescing, the
-thread-local shared renderers, and cheap `Session::meta`. Method:
-a scratch release-mode bench (`/tmp`, path deps on the workspace,
-not committed) with a counting global allocator and
-`getrusage(RUSAGE_SELF)` peak RSS. Corpus: capture/control on a
-quiet 80x24 session (300/200 samples); close over 25
-spawn(printf-ready)+close cycles; shot over 12 `render_sample`
-PNGs of an 80x24 mixed-style screen; flood = `seq 1 200000`
-through an 80x24 PTY to natural exit + `wait_stable` drain.
-Queue limits (Watcher caps, op-channel bound), explicit
-`CancelToken`s, and decoded-pixel exact verification (PNG bytes
-identical before/after: 895,917 B) throughout.
+## Budget scoreboard (primary)
 
-| # | Suite | Metric | Value |
-|---|---|---|---|
-| 13 | bench capture (before -> after) | observe_now mean / p95 | 0.152 / 0.227 ms -> 0.081-0.131 / 0.111-0.174 ms (run-to-run noise on a shared box; no mechanism changed: same round trip, same ~240 KiB allocs per read) |
-| 14 | bench control (before -> after) | send_text round-trip mean / p95 | 0.149 / 0.224 ms -> 0.061-0.068 / 0.103-0.108 ms (same noise caveat; unchanged mechanism) |
-| 15 | bench close (before -> after) | spawn+close mean / p95 | 56.2 / 62.8 ms -> 56.6 / 60.4 ms (unchanged, as expected: teardown path untouched) |
-| 16 | bench shot (before -> after) | render_sample throughput; allocs | 72.8 png/s; 395 MB -> 104.8 png/s (1.44x); 228 MB (shared default renderer: faces parsed once per thread) |
-| 17 | bench flood (before -> after) | exit wall; post-exit drain; revisions; peak RSS; allocs | 0.98 s; 3.01 s; 31,031 revs; 28.7 MB; 5.7 GB / 93M -> 0.27 s; 0.22 s (14x); ~4,550 revs (7x); 25.9 MB; 0.59 GB / 8.9M (10x). Peak RSS is dominated by the emulator's intended 10k-line scrollback either way; the queue win shows in drain latency, revision count, and allocator churn |
-| 18 | `cargo test -p tuiscotti --test render_qual` (before -> after) | wall, same machine | 2.93 s (32 tests) -> 0.97 s (33 tests, one added): shared strict renderers, zero coverage change |
+Primary: run 3 (`d56d39a0`, dirty=31) for views/cli/builds/nextest,
+run 4 (`cdecbbe0`, dirty=31) for pty. History: run 1 (`ce1ea590`,
+quiet-ish) and run 2 (`5cfdd79`, heavily contended) follow the table.
 
-New cheap path (not a before/after: it did not exist): 20,000
-`Session::meta()` reads complete in well under 1 s (<50 us each:
-one short lock, no worker round trip, no screen clone), pinned by
-`concurrent::session_meta_is_cheap_and_current`; the equivalent
-`observe_now` loop would take ~seconds and allocate ~240 KiB per
-read.
+| # | Budget | Primary observed | Verdict |
+|---|--------|------------------|---------|
+| g1 | canonical p95 ≤ 5/10/25 ms (80x24/120x40/200x60) | 0.52 / 0.86 / 2.01 (n=280/size, fail=0) | PASS, 5–12x headroom |
+| g2 | full p95 ≤ 50/100/250 ms, fresh render, 0 cache hits | 10.1 / 15.2 / 27.9 (n=70/size, fail=0) | PASS, 5–9x headroom |
+| g3 | fresh release CLI p95 ≤ 250 ms | 9.2, n=25 (warmup 688) | PASS, ~27x headroom |
+| g4a | PTY readiness→verdict p95 ≤ 100 ms | 18.6, p50 15.5, n=30, fail=0 (run 4) | PASS, 5x headroom |
+| g4b | 3-transition journey p95 ≤ 1 s | 78, p50 67, n=10, fail=0 (run 4, output-gated) | PASS, ~13x headroom |
+| g5 | cleanup max ≤ 2 s, all ok | 228, n=23, fail=0 (run 4) | PASS, ~9x headroom |
+| g6 | 4-worker medium full ≥ 2.5x single | 3.38x (wall1=899 ms, wall4=266 ms) | PASS |
+| g7 | edit→verdict ≤ 2 s (core/render/view) | 1622 / 1018 / 5701 ms, all green | FAIL (view; 3rd reproduction) |
+| g8 | full nextest wall ≤ 120 s, green | 61.9 s wall, 654/658 pass, 4 fail | FAIL (red suite; wall within budget) |
+
+History (same budgets, older harness revisions — see footnotes):
+
+| # | Run 1 (`ce1ea590`, quiet-ish) | Run 2 (`5cfdd79`, contended) |
+|---|--------------------------------|------------------------------|
+| g1 | 0.55 / 1.03 / 2.43 — PASS | 1.54 / 6.79 / 27.10 — FAIL (200x60 tail) |
+| g2 | 10.7 / 16.7 / 38.4 — PASS | 81.2 / 87.4 / 205.1 — FAIL (80x24 tail) |
+| g3 | 6.5 (warmup 986) — PASS | 5.3 (warmup 709) — PASS |
+| g4a | 72.7, n=94 pooled¹ — PASS | 71.8, n=94 pooled¹ — PASS |
+| g4b | 68, p50 37, echo-gated² — PASS | 69, p50 7, echo-gated² — PASS |
+| g5 | 225 — PASS | 226 — PASS |
+| g6 | 3.72x — PASS | 3.48x — PASS |
+| g7 | 1899 / 857 / 4868 — FAIL (view) | 1158 / 727 / 2796 — FAIL (view) |
+| g8 | 89.5 s, red — VOID³ | 34.3 s, red — VOID³ |
+
+¹ Runs 1–3 pooled sweep samples into `readiness`; run 4 tags sweeps
+separately (the run-3 pooled p95 was 138 ms, driven by 8-worker tails up
+to 198 ms — a scaling finding, not fixture latency). ² Pre-output-gating
+fixture: markers could match PTY echo; run 3+ gates on stdout-only
+markers. ³ Runs 1–2 inherited `TUISCOTTI_XTASK_ACTIVE=1` into nextest,
+failing xtask's own CLI tests; fixed by scrubbing the guard for
+test-runner children (verified: those tests pass standalone 4/4).
+
+## This-host numbers (primary runs)
+
+Distributions are tight when the box is quiet (max ≈ p95 ≈ p50 for
+canonical/full); run-2 tails (canonical-200x60 max 85 ms, compare max
+1025 ms, dozens of samples beyond 2×p50) are contention spikes, not
+algorithmic cliffs. Per-group detail lives in the envelope `groups`
+arrays; spokesman rows (run 3 unless noted):
+
+| Scenario/size | p50 | p95 | max | Note |
+|---|---|---|---|---|
+| canonical 80x24 / 120x40 / 200x60 | 0.31 / 0.76 / 1.88 | 0.52 / 0.86 / 2.01 | 0.55 / 0.87 / 2.10 | capture+canonical+compare |
+| full 80x24 / 120x40 / 200x60 | 9.7 / 14.9 / 27.6 | 10.1 / 15.2 / 27.9 | 10.3 / 15.5 / 28.0 | fresh PNG render dominates |
+| compare equal 80x24 / 120x40 / 200x60 | 1.59 / 3.24 / 7.25 | 1.61 / 3.28 / 7.41 | — | decode + memcmp |
+| compare changed 80x24 / 120x40 / 200x60 | 17.0 / 39.1 / 93.4 | 17.3 / 39.8 / 94.6 | — | hybrid diff + diff-PNG encode |
+| compare corrupt / missing 200x60 | 11.0 / 7.2 | 11.1 / 7.3 | — | decode attempt, then fail |
+| PTY readiness→verdict, single (run 4) | 15.5 | 18.6 | — | spawn→verdict ~8–10 ms + verify |
+| PTY sweep pooled (run 4, 1/2/4/8 workers) | 18.4 | 122.4 | 185.2 | 8-worker tail: contention cost |
+| PTY journey, output-gated (run 4) | 67 | 78 | — | 3 real transitions + cleanup |
+| cleanup worst case (flood-drain) | 84 | 207 | 227 | all reaped, all ≤ 2 s |
+
+Cache matrix, per-op p50 ms (n=20/state, run 3; `populated` = pure
+steady-state hit: key derivation + file hit with full PNG-decode
+validation + byte equality):
+
+| Size | fresh-renderer | warm-shared | empty-cache | populated | no-cache |
+|---|---|---|---|---|---|
+| 80x24 | 5.5 | 1.8 | 7.7 | 1.5 | 1.9, stores=0 |
+| 120x40 | 7.6 | 3.9 | 11.1 | 3.1 | 4.0, stores=0 |
+| 200x60 | 12.6 | 8.9 | 21.1 | 6.8 | 9.2, stores=0 |
+
+A populated hit beats a warm render by only ~20–25%: key derivation +
+file hit + full-decode validation costs ~75% of a render at these sizes.
+An optimization lead, not a verdict defect. The no-cache `stores=0`
+invariant held in every sample of all runs.
+
+Scaling curves (equal work per point; wall ms):
+
+| Workers | 1 | 2 | 4 | 8 | 16 | 32 |
+|---|---|---|---|---|---|---|
+| views sweep, 120x40 full ×64 (run 3) | 899 | 489 | 266 | 178 | 133 | 126 |
+| pty sweep, readiness ×16 (run 4) | 1440 | 1149 | 1005 | 926 | — | — |
+| nextest render_qual (run 3) | 9082 | 2757 | 1463 | 940 | 811 | — |
+| nextest tui (run 3) | 174 | — | 196 | — | — | — |
+
+Views scale ~7x at 32 workers on 18 cores (render-bound, independent
+sessions); PTY readiness barely scales past 2 workers (spawn-bound,
+1.55x at 8 workers); `render_qual` scales 11x at `-j16`; the tiny `tui`
+suite is PTY-latency-bound and flat (174 → 196 ms is noise).
+
+Memory (prior-methodology history, not current evidence: sampled with
+the retired `getrusage` instrument on macOS, bytes; the current harness
+samples Linux `VmHWM` only and macOS samples record `rss=0/unknown`.
+Re-measure on the Linux qualifier before quoting):
+
+| Scope | Metric | Value |
+|---|---|---|
+| views process | max sampled peak RSS | 875,937,792 (~835 MiB run 3; 702 MiB run 1) |
+| pty process | max sampled peak RSS | 234,127,360 (~223 MiB run 4; 82 MiB run 1) |
+
+Retired with the unsafe counting allocator (E2, no longer measured):
+per-op thread allocator counters (canonical-200x60 ~5.3 MiB mean,
+full-200x60 ~133 MiB mean, compare-changed-200x60 ~622 MiB max,
+readiness-80x24 ~30 MiB mean).
+
+No per-worker RSS isolation is claimed: RSS is process-wide and sampled.
+PTY peak RSS varies run to run (82 → 223 MiB): the peak depends on
+allocator timing under concurrent sweep sessions plus flood scrollback;
+both values are single sampled maxima from honest runs, reported as a
+range.
+
+Builds (dev profile, warm registry):
+
+| Measurement | Run 3 (primary) | History |
+|---|---|---|
+| warm no-op `cargo build --workspace` ×3 | 130 / 116 / 126 ms | 127 / 75 / 78 ms (run 1) |
+| scratch-target clean build (temp `CARGO_TARGET_DIR`, warm registry) | 21.1 s | 13.8 s (run 1) |
+| edit→verdict, core touch → `tuiscotti-render --lib` (green) | 1622 ms | 1899 / 1158 ms |
+| edit→verdict, renderer touch → same (green) | 1018 ms | 857 / 727 ms |
+| edit→verdict, view touch → `tuiscotti-fixtures --test view_contracts` (green) | 5701 ms — misses 2 s | 4868 / 2796 ms — miss reproduces 3/3 |
+| full nextest (658 tests) | 61.9 s wall, 654 pass, 4 fail, 1 skip | 89.5 s (646, run 1) / 34.3 s (646, run 2) |
+
+## Validity and caveats
+
+- Dirty tree, shared box: 31+ dirty files during every run; sibling
+  agents compiled and tested concurrently. Run 2 quantifies the cost:
+  canonical-200x60 p95 2.43 → 27.10 ms, full-80x24 p95 10.7 → 81.2 ms,
+  with p50s drifting up to 2.6x. Primary-run numbers are the reference;
+  contended numbers bound the noise.
+- Red suite: 4 `tuiscotti-runtime` PTY-test failures at the primary head
+  (`env_remove_drops_one_var`, `env_clear_starts_empty`,
+  `invalid_cwd_fails_spawn`, `close_input_eofs_raw_cat` — the sibling
+  runtime/spawn refactor area, F07). g8 needs a green rerun at the final
+  head; the 34–90 s walls show the 120 s budget has room, but a red run
+  cannot pass the gate by construction.
+- g7-view-edit reproduces 3/3 (4.9 s → 2.8 s → 5.7 s, all green
+  verdicts): incremental `view_contracts` after a one-file view touch
+  misses the 2 s budget. Not a harness artifact (same touch replays the
+  developer flow; content unchanged; verdict green each time).
+- Run-3 g4a pooled p95 (138 ms) is superseded by run 4 (18.6 ms): the
+  earlier figure mixed 8-worker sweep contention into the latency gate.
+  The sweep tail itself (max 185 ms at 8 workers) is reported above as a
+  scaling finding, not hidden.
+- Prior-history claims retired: F12 `/tmp`-harness rows and the
+  `0f14262`/`75ff479` table described other trees and other harnesses and
+  are not comparable to this suite. This file is now the only performance
+  report; raw history lives in `benches/results/`.
+
+## Findings for follow-up
+
+1. g7-view-edit (2.8–5.7 s vs 2 s, 3/3 reproductions): profile the
+   fixtures-test incremental link; likely test-target codegen, not the
+   one-file recompile.
+2. compare-changed cost (93 ms p50 at 200x60): the hybrid-diagnostic +
+   diff-PNG path dominates mismatch verdicts; stream or downscale the
+   diagnostic (never the strict verdict).
+3. Cache-hit value is thin (~20–25% under a warm render): full-decode
+   validation dominates; a cheaper integrity check would buy the hit path
+   back (without weakening rejection of corrupt entries).
+4. PTY concurrency barely scales (1.55x at 8 workers; 185 ms tail):
+   spawn-bound. Expected, but it caps PTY-heavy suite parallelism.
+5. Re-prove g8 green at the final head on a quiet tree, then re-prove the
+   120 s budget on the qualified CI runner (local walls do not transfer).

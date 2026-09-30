@@ -18,6 +18,9 @@ writes a JSON perf report to target/xtask-perf/report-<unix>.json with\n\
 toolchain versions, cpu count, member/file/lock counts. With\n\
 --build-timings, also runs cargo build --workspace --timings and\n\
 copies the newest cargo-timing report next to it.\n\
+\n\
+For the reproducible benchmark suite and budget scoreboard, run\n\
+`cargo xtask bench` (results in benches/results/).\n\
 ";
 
 /// Collect performance facts.

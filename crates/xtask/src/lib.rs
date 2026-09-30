@@ -4,6 +4,10 @@
 //! dispatches. Run via `cargo run -p xtask -- <subcommand>` (plain `cargo` is
 //! already the Mise/mbx-managed entry point in this repo).
 
+pub mod bench;
+pub mod bench_envelope;
+pub mod bench_probe;
+pub mod bench_score;
 pub mod brand;
 pub mod deps;
 pub mod docs;
@@ -31,6 +35,7 @@ maintenance automation (each subcommand also accepts --help):\n\
   deps       dependency inspection (bans, git sources, lockfile)\n\
   docs       docs/examples checks (stale script refs, relative links)\n\
   perf       performance collection into target/xtask-perf/\n\
+  bench      reproducible benchmark suite into benches/results/\n\
   package    packaging dry-run for publishable members\n\
   fonts      font-byte maintenance (verify | record)\n\
   help       print this text\n\
@@ -63,6 +68,7 @@ pub fn run(command_line: &[String]) -> i32 {
         deps::NAME => dispatch(&root, args, deps::run),
         docs::NAME => dispatch(&root, args, docs::run),
         perf::NAME => dispatch(&root, args, perf::run),
+        bench::NAME => dispatch(&root, args, bench::run),
         package::NAME => dispatch(&root, args, package::run),
         fonts::NAME => dispatch(&root, args, fonts::run),
         other => {

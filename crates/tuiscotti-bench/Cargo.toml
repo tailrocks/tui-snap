@@ -1,0 +1,17 @@
+[package]
+name = "tuiscotti-bench"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tuiscotti = { version = "0.2.0", path = "../tuiscotti" }
+tuiscotti-fixtures = { version = "0.2.0", path = "../tuiscotti-fixtures" }
+
+[lints]
+workspace = true
