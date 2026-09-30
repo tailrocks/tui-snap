@@ -953,7 +953,6 @@ dependencies = [
 name = "tuiscotti-core"
 version = "0.2.0"
 dependencies = [
- "lru",
  "ratatui",
  "serde",
  "serde_json",
@@ -995,7 +994,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tuiscotti-core",
- "tuiscotti-insta",
  "tuiscotti-render",
 ]
 

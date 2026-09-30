@@ -7,23 +7,29 @@
 # Pinned exact, never floating `latest` (G7).
 # rust 1.98.1 keeps the Mise pin consistent with rust-toolchain.toml
 # (`mise ls-remote rust` lists 1.98.1; `rust` is a mise core backend).
-# cargo:alint 0.15.2 provisions the repo shape/line gate (`mise run alint`,
-# wired into CI via the `repo-shape` unit in .github-gen/velnor-workflow.toml).
+# github:asamarts/alint 0.15.2 provisions the repo shape/line gate
+# (`mise run alint`, wired into CI via .velnor/config.toml custom_tasks).
+# github: (upstream release binaries) for alint/cargo-deny: exact same pinned
+# versions as the old cargo: source builds, but CI-fresh-runner installs
+# download binaries instead of compiling from source in every crate job.
 [tools]
 mr-boxington = "1.20.0"
 rust = "1.98.1"
-"cargo:alint" = "0.15.2"
+"github:asamarts/alint" = "0.15.2"
 "aqua:nextest-rs/nextest/cargo-nextest" = "0.9.146"
-"cargo:cargo-deny" = "0.20.2"
+"github:EmbarkStudios/cargo-deny" = "0.20.2"
 
 [tasks.alint]
 description = "Repo shape and line gates: alint check at the repo root"
 run = "alint check"
 
-# CI lanes (each wired into CI via a [[units]] row in
-# .github-gen/velnor-workflow.toml naming the task in ci_tasks). Tasks run
-# online (no --offline): fresh CI runners have no cargo cache. Every command
-# below is verified locally; see the F13 lane notes in the workflow source.
+# CI gates. Tasks named in .velnor/config.toml [stacks.rust] custom_tasks run
+# as `mise run <name>` steps in every generated crate job (velnor-actions);
+# the rest remain locally runnable gates (ci-no-default and ci-msrv predate
+# native no-default configurations; velnor-actions cannot express per-PR
+# MSRV, so ci-msrv is the only MSRV vehicle — run it before release).
+# Tasks run online (no --offline): fresh CI runners have no cargo cache.
+# Every command below is verified locally.
 
 [tasks.ci-rustdoc]
 description = "Rustdoc gate: workspace docs build with warnings denied"
@@ -46,6 +52,21 @@ run = "cargo run -p xtask -- policy"
 [tasks.ci-xtask-deps]
 description = "xtask umbrella: dependency inspection (bans, git sources, lockfile)"
 run = "cargo run -p xtask -- deps"
+
+[tasks.ci-no-default-graph]
+description = "Pty-free negative guard: tuiscotti no-default graph must not contain portable-pty/alacritty_terminal (a green no-default build alone cannot catch a silently reintroduced pty dep)"
+run = 'out=$(cargo tree -p tuiscotti --no-default-features --locked --prefix none) || exit 1; printf "%s\\n" "$out" | grep -q -E "portable-pty|alacritty_terminal" && exit 1 || true'
+
+[tasks.ci-deny]
+description = "Dependency policy gate: cargo-deny advisories/bans/licenses/sources (pinned github:EmbarkStudios/cargo-deny)"
+run = "cargo deny check"
+
+[tasks.ci-check-all-features]
+description = "Feature-combination gate: workspace check+clippy under --all-features (covers the test-overrides combo, which is additive test-only API — test execution is identical under default features)"
+run = [
+  "cargo check --workspace --locked --all-targets --all-features",
+  "cargo clippy --workspace --locked --all-targets --all-features -- -D warnings",
+]
 
 [tasks.ci-package]
 description = "xtask umbrella: packaging dry-run for publishable members"

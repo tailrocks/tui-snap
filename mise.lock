@@ -47,6 +47,82 @@ version = "0.20.2"
 backend = "cargo:cargo-deny"
 specifiers = ["0.20.2"]
 
+[[tools."github:EmbarkStudios/cargo-deny"]]
+version = "0.20.2"
+backend = "github:EmbarkStudios/cargo-deny"
+specifiers = ["0.20.2"]
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-arm64"]
+checksum = "sha256:995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471598345"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-arm64-musl"]
+checksum = "sha256:995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471598345"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-x64"]
+checksum = "sha256:9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471598214"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.linux-x64-musl"]
+checksum = "sha256:9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471598214"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.macos-arm64"]
+checksum = "sha256:fe67d82a10d8597a3549364cb733a3f9cc1bfff9031b7ae46384a9f2a72090c3"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471597689"
+
+[tools."github:EmbarkStudios/cargo-deny"."platforms.windows-x64"]
+checksum = "sha256:975a22143262fd27476d19ee00c7af67978426e40e1dee94eed6bbade1cf87dc"
+url = "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-pc-windows-msvc.tar.gz"
+url_api = "https://api.github.com/repos/EmbarkStudios/cargo-deny/releases/assets/471599057"
+
+[[tools."github:asamarts/alint"]]
+version = "0.15.2"
+backend = "github:asamarts/alint"
+specifiers = ["0.15.2"]
+
+[tools."github:asamarts/alint"."platforms.linux-arm64"]
+checksum = "sha256:a452485095b0c62fc395eb226529f2b6be9afbf817e92e4bee30f46de824d9f7"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561599"
+provenance = "github-attestations"
+
+[tools."github:asamarts/alint"."platforms.linux-arm64-musl"]
+checksum = "sha256:a452485095b0c62fc395eb226529f2b6be9afbf817e92e4bee30f46de824d9f7"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561599"
+provenance = "github-attestations"
+
+[tools."github:asamarts/alint"."platforms.linux-x64"]
+checksum = "sha256:b67ef64d6461573e4a40c54cd543238cbbf8126d4161e3c4385ac60cf6920295"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561603"
+provenance = "github-attestations"
+
+[tools."github:asamarts/alint"."platforms.linux-x64-musl"]
+checksum = "sha256:b67ef64d6461573e4a40c54cd543238cbbf8126d4161e3c4385ac60cf6920295"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561603"
+provenance = "github-attestations"
+
+[tools."github:asamarts/alint"."platforms.macos-arm64"]
+checksum = "sha256:6496585ede7b07d9aed3df321196c90725b48c6f41289c1c5a7fb28483426481"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561597"
+provenance = "github-attestations"
+
+[tools."github:asamarts/alint"."platforms.windows-x64"]
+checksum = "sha256:ef557017c901e2ebf1e3a22d8461ebe93c2abb20d8950838de6b3aec576d5612"
+url = "https://github.com/asamarts/alint/releases/download/v0.15.2/alint-v0.15.2-x86_64-pc-windows-msvc.tar.gz"
+url_api = "https://api.github.com/repos/asamarts/alint/releases/assets/525561600"
+provenance = "github-attestations"
+
 [[tools.mr-boxington]]
 version = "1.20.0"
 backend = "packslip:github.com/jdx/mr-boxington"
@@ -86,3 +162,19 @@ signer = "sigstore-oidc:https://github.com/jdx/mr-boxington/.github/workflows/re
 version = "1.98.1"
 backend = "core:rust"
 specifiers = ["1.98.1"]
+
+[[tools."ubi:EmbarkStudios/cargo-deny"]]
+version = "0.20.2"
+backend = "ubi:EmbarkStudios/cargo-deny"
+specifiers = ["0.20.2"]
+
+[tools."ubi:EmbarkStudios/cargo-deny"."platforms.macos-arm64-cargo-deny"]
+checksum = "blake3:2b9ab22cca8448664f5877c424fd0b5dd7e387e19ebcc5520f0e689cc51d8fa7"
+
+[[tools."ubi:asamarts/alint"]]
+version = "0.15.2"
+backend = "ubi:asamarts/alint"
+specifiers = ["0.15.2"]
+
+[tools."ubi:asamarts/alint"."platforms.macos-arm64-alint"]
+checksum = "blake3:0ff8aadb6060398e48da72f373fa5f523495887d6ba31b742ec62e76751746f6"
