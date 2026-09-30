@@ -12,6 +12,7 @@
 
 mod execute;
 mod journal;
+mod log_tail;
 mod registry;
 mod session_ops;
 mod sessions;
@@ -20,6 +21,7 @@ mod types_b;
 
 pub use execute::*;
 pub use journal::*;
+pub use log_tail::*;
 #[cfg(feature = "pty")]
 pub(crate) use registry::*;
 pub use session_ops::*;

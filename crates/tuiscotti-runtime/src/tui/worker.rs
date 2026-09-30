@@ -7,11 +7,14 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions as GridDims;
 use alacritty_terminal::term::{Config as TermConfig, Term};
 use portable_pty::{Child as PtyChild, MasterPty};
+use tuiscotti_core::locate::{Locator, Span};
 use tuiscotti_core::screen::Observation;
+
+use crate::bound_locator::ActionError;
 
 use super::error::TuiError;
 use super::input_types::{Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Wheel};
-use super::limits::{KILL_GRACE, PTY_LIFECYCLE, WORKER_TICK};
+use super::limits::{COALESCE_BYTES, KILL_GRACE, PTY_LIFECYCLE, WORKER_TICK};
 use super::shared::Shared;
 use super::worker_ctx::WorkerCtx;
 
@@ -51,6 +54,16 @@ pub(crate) enum Op {
     Input {
         input: Input,
         reply: mpsc::Sender<Result<(), TuiError>>,
+    },
+    /// Resolve a locator + deliver one click as a single worker step (F11):
+    /// the worker builds ONE fresh observation, resolves the UNIQUE viewport
+    /// target at its own current revision, and applies press + release with
+    /// no interleaving op — never two reads plus a separate unchecked click.
+    ClickTarget {
+        locator: Locator,
+        button: MouseButton,
+        mods: MouseMods,
+        reply: mpsc::Sender<Result<Span, ActionError>>,
     },
     Resize {
         cols: u16,
@@ -145,15 +158,10 @@ pub(crate) fn run_worker(p: WorkerParams) {
 
     loop {
         match op_rx.recv_timeout(WORKER_TICK) {
-            Ok(Op::Feed(bytes)) => ctx.handle_feed(&bytes),
-            Ok(Op::Eof(read_err)) => ctx.handle_eof(read_err.as_deref()),
-            Ok(Op::Observe { reply }) => ctx.handle_observe(&reply),
-            Ok(Op::Input { input, reply }) => ctx.handle_input(&input, &reply),
-            Ok(Op::Resize { cols, rows, reply }) => ctx.handle_resize(cols, rows, &reply),
-            Ok(Op::CloseInput { reply }) => ctx.handle_close_input(&reply),
-            Ok(Op::Shutdown) => {
-                ctx.handle_shutdown();
-                return;
+            Ok(op) => {
+                if dispatch(&mut ctx, op, &op_rx) {
+                    return;
+                }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -162,6 +170,80 @@ pub(crate) fn run_worker(p: WorkerParams) {
             }
         }
         ctx.poll_exit_progress();
+    }
+}
+
+/// Dispatch one op; returns true when the loop must exit.
+fn dispatch(ctx: &mut WorkerCtx, op: Op, op_rx: &mpsc::Receiver<Op>) -> bool {
+    match op {
+        Op::Feed(bytes) => {
+            // Coalesce (F12): merge immediately-pending `Feed` batches up
+            // to `COALESCE_BYTES` into ONE emulator advance, so a flood
+            // costs one grid build per cap instead of one per batch. A
+            // non-`Feed` op met while draining runs right after the merged
+            // advance, preserving channel order.
+            let mut merged = bytes;
+            let mut pending: Option<Op> = None;
+            while merged.len() < COALESCE_BYTES {
+                match op_rx.try_recv() {
+                    Ok(Op::Feed(more)) => merged.extend_from_slice(&more),
+                    Ok(other) => {
+                        pending = Some(other);
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }
+            ctx.handle_feed(&merged);
+            match pending {
+                Some(next) => dispatch_one(ctx, next),
+                None => false,
+            }
+        }
+        other => dispatch_one(ctx, other),
+    }
+}
+
+/// Dispatch one op without coalescing; true requests loop exit.
+fn dispatch_one(ctx: &mut WorkerCtx, op: Op) -> bool {
+    match op {
+        Op::Feed(bytes) => {
+            ctx.handle_feed(&bytes);
+            false
+        }
+        Op::Eof(read_err) => {
+            ctx.handle_eof(read_err.as_deref());
+            false
+        }
+        Op::Observe { reply } => {
+            ctx.handle_observe(&reply);
+            false
+        }
+        Op::Input { input, reply } => {
+            ctx.handle_input(&input, &reply);
+            false
+        }
+        Op::ClickTarget {
+            locator,
+            button,
+            mods,
+            reply,
+        } => {
+            ctx.handle_click_target(&locator, button, mods, &reply);
+            false
+        }
+        Op::Resize { cols, rows, reply } => {
+            ctx.handle_resize(cols, rows, &reply);
+            false
+        }
+        Op::CloseInput { reply } => {
+            ctx.handle_close_input(&reply);
+            false
+        }
+        Op::Shutdown => {
+            ctx.handle_shutdown();
+            true
+        }
     }
 }
 

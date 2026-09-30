@@ -15,8 +15,8 @@
 
 use tuiscotti::assert::{assert_underline_at, check_underline_at};
 use tuiscotti::frame::{Cell, Color, Mods, Rgb, UnderlineStyle};
-use tuiscotti::insta_proto::{insta_string, insta_value};
 use tuiscotti::screen::Screen;
+use tuiscotti::screen::{canonical_string, canonical_value};
 
 /// Set underline state the way producers do: bool and style consistent.
 fn set_ul(cell: &mut Cell, style: UnderlineStyle, color: Color) {
@@ -169,7 +169,7 @@ fn canonical_text_carries_style_and_color_sparsely() {
     let mut cells = blank_row(2);
     cells[0].symbol = "A".to_string();
     set_ul(&mut cells[0], UnderlineStyle::Double, Color::Indexed(9));
-    let text = insta_string(&screen_from(cells, 2, 1).expect("valid screen"));
+    let text = canonical_string(&screen_from(cells, 2, 1).expect("valid screen"));
     assert!(
         text.contains("mods=double-underline uc=index=9"),
         "styled cell must carry style + color:\n{text}"
@@ -180,7 +180,7 @@ fn canonical_text_carries_style_and_color_sparsely() {
         "default cell line must be unchanged:\n{text}"
     );
 
-    let plain = insta_string(&screen_from(blank_row(2), 2, 1).expect("valid screen"));
+    let plain = canonical_string(&screen_from(blank_row(2), 2, 1).expect("valid screen"));
     assert!(
         !plain.contains("uc="),
         "no color keys when default:\n{plain}"
@@ -200,7 +200,7 @@ fn canonical_json_carries_style_and_color_sparsely() {
         UnderlineStyle::Curly,
         Color::Rgb(Rgb::new(1, 2, 3)),
     );
-    let v = insta_value(&screen_from(cells, 2, 1).expect("valid screen"));
+    let v = canonical_value(&screen_from(cells, 2, 1).expect("valid screen"));
     assert_eq!(v["cells"][0]["mods"]["underline"], serde_json::json!(true));
     assert_eq!(
         v["cells"][0]["mods"]["underline_style"],

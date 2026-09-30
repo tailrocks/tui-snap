@@ -3,7 +3,7 @@ use super::harness::*;
 use super::*;
 use std::fs;
 use tuiscotti::diff::AlphaPolicy;
-use tuiscotti::insta_proto::insta_string;
+use tuiscotti::screen::canonical_string;
 
 #[test]
 fn compound_canonical_plus_png_green() {
@@ -12,7 +12,7 @@ fn compound_canonical_plus_png_green() {
         &dir,
         "shot",
         GEN1,
-        &insta_string(&screen_gen1().expect("screen_gen1 succeeds")),
+        &canonical_string(&screen_gen1().expect("screen_gen1 succeeds")),
     )
     .expect("write_text_snap succeeds");
     write_binary_snap(
@@ -71,7 +71,7 @@ fn reject_one_artifact_breaks_compound() {
         &dir,
         "rj_c",
         GEN1,
-        &insta_string(&screen_gen1().expect("screen_gen1 succeeds")),
+        &canonical_string(&screen_gen1().expect("screen_gen1 succeeds")),
     )
     .expect("write_text_snap succeeds");
     write_binary_snap(&dir, "rj_p", GEN1, &png_gen1().expect("png_gen1 succeeds"))
@@ -153,7 +153,7 @@ fn partial_accept_breaks_compound() {
         &dir,
         "pa_c",
         GEN1,
-        &insta_string(&screen_gen1().expect("screen_gen1 succeeds")),
+        &canonical_string(&screen_gen1().expect("screen_gen1 succeeds")),
     )
     .expect("write_text_snap succeeds");
     write_binary_snap(&dir, "pa_p", GEN1, &png_gen1().expect("png_gen1 succeeds"))
@@ -220,7 +220,7 @@ fn interrupted_write_breaks_compound() {
         &dir,
         "iw_c",
         GEN1,
-        &insta_string(&screen_gen1().expect("screen_gen1 succeeds")),
+        &canonical_string(&screen_gen1().expect("screen_gen1 succeeds")),
     )
     .expect("write_text_snap succeeds");
     write_binary_snap(&dir, "iw_p", GEN1, &png_gen1().expect("png_gen1 succeeds"))

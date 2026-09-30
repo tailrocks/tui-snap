@@ -13,8 +13,10 @@ use super::frame::build_observation;
 use super::shared::Shared;
 use super::worker::{Op, WorkerEventState, cols_of, rows_of};
 
-/// Blocking PTY reads forwarded as ops.
-pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::Sender<Op>) {
+/// Blocking PTY reads forwarded as ops. The channel is bounded (F12):
+/// a flooding child blocks this send — backpressure through the PTY,
+/// like a real terminal — instead of queueing unbounded batches.
+pub(crate) fn run_reader(mut reader: Box<dyn std::io::Read + Send>, tx: &mpsc::SyncSender<Op>) {
     let mut buf = vec![0u8; 8192];
     loop {
         match reader.read(&mut buf) {

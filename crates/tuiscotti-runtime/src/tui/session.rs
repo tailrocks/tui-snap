@@ -11,15 +11,15 @@ use tuiscotti_core::screen::{Observation, Screen};
 
 use super::error::{CancelToken, TuiError, WaitError};
 use super::exit::{ExitStatus, ExitWait};
-use super::limits::DEFAULT_STABLE_QUIET;
+use super::limits::{DEFAULT_STABLE_QUIET, OP_SEND_TIMEOUT};
 use super::session_teardown::recv_reply;
-use super::shared::Shared;
+use super::shared::{SessionMeta, Shared};
 use super::worker::{Input, Op};
 
 /// Owned PTY session: the child, its emulator, and both I/O threads.
 /// `Send + Sync`; concurrent sessions are fully independent (R07).
 pub struct Session {
-    pub(crate) op_tx: Option<mpsc::Sender<Op>>,
+    pub(crate) op_tx: Mutex<Option<mpsc::SyncSender<Op>>>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) worker: Mutex<Option<std::thread::JoinHandle<()>>>,
     pub(crate) reader: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -60,6 +60,15 @@ impl Session {
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.shared.revision()
+    }
+
+    /// Cheap metadata of the latest published observation (F12): revision
+    /// plus grid geometry under one short lock — no worker round trip, no
+    /// screen clone. `None` only before revision 0 is published, which a
+    /// spawned session never observes (spawn blocks for it).
+    #[must_use]
+    pub fn meta(&self) -> Option<SessionMeta> {
+        self.shared.meta()
     }
 
     /// Non-blocking exit poll. `Some` once the worker reaped the child.
@@ -250,10 +259,16 @@ impl Session {
         if self.closed.load(Ordering::SeqCst) {
             return Err(TuiError::Closed("session is closed".to_string()));
         }
-        match &self.op_tx {
-            Some(tx) => tx
-                .send(op)
-                .map_err(|_| TuiError::Closed("worker is gone".to_string())),
+        // Clone under the lock, send outside it: the op channel is bounded
+        // (F12 backpressure), so a send may wait for the worker to drain,
+        // and that wait must never hold the sender lock.
+        let tx = self
+            .op_tx
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        match tx {
+            Some(tx) => send_bounded(&tx, op, OP_SEND_TIMEOUT),
             None => Err(TuiError::Closed("session is closed".to_string())),
         }
     }
@@ -320,6 +335,37 @@ impl Session {
                 });
             }
             self.shared.wait_changed(deadline, cancel);
+        }
+    }
+}
+
+/// Send one op on the bounded channel, waiting at most `bound` for the
+/// worker to drain (`SyncSender::send_timeout` is still unstable, so this
+/// spins on the stable `try_send`). A full queue past the bound means the
+/// worker is genuinely stuck — draining a flood is fast — so the send
+/// fails instead of blocking forever.
+pub(crate) fn send_bounded(
+    tx: &mpsc::SyncSender<Op>,
+    op: Op,
+    bound: Duration,
+) -> Result<(), TuiError> {
+    let deadline = Instant::now() + bound;
+    let mut op = op;
+    loop {
+        match tx.try_send(op) {
+            Ok(()) => return Ok(()),
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                return Err(TuiError::Closed("worker is gone".to_string()));
+            }
+            Err(mpsc::TrySendError::Full(returned)) => {
+                op = returned;
+                if Instant::now() >= deadline {
+                    return Err(TuiError::Timeout(
+                        "worker overloaded: op queue stayed full past the send bound".to_string(),
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
         }
     }
 }

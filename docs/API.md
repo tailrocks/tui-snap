@@ -16,6 +16,8 @@ facade paths. Status labels: **implemented** (shipped, tested),
 | `tui::Session::{send_text, send_bytes, paste}` | implemented | Literal input; `paste` is bracketed paste. |
 | `tui::Session::{click, mouse_down, mouse_up, mouse_move, mouse_drag, mouse_wheel, focus_in, focus_out}` | implemented | Fail with `ModeNotEnabled` unless the app enabled reporting. |
 | `tui::Session::{resize, signal, pid, revision, poll_exit}` | implemented | Resize reflows via the emulator; signals unix-only. |
+| `tui::Session::meta` → `tui::SessionMeta` | implemented | Cheap revision + geometry under one lock — no worker round trip, no screen clone (F12). |
+| `tui::Session::{get_by, get_by_text}` → `BoundLocator::{visible_now, expect_visible[_within], click}` | implemented | Immediate lookup vs bounded retrying expectation (10s default); click resolves + delivers atomically in the owning worker (F11). |
 | `tui_shell::{Recording, Replayed, replay_*, TermSnapshot, assert_*}` | implemented | Recording/replay (`replay_bytes`/`replay_chunks`/`replay_recording` → `Replayed`) + terminal-state assertions (title, modes, palette, clipboard, links, scrollback). |
 | `command::{Command, ProcessOutput, IsolatedEnv}` | implemented | Piped child runs: timeouts, output limits, split streams,exit/signal distinction (`Termination`). |
 
@@ -47,6 +49,9 @@ facade paths. Status labels: **implemented** (shipped, tested),
 |---|---|---|
 | `profile::{Profile::default_profile, RenderProfile::strict/vendored, FontFaces, FallbackFace}` | implemented | Pinned: font SHA-256, 10×21 cells @16px, scale ×2. |
 | `render::{Renderer, render_png, render_svg, ansi_dump, frame_from_screen, redact_frame}` | implemented | PNG/SVG/ANSI/HTML + fidelity sidecars; `Renderer::with_fallbacks` for custom chains (pins verified at load). |
+| `render::Renderer::{with_profile, with_strict}` | implemented | Thread-local shared renderers (F12): faces parsed once per thread, glyph caches shared; custom profiles construct per call. |
+| `render::{CacheOptions, RenderCache::open_with_options}` | implemented | No-cache mode is a per-cache context (F12) — no process-global state; OR-ed with `RENDER_NO_CACHE`. |
+| `screen::{canonical_string, canonical_value}` | implemented | Deterministic state projections every gate binds (F12: moved from the insta spike into core). |
 | `formats::{capture_all, CaptureBundle, Generation, pipe_projection, …}` | implemented | Six-format contracts (ASCII/TXT/ANSI/PNG/HTML/canonical JSON) + piped-byte projections with generation binding. |
 | `diff::{compare_png, compare_png_with_alpha, perceptual_score, PerceptualPolicy}` | implemented | Exact decoded-pixel gate; `PerceptualPolicy::new` rejects NaN/out-of-range thresholds. |
 | `export::{cast_v2, gif, apng}` | implemented | asciicast/GIF/APNG evidence exports. |
@@ -58,6 +63,8 @@ facade paths. Status labels: **implemented** (shipped, tested),
 | `proto::{Op, OpResult, OpError, execute, run_machine_line}` | implemented | 15 typed ops (spawn/stdin/observe/snapshot/screenshot/wait/exit/assert/render/diff/session-start/session-stop/session-list/version/capabilities — no prune op); JSON envelopes over stdio. |
 | `proto::{session_start, session_stop, session_list, session_prune, runtime_dir}` | implemented | Named sessions, versioned endpoints, owner-only runtime dir. |
 | `proto::{Recorder, read_journal, Verdict}` | implemented | Bounded event journals + offline verdicts. |
+| `proto::LogTail` | implemented | Bounded incremental session-log tail (F12): per-poll + lifetime caps, truncation flagged, never re-reads whole. |
+| `proto::set_runtime_dir_override` | test-only (`test-overrides`) | Exists only under `cfg(test)` or the `test-overrides` feature; production resolves the runtime dir from the process env (F12). |
 | `mcp::{tools, tools_list_json, serve, run_stdio, handle_request}` | implemented | MCP stdio bridge over the op protocol. |
 | `runner::{TestContext, BaselineId, AttemptId, Journal, ScenarioManifest, JunitKey}` | implemented | Runner-neutral identity (nextest-aware), evidence dirs, journals, scenario manifests. |
 

@@ -13,7 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
-use tuiscotti::insta_proto::insta_string;
+use tuiscotti::screen::canonical_string;
 use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen};
 
 mod common;
@@ -180,7 +180,7 @@ fn write_frozen(
 ) -> Result<(), Box<dyn std::error::Error>> {
     fs::write(
         root.join(format!("{name}.canonical.txt")),
-        insta_string(screen),
+        canonical_string(screen),
     )?;
     let sample = render_sample(screen)?;
     let png = if tag_png {

@@ -4,7 +4,7 @@ use tuiscotti::assert::{
     FrozenError, assert_frozen_screenshot, assert_frozen_snapshot, check_frozen_screenshot,
     check_frozen_snapshot, frozen_accept, png_tag_generation, render_sample,
 };
-use tuiscotti::insta_proto::insta_string;
+use tuiscotti::screen::canonical_string;
 
 #[test]
 fn frozen_missing_fails() {
@@ -100,10 +100,10 @@ fn frozen_passes_when_matching() {
     let sample = render_sample(&screen).expect("render_sample(&screen) succeeds");
     fs::write(
         root.path().join("mistag.canonical.txt"),
-        insta_string(&screen),
+        canonical_string(&screen),
     )
     .expect(
-        "fs::write( root.path().join(\"mistag.canonical.txt\"), insta_string(&screen), ) succeeds",
+        "fs::write( root.path().join(\"mistag.canonical.txt\"), canonical_string(&screen), ) succeeds",
     );
     fs::write(
         root.path().join("mistag.png"),

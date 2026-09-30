@@ -38,7 +38,7 @@ pub use tuiscotti_runtime::keys::KeyChord;
 #[cfg(feature = "pty")]
 pub use tuiscotti_runtime::tui::{
     CancelToken, ExitStatus, ExitWait, Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Session,
-    Signal, Tui, TuiError, WaitError,
+    SessionMeta, Signal, Tui, TuiError, WaitError,
 };
 
 // Purposeful advanced modules (also the pre-G6 compatibility surface).

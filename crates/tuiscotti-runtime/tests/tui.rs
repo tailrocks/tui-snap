@@ -43,3 +43,9 @@ mod session;
 
 #[path = "tui/input.rs"]
 mod input;
+
+#[path = "tui/bound.rs"]
+mod bound;
+
+#[path = "tui/concurrent.rs"]
+mod concurrent;

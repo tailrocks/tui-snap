@@ -11,6 +11,7 @@ pub(crate) mod pty_registry {
         OpError, OpResult, base64_decode, base64_encode, observation_view, screen_text,
         screen_view, wait_kind,
     };
+    use std::sync::Arc;
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{Duration, Instant};
@@ -21,15 +22,28 @@ pub(crate) mod pty_registry {
     // Named PTY sessions surviving across CLI invocations (F08-F2) wait for a
     // released termpane plus a retained-session/owner API that does not exist
     // yet; no path/git override stands in for it here.
-    static REGISTRY: Mutex<Option<HashMap<String, crate::tui::Session>>> = Mutex::new(None);
+    //
+    // Concurrency (F12): the map holds `Arc<Session>` and every critical
+    // section below is short (lookup/insert/remove only) — spawns, waits,
+    // and observations all run OUTSIDE the lock, so independent sessions
+    // operate concurrently and one blocked wait never stalls another
+    // session. An `exit` removes the entry but in-flight holders keep a
+    // working `Arc` until close completes.
+    static REGISTRY: Mutex<Option<HashMap<String, Arc<crate::tui::Session>>>> = Mutex::new(None);
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-    fn with_registry<T>(f: impl FnOnce(&mut HashMap<String, crate::tui::Session>) -> T) -> T {
+    fn with_registry<T>(f: impl FnOnce(&mut HashMap<String, Arc<crate::tui::Session>>) -> T) -> T {
         let mut guard = REGISTRY
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let map = guard.get_or_insert_with(HashMap::new);
         f(map)
+    }
+
+    /// Short-lock lookup: clone the `Arc` out, then operate lock-free.
+    fn lookup(session: &str) -> Result<Arc<crate::tui::Session>, OpError> {
+        with_registry(|map| map.get(session).cloned())
+            .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))
     }
 
     fn fresh_id() -> String {
@@ -99,22 +113,37 @@ pub(crate) mod pty_registry {
         if let Some(cwd) = cwd {
             builder = builder.cwd(cwd);
         }
-        // Reserve-then-spawn under one lock: a duplicate id fails before any
-        // child exists, so a failed registration never leaves a spawned
-        // session to clean up. (The lock is already held across blocking
-        // waits elsewhere in this registry.)
-        with_registry(|map| {
+        // Check-then-spawn-then-insert, all outside one lock: the pre-check
+        // fails the common duplicate before any child exists; the spawn
+        // itself runs lock-free (it blocks for the worker's revision 0);
+        // the insert re-checks so a same-id race loser closes what it just
+        // spawned instead of clobbering the winner.
+        if with_registry(|map| map.contains_key(&id)) {
+            return Err(
+                OpError::new("session-exists", format!("{id} already spawned")).with_session(&id),
+            );
+        }
+        let session = builder.spawn().map_err(|e| tui_err(&e).with_session(&id))?;
+        let pid = session.pid();
+        let session = Arc::new(session);
+        let won = with_registry(|map| {
             if map.contains_key(&id) {
-                return Err(
-                    OpError::new("session-exists", format!("{id} already spawned"))
-                        .with_session(&id),
-                );
+                return false;
             }
-            let session = builder.spawn().map_err(|e| tui_err(&e).with_session(&id))?;
-            let pid = session.pid();
-            map.insert(id.clone(), session);
-            Ok(OpResult::Spawned { session: id, pid })
-        })
+            map.insert(id.clone(), Arc::clone(&session));
+            true
+        });
+        if !won {
+            // Lost a same-id race: close what we spawned (best-effort; the
+            // duplicate verdict stays authoritative either way).
+            if session.close().is_err() {
+                // Close failed after a lost race; the verdict stands.
+            }
+            return Err(
+                OpError::new("session-exists", format!("{id} already spawned")).with_session(&id),
+            );
+        }
+        Ok(OpResult::Spawned { session: id, pid })
     }
 
     pub(crate) fn stdin(
@@ -134,89 +163,74 @@ pub(crate) mod pty_registry {
             )
             .with_session(session));
         }
-        with_registry(|map| {
-            let s = map.get(session).ok_or_else(|| {
-                OpError::new("not-found", "unknown session").with_session(session)
+        let s = lookup(session)?;
+        let r = if let Some(text) = text {
+            if text.is_empty() {
+                return Err(
+                    OpError::new("invalid-input", "text must not be empty").with_session(session)
+                );
+            }
+            s.send_text(&text)
+        } else if let Some(chord) = chord {
+            s.press(&chord)
+        } else if let Some(b64) = bytes_b64 {
+            let bytes = base64_decode(&b64).map_err(|e| {
+                OpError::new("invalid-input", format!("bad bytes_b64: {e}")).with_session(session)
             })?;
-            let r = if let Some(text) = text {
-                if text.is_empty() {
-                    return Err(OpError::new("invalid-input", "text must not be empty")
-                        .with_session(session));
-                }
-                s.send_text(&text)
-            } else if let Some(chord) = chord {
-                s.press(&chord)
-            } else if let Some(b64) = bytes_b64 {
-                let bytes = base64_decode(&b64).map_err(|e| {
-                    OpError::new("invalid-input", format!("bad bytes_b64: {e}"))
-                        .with_session(session)
-                })?;
-                if bytes.is_empty() {
-                    return Err(OpError::new("invalid-input", "bytes must not be empty")
-                        .with_session(session));
-                }
-                s.send_bytes(&bytes)
-            } else {
-                unreachable!("counted above");
-            };
-            r.map_err(|e| tui_err(&e).with_session(session))?;
-            Ok(OpResult::InputAccepted {
-                session: session.to_string(),
-            })
+            if bytes.is_empty() {
+                return Err(
+                    OpError::new("invalid-input", "bytes must not be empty").with_session(session)
+                );
+            }
+            s.send_bytes(&bytes)
+        } else {
+            unreachable!("counted above");
+        };
+        r.map_err(|e| tui_err(&e).with_session(session))?;
+        Ok(OpResult::InputAccepted {
+            session: session.to_string(),
         })
     }
 
     pub(crate) fn observe(session: &str) -> Result<OpResult, OpError> {
-        with_registry(|map| {
-            let s = map.get(session).ok_or_else(|| {
-                OpError::new("not-found", "unknown session").with_session(session)
-            })?;
-            let obs = s
-                .observe_now()
-                .map_err(|e| tui_err(&e).with_session(session))?;
-            Ok(OpResult::Observation {
-                observation: observation_view(&obs),
-            })
+        let s = lookup(session)?;
+        let obs = s
+            .observe_now()
+            .map_err(|e| tui_err(&e).with_session(session))?;
+        Ok(OpResult::Observation {
+            observation: observation_view(&obs),
         })
     }
 
     pub(crate) fn snapshot(session: &str) -> Result<OpResult, OpError> {
-        with_registry(|map| {
-            let s = map.get(session).ok_or_else(|| {
-                OpError::new("not-found", "unknown session").with_session(session)
-            })?;
-            let screen = s
-                .snapshot()
-                .map_err(|e| tui_err(&e).with_session(session))?;
-            Ok(OpResult::Snapshot {
-                screen: screen_view(&screen),
-            })
+        let s = lookup(session)?;
+        let screen = s
+            .snapshot()
+            .map_err(|e| tui_err(&e).with_session(session))?;
+        Ok(OpResult::Snapshot {
+            screen: screen_view(&screen),
         })
     }
 
     pub(crate) fn screenshot(session: &str) -> Result<OpResult, OpError> {
-        with_registry(|map| {
-            let s = map.get(session).ok_or_else(|| {
-                OpError::new("not-found", "unknown session").with_session(session)
-            })?;
-            let obs = s
-                .observe_now()
-                .map_err(|e| tui_err(&e).with_session(session))?;
-            let canonical = tuiscotti_insta::insta_proto::insta_string(&obs.screen);
-            let profile = tuiscotti_render::profile::Profile::default_profile();
-            let mut renderer = tuiscotti_render::render::Renderer::new(
-                &profile,
-                &tuiscotti_render::profile::VENDORED_FACES,
-            )
-            .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
-            let image = renderer
-                .render_screen(&obs.screen)
-                .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
-            Ok(OpResult::Screenshot {
-                screen: screen_view(&obs.screen),
-                canonical,
-                png_b64: base64_encode(&image.png),
-            })
+        let s = lookup(session)?;
+        let obs = s
+            .observe_now()
+            .map_err(|e| tui_err(&e).with_session(session))?;
+        let canonical = tuiscotti_core::screen::canonical_string(&obs.screen);
+        let profile = tuiscotti_render::profile::Profile::default_profile();
+        // Shared default renderer (F12): faces parsed once per thread,
+        // glyph cache shared across screenshots.
+        let image = tuiscotti_render::render::Renderer::with_profile(
+            &profile,
+            &tuiscotti_render::profile::VENDORED_FACES,
+            |r| r.render_screen(&obs.screen),
+        )
+        .map_err(|e| OpError::new("render", e.to_string()).with_session(session))?;
+        Ok(OpResult::Screenshot {
+            screen: screen_view(&obs.screen),
+            canonical,
+            png_b64: base64_encode(&image.png),
         })
     }
 
@@ -227,66 +241,61 @@ pub(crate) mod pty_registry {
         quiet_ms: Option<u64>,
         timeout_ms: u64,
     ) -> Result<OpResult, OpError> {
-        with_registry(|map| {
-            let s = map.get(session).ok_or_else(|| {
-                OpError::new("not-found", "unknown session").with_session(session)
-            })?;
-            let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-            let cancel = crate::tui::CancelToken::new();
-            match kind {
-                wait_kind::TEXT => {
-                    let needle = needle.ok_or_else(|| {
-                        OpError::new("invalid-input", "text wait needs `needle`")
-                            .with_session(session)
-                    })?;
-                    if needle.is_empty() {
-                        return Err(OpError::new("invalid-input", "needle must not be empty")
-                            .with_session(session));
-                    }
-                    let obs = s
-                        .wait_predicate(
-                            |o| screen_text(&o.screen).contains(needle),
-                            deadline,
-                            &cancel,
-                        )
-                        .map_err(|e| wait_err(&e).with_session(session))?;
-                    Ok(OpResult::Waited {
-                        session: session.to_string(),
-                        observation: observation_view(&obs),
-                    })
+        let s = lookup(session)?;
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+        let cancel = crate::tui::CancelToken::new();
+        match kind {
+            wait_kind::TEXT => {
+                let needle = needle.ok_or_else(|| {
+                    OpError::new("invalid-input", "text wait needs `needle`").with_session(session)
+                })?;
+                if needle.is_empty() {
+                    return Err(OpError::new("invalid-input", "needle must not be empty")
+                        .with_session(session));
                 }
-                wait_kind::STABLE => {
-                    let quiet = Duration::from_millis(quiet_ms.unwrap_or(200));
-                    let obs = s
-                        .wait_stable_quiet(deadline, quiet, &cancel)
-                        .map_err(|e| wait_err(&e).with_session(session))?;
-                    Ok(OpResult::Waited {
-                        session: session.to_string(),
-                        observation: observation_view(&obs),
-                    })
-                }
-                wait_kind::EXIT => {
-                    let ew = s
-                        .wait_exit(deadline, &cancel)
-                        .map_err(|e| wait_err(&e).with_session(session))?;
-                    Ok(OpResult::Exited {
-                        session: session.to_string(),
-                        code: ew.status.code(),
-                        signal: ew.status.signal().map(str::to_string),
-                        observation: observation_view(&ew.observation),
-                    })
-                }
-                other => Err(OpError::new(
-                    "invalid-input",
-                    format!("unknown wait kind {other:?} (want text|stable|exit)"),
-                )
-                .with_session(session)),
+                let obs = s
+                    .wait_predicate(
+                        |o| screen_text(&o.screen).contains(needle),
+                        deadline,
+                        &cancel,
+                    )
+                    .map_err(|e| wait_err(&e).with_session(session))?;
+                Ok(OpResult::Waited {
+                    session: session.to_string(),
+                    observation: observation_view(&obs),
+                })
             }
-        })
+            wait_kind::STABLE => {
+                let quiet = Duration::from_millis(quiet_ms.unwrap_or(200));
+                let obs = s
+                    .wait_stable_quiet(deadline, quiet, &cancel)
+                    .map_err(|e| wait_err(&e).with_session(session))?;
+                Ok(OpResult::Waited {
+                    session: session.to_string(),
+                    observation: observation_view(&obs),
+                })
+            }
+            wait_kind::EXIT => {
+                let ew = s
+                    .wait_exit(deadline, &cancel)
+                    .map_err(|e| wait_err(&e).with_session(session))?;
+                Ok(OpResult::Exited {
+                    session: session.to_string(),
+                    code: ew.status.code(),
+                    signal: ew.status.signal().map(str::to_string),
+                    observation: observation_view(&ew.observation),
+                })
+            }
+            other => Err(OpError::new(
+                "invalid-input",
+                format!("unknown wait kind {other:?} (want text|stable|exit)"),
+            )
+            .with_session(session)),
+        }
     }
 
     pub(crate) fn exit(session: &str, timeout_ms: u64) -> Result<OpResult, OpError> {
-        let mut s = with_registry(|map| {
+        let s = with_registry(|map| {
             map.remove(session)
                 .ok_or_else(|| OpError::new("not-found", "unknown session").with_session(session))
         })?;

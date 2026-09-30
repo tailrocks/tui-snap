@@ -10,7 +10,7 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 use super::capture::run_reader;
 use super::error::TuiError;
-use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, PTY_LIFECYCLE};
+use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, OP_QUEUE_LIMIT, PTY_LIFECYCLE};
 use super::profile::TerminalProfile;
 use super::session::Session;
 use super::shared::Shared;
@@ -180,7 +180,10 @@ impl Tui {
             pid,
         } = spawn_pty_child(cmd, cols, rows)?;
 
-        let (op_tx, op_rx) = mpsc::channel::<Op>();
+        // Bounded (F12): a flooding child blocks the reader on a full
+        // queue — backpressure through the PTY, like a real terminal —
+        // instead of piling unbounded `Feed` batches in memory.
+        let (op_tx, op_rx) = mpsc::sync_channel::<Op>(OP_QUEUE_LIMIT);
         let shared = Arc::new(Shared::new());
         let term_config = TermConfig {
             kitty_keyboard: self.profile.kitty_keyboard,
@@ -210,7 +213,7 @@ impl Tui {
             .map_err(|e| TuiError::Spawn(format!("reader spawn failed: {e}")))?;
 
         let session = Session {
-            op_tx: Some(op_tx),
+            op_tx: Mutex::new(Some(op_tx)),
             shared,
             worker: Mutex::new(Some(worker)),
             reader: Mutex::new(Some(reader_thread)),

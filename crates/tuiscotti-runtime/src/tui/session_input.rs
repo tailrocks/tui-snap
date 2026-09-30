@@ -2,6 +2,9 @@
 //! resize, signals (R11-core).
 
 use std::sync::mpsc;
+use std::time::Duration;
+
+use tuiscotti_core::locate::{Locator, Span};
 
 use super::error::TuiError;
 use super::exit::process_exists;
@@ -12,6 +15,7 @@ use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 use super::session::Session;
 use super::session_teardown::recv_reply;
 use super::worker::{Input, MouseAction, Op};
+use crate::bound_locator::ActionError;
 
 impl Session {
     /// Send literal text (UTF-8 bytes, no chord interpretation).
@@ -118,6 +122,37 @@ impl Session {
     ) -> Result<(), TuiError> {
         self.mouse_down(button, x, y, mods)?;
         self.mouse_up(button, x, y, mods)
+    }
+
+    /// Resolve `locator` and click its unique target as ONE worker step
+    /// (F11): the owning worker builds one fresh observation, resolves the
+    /// unique viewport target at its own current revision, and delivers
+    /// press + release with no interleaving op. Returns the acted-on [`Span`]
+    /// so the caller can audit what was clicked.
+    ///
+    /// Single attempt, never retried: on a reply timeout the click may
+    /// already have been delivered, and a retry would send a second press.
+    pub(crate) fn click_target(
+        &self,
+        locator: Locator,
+        button: MouseButton,
+        mods: MouseMods,
+    ) -> Result<Span, ActionError> {
+        let (tx, rx) = mpsc::channel();
+        self.send(Op::ClickTarget {
+            locator,
+            button,
+            mods,
+            reply: tx,
+        })
+        .map_err(ActionError::Session)?;
+        rx.recv_timeout(Duration::from_secs(10)).map_err(|_| {
+            ActionError::Session(TuiError::Timeout(
+                "click_target: worker unresponsive; the click may already have been \
+                     delivered, so it must not be retried"
+                    .to_string(),
+            ))
+        })?
     }
 
     /// Button press at `(x, y)`.

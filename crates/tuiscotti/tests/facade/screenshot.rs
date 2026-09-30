@@ -1,7 +1,7 @@
 use super::*;
 use std::fs;
 use tuiscotti::assert::{check_consistent, generation_id, png_tag_generation, render_sample};
-use tuiscotti::insta_proto::insta_string;
+use tuiscotti::screen::canonical_string;
 
 /// Find the published bundle for `scenario` under the evidence root
 /// (exactly one `complete.json` beneath the scenario partition).
@@ -37,7 +37,7 @@ fn find_bundle(evidence: &Path, scenario: &str) -> Result<PathBuf, String> {
 fn snapshot_macro_passes_on_identical_rerun() {
     let ws = workspace().expect("workspace succeeds");
     let screen = fixture().expect("fixture succeeds");
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let generation = generation_id(&canonical);
     // Second same-process call auto-suffixes to `fac_rerun-2` (no public opt-out).
     write_text_snap(&ws.snaps, "fac_rerun", &generation, &canonical)

@@ -55,14 +55,15 @@ pub fn frame_from_screen_with_source(screen: &Screen, profile_name: &str, source
 /// rendering ([`Renderer::render`]). Strict missing policy fails on
 /// uncovered glyphs; see [`MissingGlyphPolicy`](crate::profile::MissingGlyphPolicy).
 ///
-/// One-shot convenience: constructs a fresh [`Renderer`] per call. Bulk
-/// gates should keep a [`Renderer::for_render_profile`] instance instead.
+/// One-shot convenience over the thread-local shared instance for `rp`
+/// ([`Renderer::with_strict`]): faces parsed once per thread per profile,
+/// glyph cache shared.
 ///
 /// # Errors
 ///
 /// Returns `RenderError` when the profile or screen is invalid.
 pub fn render_screen(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
-    Renderer::for_render_profile(rp)?.render_screen(screen)
+    Renderer::with_strict(rp, |r| r.render_screen(screen))
 }
 
 /// [`render_screen`] returning PNG bytes only.
@@ -76,13 +77,13 @@ pub fn render_screen_png(screen: &Screen, rp: &RenderProfile<'_>) -> Result<Vec<
 
 /// Render a validated [`Frame`] under a strict [`RenderProfile`]: the same
 /// engine as [`render_png_report`](super::render_png_report), plus the profile's missing-glyph policy
-/// and blink sample phase.
+/// and blink sample phase. Same sharing as [`render_screen`].
 ///
 /// # Errors
 ///
 /// Returns `RenderError` when the profile or frame is invalid.
 pub fn render_frame_strict(frame: &Frame, rp: &RenderProfile<'_>) -> Result<Rendered, RenderError> {
-    Renderer::for_render_profile(rp)?.render(frame)
+    Renderer::with_strict(rp, |r| r.render(frame))
 }
 
 // ---------------------------------------------------------------------------

@@ -74,3 +74,4 @@ pub use input_types::{
 pub use limits::{DEFAULT_STABLE_QUIET, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 pub use profile::{MouseProfile, TerminalProfile, TrackedModes};
 pub use session::Session;
+pub use shared::SessionMeta;

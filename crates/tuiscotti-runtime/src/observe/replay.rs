@@ -177,7 +177,7 @@ mod replay_paths {
             if let Some(cwd) = &self.cwd {
                 builder = builder.cwd(cwd.clone());
             }
-            let mut session = builder
+            let session = builder
                 .spawn()
                 .map_err(|e| RerunError::Spawn(e.to_string()))?;
             let pid = session.pid();

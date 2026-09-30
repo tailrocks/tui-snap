@@ -138,7 +138,7 @@ impl Guardian {
     /// This function never fails; teardown faults land in the report.
     pub fn finish(mut self, deadline: Instant) -> Result<GuardianReport, TuiError> {
         let mut teardown_error = None;
-        if let Some(mut s) = self.session.take()
+        if let Some(s) = self.session.take()
             && let Err(e) = s.close()
         {
             teardown_error = Some(e.to_string());
@@ -154,7 +154,7 @@ impl Guardian {
 
 impl Drop for Guardian {
     fn drop(&mut self) {
-        if let Some(mut s) = self.session.take() {
+        if let Some(s) = self.session.take() {
             // Drop-time teardown is best-effort: the group sweep below
             // still runs even when the session close fails.
             if s.close().is_err() {

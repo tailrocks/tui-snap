@@ -8,6 +8,8 @@ license.workspace = true
 [features]
 default = ["pty"]
 pty = ["tuiscotti-runtime/pty"]
+# Forwards the runtime's test-only overrides (F12). Test builds only.
+test-overrides = ["tuiscotti-runtime/test-overrides"]
 
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }

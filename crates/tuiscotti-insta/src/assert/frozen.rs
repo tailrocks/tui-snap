@@ -4,9 +4,9 @@ use super::{
     AssertError, FOUR_STEM, check_scenario_name, generation_id, png_generation, render_sample,
     snap_generation,
 };
-use crate::insta_proto::insta_string;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::screen::Screen;
+use tuiscotti_core::screen::canonical_string;
 use tuiscotti_render::diff::{AlphaPolicy, compare_png_with_alpha};
 
 /// Compound-consistency failure: mixed or unreadable generation bindings.
@@ -171,7 +171,7 @@ pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result
         path: path.clone(),
         reason: format!("canonical is not UTF-8: {e}"),
     })?;
-    let actual = insta_string(screen);
+    let actual = canonical_string(screen);
     if approved_text != actual {
         return Err(FrozenError::Mismatch {
             name: name.to_string(),

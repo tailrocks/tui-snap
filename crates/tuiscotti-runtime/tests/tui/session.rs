@@ -5,7 +5,7 @@ use tuiscotti_runtime::tui::{Key, KeyMods, Tui, WaitError, parse_chord, process_
 
 #[test]
 fn spawn_and_observe() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(40, 10)
         .spawn()
         .expect("spawn succeeds");
@@ -22,7 +22,7 @@ fn spawn_and_observe() {
 
 #[test]
 fn typed_input_echoes() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 12)
         .spawn()
         .expect("spawn succeeds");
@@ -40,7 +40,7 @@ fn typed_input_echoes() {
 
 #[test]
 fn chord_press_sends_key() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 12)
         .spawn()
         .expect("spawn succeeds");
@@ -78,7 +78,7 @@ fn chord_parser_shapes() {
 
 #[test]
 fn resize_changes_grid() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(80, 24)
         .spawn()
         .expect("spawn succeeds");
@@ -92,7 +92,7 @@ fn resize_changes_grid() {
 
 #[test]
 fn predicate_timeout_yields_evidence() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(50, 8)
         .spawn()
         .expect("spawn succeeds");
@@ -149,7 +149,7 @@ fn printf_app_output_and_success() {
 
 #[test]
 fn close_reaps_child_no_leak() {
-    let mut s = Tui::new(["/bin/sleep", "30"])
+    let s = Tui::new(["/bin/sleep", "30"])
         .spawn()
         .expect("spawn succeeds");
     let pid = s.pid().expect("child pid");
@@ -188,11 +188,11 @@ fn finish_eofs_cat_to_success() {
 
 #[test]
 fn two_sessions_independent() {
-    let mut a = Tui::new(["/bin/cat"])
+    let a = Tui::new(["/bin/cat"])
         .size(60, 10)
         .spawn()
         .expect("spawn succeeds");
-    let mut b = Tui::new(["/bin/cat"])
+    let b = Tui::new(["/bin/cat"])
         .size(60, 10)
         .spawn()
         .expect("spawn succeeds");

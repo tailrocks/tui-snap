@@ -64,8 +64,9 @@ impl GroupedStore {
         pixel_threshold: f64,
         title: &str,
     ) -> Result<StoreReport, SnapshotError> {
-        let mut renderer = Renderer::new(profile, faces)?;
-        self.report_with(&mut renderer, pixel_threshold, title)
+        Renderer::with_profile(profile, faces, |r| {
+            self.report_with(r, pixel_threshold, title)
+        })
     }
 
     /// Review index over the ONE persisted verdict per scenario (C05):

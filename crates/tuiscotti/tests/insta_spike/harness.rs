@@ -5,7 +5,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tuiscotti::Screen;
 use tuiscotti::diff::AlphaPolicy;
-use tuiscotti::insta_proto::{PngPixelComparator, insta_string};
+use tuiscotti::insta_proto::PngPixelComparator;
+use tuiscotti::screen::canonical_string;
 
 /// Pending-dependent simulations (accept/reject/interrupted) need failing
 /// assertions to write `.snap.new` pendings AND fail — the `new` behavior —
@@ -48,7 +49,7 @@ pub(crate) fn run_canonical(
 ) -> Result<(), String> {
     let settings = settings_for(dir, generation);
     let name = name.to_string();
-    let text = insta_string(screen);
+    let text = canonical_string(screen);
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         settings.bind(|| {
             insta::assert_snapshot!(name, text);
@@ -87,7 +88,7 @@ pub(crate) fn write_text_snap(
     body: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let content = format!(
-        "---\nsource: tests/insta_spike.rs\ndescription: tuiscotti generation {generation}\nexpression: insta_string\n---\n{body}"
+        "---\nsource: tests/insta_spike.rs\ndescription: tuiscotti generation {generation}\nexpression: canonical_string\n---\n{body}"
     );
     Ok(fs::write(dir.join(format!("{name}.snap")), content)?)
 }

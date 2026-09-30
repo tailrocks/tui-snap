@@ -296,7 +296,7 @@ fn cli_accept_rejects_frozen() {
     std::fs::create_dir(&frozen).expect("mkdir");
     std::fs::write(
         frozen.join("home.canonical.txt"),
-        tuiscotti::insta_proto::insta_string(&screen),
+        tuiscotti::screen::canonical_string(&screen),
     )
     .expect("canonical");
     tuiscotti::assert::check_frozen_snapshot(&frozen, "home", &screen)

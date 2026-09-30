@@ -24,32 +24,33 @@ use super::RenderError;
 use crate::profile::RenderProfile;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tuiscotti_core::frame::{Color, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
-// No-cache override (qualification mode).
+// No-cache mode (qualification): explicit context + process config.
 // ---------------------------------------------------------------------------
 
-/// `RENDER_NO_CACHE` set (to anything but `""`/`"0"`) disables the
+/// `RENDER_NO_CACHE` set (to anything but `""`/`"0"`) disables every
 /// [`RenderCache`]: every `get` misses, every `put` is dropped. Qualification
-/// runs set this so no cache entry can mask a renderer change.
+/// runs set this in the invoking shell so no cache entry can mask a renderer
+/// change. This reads process configuration only — there is no in-process
+/// global override (F12): tests select no-cache mode per cache through
+/// [`CacheOptions`], so independent tests never serialize on shared state.
 #[must_use]
 pub fn render_cache_disabled() -> bool {
-    NO_CACHE_OVERRIDE.load(Ordering::SeqCst)
-        || matches!(std::env::var("RENDER_NO_CACHE"), Ok(v) if v != "0" && !v.is_empty())
+    matches!(std::env::var("RENDER_NO_CACHE"), Ok(v) if v != "0" && !v.is_empty())
 }
 
-static NO_CACHE_OVERRIDE: AtomicBool = AtomicBool::new(false);
-
-/// Test-only no-cache override, OR-ed with `RENDER_NO_CACHE` (no `unsafe`,
-/// unlike `set_var`, which is an `unsafe fn` in edition 2024 and cannot be
-/// used under the workspace lints). Callers sharing a process must serialize
-/// (see the render tests' `CACHE_LOCK`); pass `false` to clear. Never set in
-/// production code.
-pub fn set_no_cache_override(enabled: bool) {
-    NO_CACHE_OVERRIDE.store(enabled, Ordering::SeqCst);
+/// Explicit per-cache options (F12): no-cache mode travels with the cache
+/// handle, never through process-global state.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CacheOptions {
+    /// When true, this cache behaves as if caching were disabled: every
+    /// `get` misses, every `put` is dropped (renders still work). OR-ed
+    /// with [`render_cache_disabled`].
+    pub no_cache: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +219,11 @@ impl CacheKey {
     ///
     /// Returns `RenderError` when `s` is not 64 lowercase hex chars.
     pub fn parse(s: &str) -> Result<Self, RenderError> {
-        if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+        if s.len() != 64
+            || !s
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        {
             return Err(RenderError(format!(
                 "invalid cache key: expected 64 lowercase hex chars, got {s:?}"
             )));
@@ -369,6 +374,7 @@ fn decode_entry(key: &CacheKey, bytes: &[u8]) -> Option<Vec<u8>> {
 #[derive(Debug)]
 pub struct RenderCache {
     dir: PathBuf,
+    no_cache: bool,
     rejected: u64,
     hits: u64,
     stores: u64,
@@ -388,6 +394,22 @@ impl RenderCache {
     /// Returns `RenderError` when `dir` overlaps an approved root or cannot
     /// be created/resolved.
     pub fn open(dir: &Path, approved_roots: &[&Path]) -> Result<Self, RenderError> {
+        Self::open_with_options(dir, approved_roots, CacheOptions::default())
+    }
+
+    /// [`RenderCache::open`] with explicit [`CacheOptions`]: `no_cache`
+    /// disables this cache instance (qualification mode per cache, no
+    /// process-global state), OR-ed with [`render_cache_disabled`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `RenderError` when `dir` overlaps an approved root or cannot
+    /// be created/resolved.
+    pub fn open_with_options(
+        dir: &Path,
+        approved_roots: &[&Path],
+        options: CacheOptions,
+    ) -> Result<Self, RenderError> {
         std::fs::create_dir_all(dir)
             .map_err(|e| RenderError(format!("cannot create cache dir {}: {e}", dir.display())))?;
         let dir = std::fs::canonicalize(dir)
@@ -404,10 +426,17 @@ impl RenderCache {
         }
         Ok(Self {
             dir,
+            no_cache: options.no_cache,
             rejected: 0,
             hits: 0,
             stores: 0,
         })
+    }
+
+    /// True when this cache instance was opened with no-cache mode.
+    #[must_use]
+    pub fn is_no_cache(&self) -> bool {
+        self.no_cache
     }
 
     /// Cache key for a screen under a strict profile ([`CacheKey::for_screen`]).
@@ -428,12 +457,13 @@ impl RenderCache {
     }
 
     /// Fetch a cached PNG. Returns `None` (miss) when caching is disabled
-    /// ([`render_cache_disabled`]), the key is absent, or the entry is
+    /// (this instance's [`CacheOptions::no_cache`] or
+    /// [`render_cache_disabled`]), the key is absent, or the entry is
     /// corrupt/incompatible — the last case also removes the entry and
     /// increments [`Self::rejected`]. Served bytes are always a fully
     /// decode-validated PNG for THIS key.
     pub fn get(&mut self, key: &CacheKey) -> Option<Vec<u8>> {
-        if render_cache_disabled() {
+        if self.no_cache || render_cache_disabled() {
             return None;
         }
         let path = self.path(key);
@@ -464,7 +494,7 @@ impl RenderCache {
     /// Returns `RenderError` when the payload is not a valid bounded PNG or
     /// the entry cannot be published.
     pub fn put(&mut self, key: &CacheKey, png: &[u8]) -> Result<(), RenderError> {
-        if render_cache_disabled() {
+        if self.no_cache || render_cache_disabled() {
             return Ok(());
         }
         if !fully_valid_png(png) {
@@ -537,7 +567,9 @@ fn resolved_against_cwd(path: &Path) -> PathBuf {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path)
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
     };
     // Clean FIRST so `..` segments are gone before the ancestor walk
     // (`Path::file_name` returns `None` for a trailing `..`).

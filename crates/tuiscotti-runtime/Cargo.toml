@@ -10,10 +10,19 @@ default = ["pty"]
 # PTY runtime (`tui` module). Pure view tests build and run with
 # `--no-default-features`.
 pty = ["dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
+# Test-only process-global overrides (F12): `set_runtime_dir_override`
+# exists only with this feature (or `cfg(test)`). Production builds must
+# never enable it; production code resolves the runtime dir from the
+# process environment (`TUISCOTTI_RUNTIME_DIR` / `XDG_RUNTIME_DIR`).
+test-overrides = []
 
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
 tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+# DEAD since F12 (no runtime code names tuiscotti_insta; the canonical
+# projection moved to core): kept only because removing it rewrites
+# Cargo.lock, which the dep-graph owner currently owns. Delete with the
+# lockfile.
 tuiscotti-insta = { version = "0.2.0", path = "../tuiscotti-insta" }
 base64.workspace = true
 serde.workspace = true

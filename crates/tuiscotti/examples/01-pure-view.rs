@@ -9,8 +9,8 @@
 
 use ratatui::widgets::Paragraph;
 use tuiscotti::assert::{Policy, generation_id};
-use tuiscotti::insta_proto::insta_string;
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
+use tuiscotti::screen::canonical_string;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Production draw closure: the real render path, not a hand-made grid.
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         snapshots: snaps.clone(),
         evidence: tmp.path().join("evidence"),
     };
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let generation = generation_id(&canonical);
     std::fs::write(
         snaps.join("pure-view.snap"),

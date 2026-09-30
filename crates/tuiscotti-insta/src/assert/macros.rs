@@ -193,8 +193,8 @@ macro_rules! assert_screenshot_in {
         );
         let __tuiscotti_snap_name = $name.to_string();
         let __tuiscotti_canonical = __tuiscotti_prepared.canonical;
-        let __tuiscotti_canonical_outcome = std::panic::catch_unwind(
-            std::panic::AssertUnwindSafe(|| {
+        let __tuiscotti_canonical_outcome =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 __tuiscotti_settings.bind(|| {
                     $crate::insta::assert_snapshot!(
                         __tuiscotti_snap_name,
@@ -202,8 +202,7 @@ macro_rules! assert_screenshot_in {
                         "canonical screen"
                     );
                 });
-            }),
-        );
+            }));
         let __tuiscotti_png_base = $crate::assert::png_snapshot_base($name);
         let __tuiscotti_png_name = format!("{}.png", __tuiscotti_png_base);
         let mut __tuiscotti_png_settings = $crate::assert::snapshot_settings(
@@ -214,15 +213,16 @@ macro_rules! assert_screenshot_in {
         __tuiscotti_png_settings
             .set_comparator(Box::new($crate::assert::screenshot_png_comparator()));
         let __tuiscotti_png = __tuiscotti_prepared.png;
-        let __tuiscotti_png_outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            __tuiscotti_png_settings.bind(|| {
-                $crate::insta::assert_binary_snapshot!(
-                    __tuiscotti_png_name.as_str(),
-                    __tuiscotti_png,
-                    "screenshot png"
-                );
-            });
-        }));
+        let __tuiscotti_png_outcome =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                __tuiscotti_png_settings.bind(|| {
+                    $crate::insta::assert_binary_snapshot!(
+                        __tuiscotti_png_name.as_str(),
+                        __tuiscotti_png,
+                        "screenshot png"
+                    );
+                });
+            }));
         // Strict gate over the RESOLVED (suffixed, caller-relative) identity:
         // new-format samples require complete bindings; missing or partial
         // bindings fail here instead of passing half-blind.

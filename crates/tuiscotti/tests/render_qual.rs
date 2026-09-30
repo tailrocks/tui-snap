@@ -168,8 +168,10 @@ const CORPUS: &[(&str, &str, u8, bool)] = &[
 // ---------------------------------------------------------------------------
 // V08: content-addressed cache.
 // ---------------------------------------------------------------------------
-
-static CACHE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+//
+// No lock: no-cache mode is a per-cache [`tuiscotti::render::CacheOptions`]
+// context (F12), so cache tests share no process-global state and run
+// concurrently.
 
 fn cache_png() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let rp = RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder);

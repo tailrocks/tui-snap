@@ -12,7 +12,7 @@ use std::path::Path;
 
 use tuiscotti::Policy;
 use tuiscotti::assert::{generation_id, png_tag_generation, render_sample};
-use tuiscotti::insta_proto::insta_string;
+use tuiscotti::screen::canonical_string;
 
 fn write_text_snap(
     dir: &Path,
@@ -79,7 +79,7 @@ fn pure_view_matches_proposed_shape() {
     let evidence = tmp.path().join("evidence");
     fs::create_dir(&snaps).expect("fs::create_dir snaps succeeds");
     fs::create_dir(&evidence).expect("fs::create_dir evidence succeeds");
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let generation = generation_id(&canonical);
     let sample = render_sample(&screen).expect("render_sample succeeds");
     write_text_snap(&snaps, "g6_settings", &generation, &canonical)
@@ -146,9 +146,8 @@ fn find_bundle(evidence: &Path, scenario: &str) -> Result<std::path::PathBuf, St
 #[cfg(feature = "pty")]
 fn live_session_matches_proposed_shape() {
     // Proposed shape (adjusted: `expect_exit` takes an explicit Duration —
-    // a bare `expect_exit()` would hide the timeout policy; `mut` only for
-    // the `&mut self` close):
-    //   let mut app = tuiscotti::Tui::cargo_bin("menu-fixture")?
+    // a bare `expect_exit()` would hide the timeout policy):
+    //   let app = tuiscotti::Tui::cargo_bin("menu-fixture")?
     //       .size(100, 30)
     //       .spawn()?;
     //   app.get_by_text("Ready").expect_visible()?;
@@ -159,7 +158,7 @@ fn live_session_matches_proposed_shape() {
     //   app.press("q")?;
     //   app.expect_exit().success()?;
     use std::time::Duration;
-    let mut app = tuiscotti::Tui::new(["/bin/sh", "-c", "printf 'Ready\\n'; sleep 30"])
+    let app = tuiscotti::Tui::new(["/bin/sh", "-c", "printf 'Ready\\n'; sleep 30"])
         .size(80, 24)
         .spawn()
         .expect("spawn sh succeeds");
@@ -170,14 +169,15 @@ fn live_session_matches_proposed_shape() {
         .expect_visible()
         .expect("expect_visible succeeds");
     assert!(span.text.contains("Ready"), "span: {span}");
-    // Scoped composition through the same bound API.
+    // Scoped composition through the same bound API; the immediate
+    // lookup is distinct from the retrying expectation above.
     let scoped = tuiscotti::Locator::within(
         tuiscotti::Locator::region(0, 0, 80, 24),
         tuiscotti::Locator::text("Ready".to_string()),
     );
     app.get_by(scoped)
-        .expect_visible()
-        .expect("scoped expect_visible succeeds");
+        .visible_now()
+        .expect("scoped visible_now succeeds");
     // Harmless input: Enter submits an empty command to sh.
     app.press("Enter").expect("press Enter succeeds");
     app.wait_stable_timeout(Duration::from_secs(10))

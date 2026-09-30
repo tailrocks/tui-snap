@@ -112,7 +112,7 @@ fn readme_interactive_tui() {
     assert_eq!(key, tuiscotti::tui::Key::Up);
     assert!(mods.ctrl);
 
-    let mut s = Tui::new(["/bin/sh", "-c", "printf 'Ready\\n'; sleep 30"])
+    let s = Tui::new(["/bin/sh", "-c", "printf 'Ready\\n'; sleep 30"])
         .size(120, 40)
         .spawn()
         .expect("spawn shell");

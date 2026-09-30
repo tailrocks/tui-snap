@@ -9,7 +9,7 @@ use tuiscotti_runtime::tui::{
 
 #[test]
 fn cancel_mid_wait() {
-    let mut s = Tui::new(["/bin/cat"]).spawn().expect("spawn succeeds");
+    let s = Tui::new(["/bin/cat"]).spawn().expect("spawn succeeds");
     let token = CancelToken::new();
     let killer = token.clone();
     let handle = std::thread::spawn(move || {
@@ -41,7 +41,7 @@ fn cancel_mid_wait() {
 
 #[test]
 fn wait_stable_settles() {
-    let mut s = Tui::new(["/bin/sh", "-c", "printf 'steady\\n'"])
+    let s = Tui::new(["/bin/sh", "-c", "printf 'steady\\n'"])
         .spawn()
         .expect("spawn succeeds");
     let obs = s
@@ -53,7 +53,7 @@ fn wait_stable_settles() {
 
 #[test]
 fn wait_frame_unsupported_with_evidence() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(40, 10)
         .spawn()
         .expect("spawn succeeds");
@@ -71,7 +71,7 @@ fn wait_frame_unsupported_with_evidence() {
 
 #[test]
 fn mouse_refused_without_mode() {
-    let mut s = Tui::new(["/bin/cat"]).spawn().expect("spawn succeeds");
+    let s = Tui::new(["/bin/cat"]).spawn().expect("spawn succeeds");
     let err = s
         .click(MouseButton::Left, 5, 5, MouseMods::NONE)
         .expect_err("click must fail");
@@ -83,7 +83,7 @@ fn mouse_refused_without_mode() {
 
 #[test]
 fn mouse_click_sgr_roundtrip() {
-    let mut s = Tui::new(["/bin/sh", "-c", "printf '\\e[?1000h\\e[?1006h'; cat"])
+    let s = Tui::new(["/bin/sh", "-c", "printf '\\e[?1000h\\e[?1006h'; cat"])
         .size(60, 12)
         .spawn()
         .expect("spawn succeeds");
@@ -120,7 +120,7 @@ fn mouse_click_sgr_roundtrip() {
 
 #[test]
 fn mouse_wheel_and_drag_roundtrip() {
-    let mut s = Tui::new([
+    let s = Tui::new([
         "/bin/sh",
         "-c",
         "printf '\\e[?1000h\\e[?1003h\\e[?1006h'; cat",
@@ -170,7 +170,7 @@ fn mouse_wheel_and_drag_roundtrip() {
 
 #[test]
 fn focus_roundtrip() {
-    let mut s = Tui::new(["/bin/sh", "-c", "printf '\\e[?1004h'; cat"])
+    let s = Tui::new(["/bin/sh", "-c", "printf '\\e[?1004h'; cat"])
         .size(60, 8)
         .spawn()
         .expect("spawn succeeds");
@@ -204,7 +204,7 @@ fn focus_roundtrip() {
 #[test]
 fn paste_negotiated_and_delimiter_rejected() {
     // Without 2004 the paste goes through plain.
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 8)
         .spawn()
         .expect("spawn succeeds");
@@ -223,7 +223,7 @@ fn paste_negotiated_and_delimiter_rejected() {
     s.close().expect("close succeeds");
 
     // With 2004 the paste is bracketed.
-    let mut s = Tui::new(["/bin/sh", "-c", "printf '\\e[?2004h'; cat"])
+    let s = Tui::new(["/bin/sh", "-c", "printf '\\e[?2004h'; cat"])
         .size(60, 8)
         .spawn()
         .expect("spawn succeeds");
@@ -247,7 +247,7 @@ fn paste_negotiated_and_delimiter_rejected() {
 
 #[test]
 fn key_release_without_kitty_is_noop() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 8)
         .spawn()
         .expect("spawn succeeds");
@@ -306,7 +306,7 @@ fn signal_terminates_child() {
 
 #[test]
 fn child_env_and_cwd_are_child_only() {
-    let mut s = Tui::new([
+    let s = Tui::new([
         "/bin/sh",
         "-c",
         "printf \"v=$TUISCOTTI_TUI_PROBE pwd=$PWD\\n\"; cat",
@@ -337,7 +337,7 @@ fn child_env_and_cwd_are_child_only() {
 
 #[test]
 fn raw_bytes_and_enter_key() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 8)
         .spawn()
         .expect("spawn succeeds");

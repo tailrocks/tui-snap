@@ -206,7 +206,7 @@ fn replay_bounded() {
 
 #[test]
 fn replay_matches_live_session() {
-    let mut s = Tui::new([
+    let s = Tui::new([
         "/bin/sh",
         "-c",
         "stty -echo; printf 'A\\033[31mB\\033[0m\\nEND\\n'",

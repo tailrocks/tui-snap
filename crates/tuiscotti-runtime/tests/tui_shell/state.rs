@@ -16,7 +16,7 @@ use tuiscotti_runtime::tui_shell::{
 
 #[test]
 fn live_title_bells_modes_palette() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(60, 12)
         .spawn()
         .expect("spawn succeeds");
@@ -72,7 +72,7 @@ fn live_title_bells_modes_palette() {
 
 #[test]
 fn live_unsupported_state_reported_not_fabricated() {
-    let mut s = Tui::new(["/bin/cat"])
+    let s = Tui::new(["/bin/cat"])
         .size(40, 10)
         .spawn()
         .expect("spawn succeeds");

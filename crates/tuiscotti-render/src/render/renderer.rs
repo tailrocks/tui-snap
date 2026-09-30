@@ -6,9 +6,41 @@ use super::{
     load_font, verify_geometry,
 };
 use crate::profile::{BlinkPhase, FontFaces, MissingGlyphPolicy, Profile, RenderProfile};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use tuiscotti_core::{frame::Frame, screen::Screen};
 
 mod strict;
+
+// Thread-local shared renderers (F12): one `Renderer` per profile key,
+// constructed once per thread, glyph caches shared across all renders on
+// that thread. Threads never share instances (no lock contention, no
+// `Sync` requirement); the map holds at most one entry per distinct
+// profile a thread renders with.
+thread_local! {
+    static SHARED: RefCell<HashMap<String, Renderer>> = RefCell::new(HashMap::new());
+}
+
+/// Key for the legacy default gate (default profile + vendored faces +
+/// default fallback chain).
+const DEFAULT_KEY: &str = "legacy:tuiscotti-default";
+
+/// True only for the exact vendored byte slices (identity, not content:
+/// same static, same pointer). A caller passing different bytes with
+/// identical content renders through a fresh instance — the safe
+/// direction, since pins are verified at construction either way.
+fn faces_are_vendored(faces: &FontFaces<'_>) -> bool {
+    use crate::profile::{
+        VENDORED_FONT, VENDORED_FONT_BOLD, VENDORED_FONT_BOLD_ITALIC, VENDORED_FONT_ITALIC,
+    };
+    fn same(a: &[u8], b: &[u8]) -> bool {
+        a.len() == b.len() && a.as_ptr() == b.as_ptr()
+    }
+    same(faces.regular, VENDORED_FONT)
+        && same(faces.bold, VENDORED_FONT_BOLD)
+        && same(faces.italic, VENDORED_FONT_ITALIC)
+        && same(faces.bold_italic, VENDORED_FONT_BOLD_ITALIC)
+}
 
 /// A reusable renderer: parses the pinned faces ONCE at construction (the
 /// geometry pin is verified there too) and caches glyph rasters across
@@ -103,6 +135,89 @@ impl Renderer {
         r.strict_missing = rp.missing() == MissingGlyphPolicy::Strict;
         r.blink_phase = rp.blink_phase();
         Ok(r)
+    }
+
+    /// Run `f` against a renderer for `profile` + `faces`, reusing the
+    /// thread-local shared instance when the request is exactly the
+    /// default gate ([`Profile::is_default_gate`] plus the vendored face
+    /// bytes, with the default fallback chain [`Self::new`] loads).
+    /// Anything else renders through a fresh instance, so custom
+    /// profiles, face overrides, and geometry pins behave exactly as
+    /// before — only slower (one construction per call).
+    ///
+    /// The closure must not reenter `with_profile`/`with_strict` on the
+    /// same thread (reentry fails closed with `RenderError`, never
+    /// panics). `E` only needs `From<RenderError>` so construction
+    /// failures convert into the caller's error type.
+    ///
+    /// # Errors
+    ///
+    /// Returns `E` when the renderer cannot be built or `f` fails.
+    pub fn with_profile<T, E>(
+        profile: &Profile,
+        faces: &FontFaces<'_>,
+        f: impl FnOnce(&mut Renderer) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<RenderError>,
+    {
+        if profile.is_default_gate() && faces_are_vendored(faces) {
+            Self::with_shared(DEFAULT_KEY, Self::build_default, f)
+        } else {
+            f(&mut Self::new(profile, faces)?)
+        }
+    }
+
+    /// Run `f` against a renderer for the strict profile `rp`, reusing
+    /// the thread-local shared instance keyed by [`RenderProfile::hash`].
+    /// Sound: the hash covers every pin, and the strict constructor
+    /// verifies face bytes against those pins (fields are `pub(crate)`,
+    /// so no unverified profile value can exist) — a key hit is
+    /// byte-identical faces under byte-identical parameters. Same
+    /// reentry rule as [`Self::with_profile`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `E` when the renderer cannot be built or `f` fails.
+    pub fn with_strict<T, E>(
+        rp: &RenderProfile<'_>,
+        f: impl FnOnce(&mut Renderer) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<RenderError>,
+    {
+        let key = format!("strict:{}", rp.hash());
+        Self::with_shared(&key, || Self::for_render_profile(rp), f)
+    }
+
+    /// The shared default-gate renderer constructor (faces parsed + pins
+    /// verified once per thread).
+    fn build_default() -> Result<Self, RenderError> {
+        Self::new(&Profile::default_profile(), &crate::profile::VENDORED_FACES)
+    }
+
+    /// Run `f` against the shared renderer for `key`, constructing it on
+    /// first use. Reentrant or post-teardown access fails closed.
+    fn with_shared<T, E>(
+        key: &str,
+        make: impl FnOnce() -> Result<Self, RenderError>,
+        f: impl FnOnce(&mut Renderer) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<RenderError>,
+    {
+        SHARED
+            .try_with(|cell| {
+                let mut map = cell
+                    .try_borrow_mut()
+                    .map_err(|_| RenderError("reentrant shared-renderer use".to_string()))?;
+                let renderer = match map.entry(key.to_string()) {
+                    std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(e) => e.insert(make()?),
+                };
+                f(renderer)
+            })
+            .map_err(|_| RenderError("shared renderer unavailable".to_string()))?
     }
 
     /// The profile this renderer is pinned to.

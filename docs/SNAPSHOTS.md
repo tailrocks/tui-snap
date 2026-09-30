@@ -118,7 +118,7 @@ at runtime.
 ## Macro gates (`assert_snapshot!` / `assert_screenshot!`)
 
 - `assert_snapshot!(name, screen)` — Insta text gate over the
-  canonical projection (`insta_proto::insta_string`).
+  canonical projection (`screen::canonical_string`).
 - `assert_screenshot!(name, screen)` — compound gate: canonical
   text + generation-tagged PNG as one sample. Evidence lands on
   disk BEFORE failure; mixed generations fail, never half-pass

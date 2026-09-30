@@ -1,13 +1,10 @@
 use super::*;
 use tuiscotti::profile::{BlinkPhase, MissingGlyphPolicy, RenderProfile, VENDORED_FALLBACK_FACES};
-use tuiscotti::render::{
-    CacheKey, RenderCache, render_cache_disabled, render_screen, screen_content_hash,
-};
+use tuiscotti::render::{CacheKey, CacheOptions, RenderCache, render_screen, screen_content_hash};
 use tuiscotti::{CursorStyle, FallbackFace, Rgb, UnderlineStyle};
 
 #[test]
 fn cache_roundtrip_and_key_sensitivity() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let approved = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache = RenderCache::open(dir.path(), &[approved.path()])
@@ -48,7 +45,6 @@ fn cache_roundtrip_and_key_sensitivity() {
 
 #[test]
 fn corrupt_and_incompatible_entries_rejected_and_counted() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
@@ -83,12 +79,13 @@ fn approved_roots_are_never_cache_dirs() {
 
 #[test]
 fn no_cache_mode_disables_reads_and_writes_but_not_renders() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
-    tuiscotti::render::set_no_cache_override(true);
-    assert!(render_cache_disabled());
+    // No-cache mode is an explicit per-cache context (F12): no global is
+    // flipped, so this test needs no lock and cannot affect its neighbors.
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
-        RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
+        RenderCache::open_with_options(dir.path(), &[], CacheOptions { no_cache: true })
+            .expect("RenderCache::open_with_options succeeds");
+    assert!(cache.is_no_cache());
     let rp = RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder);
     let screen =
         screen_from_leads(4, 2, vec![cell(0, 0, "Q", 1)]).expect("screen_from_leads succeeds");
@@ -105,17 +102,45 @@ fn no_cache_mode_disables_reads_and_writes_but_not_renders() {
             .next()
             .is_none()
     );
-    // Qualification renders still work with the escape set.
+    // Qualification renders still work with the option set.
     assert!(
         !render_screen(&screen, &rp)
             .expect("render_screen(&screen, &rp) succeeds")
             .png
             .is_empty()
     );
-    tuiscotti::render::set_no_cache_override(false);
-    if std::env::var("RENDER_NO_CACHE").is_err() {
-        assert!(!render_cache_disabled());
-    }
+}
+
+#[test]
+fn independent_caches_keep_their_own_options_concurrently() {
+    // A no-cache instance beside a plain instance, driven from two
+    // threads: each behaves per its own options (F12 explicit contexts —
+    // no process-global mode can leak between them).
+    let rp = RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder);
+    let screen =
+        screen_from_leads(4, 2, vec![cell(0, 0, "Q", 1)]).expect("screen_from_leads succeeds");
+    let key = RenderCache::key_for(&screen, &rp);
+    let png = cache_png().expect("cache_png succeeds");
+    std::thread::scope(|scope| {
+        let plain = scope.spawn(|| {
+            let dir = tempfile::tempdir().expect("tempdir succeeds");
+            let mut cache = RenderCache::open(dir.path(), &[]).expect("RenderCache::open succeeds");
+            cache.put(&key, &png).expect("put succeeds");
+            assert_eq!(cache.get(&key).expect("hit"), png);
+            assert_eq!((cache.stores(), cache.hits()), (1, 1));
+        });
+        let uncached = scope.spawn(|| {
+            let dir = tempfile::tempdir().expect("tempdir succeeds");
+            let mut cache =
+                RenderCache::open_with_options(dir.path(), &[], CacheOptions { no_cache: true })
+                    .expect("open_with_options succeeds");
+            cache.put(&key, &png).expect("put succeeds");
+            assert_eq!(cache.stores(), 0);
+            assert!(cache.get(&key).is_none());
+        });
+        plain.join().expect("plain joins");
+        uncached.join().expect("uncached joins");
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -288,17 +313,59 @@ fn one_field_cursor_mutations_each_move_the_key() {
     // Cursor fields, one at a time (validated cursor on a 4x2 grid).
     let cursor_base = Cursor::default();
     let cursor_variants = [
-        ("cursor-x", Cursor { x: 1, ..cursor_base }),
-        ("cursor-y", Cursor { y: 1, ..cursor_base }),
-        ("cursor-visible", Cursor { visible: !cursor_base.visible, ..cursor_base }),
-        ("cursor-underline", Cursor { style: CursorStyle::Underline, ..cursor_base }),
-        ("cursor-bar", Cursor { style: CursorStyle::Bar, ..cursor_base }),
-        ("cursor-blinking", Cursor { blinking: !cursor_base.blinking, ..cursor_base }),
+        (
+            "cursor-x",
+            Cursor {
+                x: 1,
+                ..cursor_base
+            },
+        ),
+        (
+            "cursor-y",
+            Cursor {
+                y: 1,
+                ..cursor_base
+            },
+        ),
+        (
+            "cursor-visible",
+            Cursor {
+                visible: !cursor_base.visible,
+                ..cursor_base
+            },
+        ),
+        (
+            "cursor-underline",
+            Cursor {
+                style: CursorStyle::Underline,
+                ..cursor_base
+            },
+        ),
+        (
+            "cursor-bar",
+            Cursor {
+                style: CursorStyle::Bar,
+                ..cursor_base
+            },
+        ),
+        (
+            "cursor-blinking",
+            Cursor {
+                blinking: !cursor_base.blinking,
+                ..cursor_base
+            },
+        ),
     ];
-    let base_cursor_key = RenderCache::key_for(&screen_with_cursor(cursor_base).expect("screen_with_cursor succeeds"), &rp);
+    let base_cursor_key = RenderCache::key_for(
+        &screen_with_cursor(cursor_base).expect("screen_with_cursor succeeds"),
+        &rp,
+    );
     for (label, cursor) in cursor_variants {
         assert_ne!(
-            RenderCache::key_for(&screen_with_cursor(cursor).expect("screen_with_cursor succeeds"), &rp),
+            RenderCache::key_for(
+                &screen_with_cursor(cursor).expect("screen_with_cursor succeeds"),
+                &rp
+            ),
             base_cursor_key,
             "cache key must move for {label}"
         );
@@ -307,8 +374,14 @@ fn one_field_cursor_mutations_each_move_the_key() {
     // Origin is NOT rendering-relevant (the screen→frame adaptation drops
     // it): same pixels, same key.
     assert_eq!(
-        RenderCache::key_for(&screen_at_origin(0, 0).expect("screen_at_origin succeeds"), &rp),
-        RenderCache::key_for(&screen_at_origin(7, -3).expect("screen_at_origin succeeds"), &rp),
+        RenderCache::key_for(
+            &screen_at_origin(0, 0).expect("screen_at_origin succeeds"),
+            &rp
+        ),
+        RenderCache::key_for(
+            &screen_at_origin(7, -3).expect("screen_at_origin succeeds"),
+            &rp
+        ),
         "grid origin must not affect the key"
     );
 }
@@ -373,7 +446,10 @@ impl ProfileParts {
 #[test]
 fn one_field_profile_mutations_each_move_the_key() {
     let screen = screen_of(styled_lead()).expect("screen_of succeeds");
-    let base_key = RenderCache::key_for(&screen, &ProfileParts::base().build().expect("profile builds"));
+    let base_key = RenderCache::key_for(
+        &screen,
+        &ProfileParts::base().build().expect("profile builds"),
+    );
 
     let mut named: Vec<(&str, RenderProfile<'static>)> = Vec::new();
     let mut p = ProfileParts::base();
@@ -481,7 +557,6 @@ fn typed_keys_reject_traversal_and_garbage() {
 
 #[test]
 fn truncation_is_rejected_and_removed() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
@@ -513,7 +588,6 @@ fn truncation_is_rejected_and_removed() {
 
 #[test]
 fn wrong_entry_payload_is_rejected_and_removed() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
@@ -540,7 +614,6 @@ fn wrong_entry_payload_is_rejected_and_removed() {
 
 #[test]
 fn undecodable_payloads_are_never_stored() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
@@ -565,17 +638,19 @@ fn undecodable_payloads_are_never_stored() {
 
 #[test]
 fn interrupted_writes_leave_no_live_entry() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
     let rp = placeholder_rp();
     let key = RenderCache::key_for(&screen_of(styled_lead()).expect("screen_of succeeds"), &rp);
     // A crashed publish leaves only an orphaned temp file: no live name exists.
-    std::fs::write(dir.path().join(".deadbeef.tmp-1-1"), b"partial")
-        .expect("write orphan tmp");
+    std::fs::write(dir.path().join(".deadbeef.tmp-1-1"), b"partial").expect("write orphan tmp");
     assert!(cache.get(&key).is_none());
-    assert_eq!(cache.rejected(), 0, "missing entry is a miss, not a rejection");
+    assert_eq!(
+        cache.rejected(),
+        0,
+        "missing entry is a miss, not a rejection"
+    );
     // A short write that DID reach the live name is rejected + removed, and
     // the next publish recovers cleanly.
     std::fs::write(dir.path().join(key.file_name()), b"partial-entry")
@@ -606,22 +681,19 @@ fn cache_and_approved_roots_must_not_overlap_in_either_direction() {
     let err = RenderCache::open(&approved, &[&sneaky]).expect_err("dot-dot alias refused");
     assert!(err.to_string().contains("never a render cache"), "{err}");
     // Disjoint trees still open fine.
-    RenderCache::open(&tmp.path().join("ok-cache"), &[&approved])
-        .expect("disjoint cache opens");
+    RenderCache::open(&tmp.path().join("ok-cache"), &[&approved]).expect("disjoint cache opens");
 }
 
 #[cfg(unix)]
 #[test]
 fn symlink_aliases_of_approved_roots_are_refused() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let tmp = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let real = tmp.path().join("real-approved");
     std::fs::create_dir(&real).expect("create real approved");
     let alias = tmp.path().join("alias-approved");
     std::os::unix::fs::symlink(&real, &alias).expect("symlink succeeds");
     // Same tree through two spellings: refused.
-    let err =
-        RenderCache::open(&real, &[&alias]).expect_err("symlink alias of approved refused");
+    let err = RenderCache::open(&real, &[&alias]).expect_err("symlink alias of approved refused");
     assert!(err.to_string().contains("never a render cache"), "{err}");
     // Cache dir reached THROUGH a symlinked parent, inside the approved tree.
     let parent_link = tmp.path().join("parent-link");
@@ -639,7 +711,6 @@ fn symlink_aliases_of_approved_roots_are_refused() {
 
 #[test]
 fn cached_bytes_equal_uncached_renders() {
-    let _g = CACHE_LOCK.lock().expect("CACHE_LOCK.lock() succeeds");
     let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
     let mut cache =
         RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
@@ -647,7 +718,9 @@ fn cached_bytes_equal_uncached_renders() {
     let screen = screen_of(styled_lead()).expect("screen_of succeeds");
     let key = RenderCache::key_for(&screen, &rp);
     // Uncached render straight from the engine.
-    let fresh = render_screen(&screen, &rp).expect("render_screen succeeds").png;
+    let fresh = render_screen(&screen, &rp)
+        .expect("render_screen succeeds")
+        .png;
     assert!(!fresh.is_empty());
     cache.put(&key, &fresh).expect("put succeeds");
     let hit = cache.get(&key).expect("cache hits");

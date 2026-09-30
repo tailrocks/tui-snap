@@ -43,8 +43,10 @@ impl GroupedStore {
     /// comparing; on pixel mismatch also writes the diff PNG under the diff
     /// root. Gate semantics are in the module docs.
     ///
-    /// This constructs a fresh [`Renderer`] per call; bulk gates should
-    /// build one and call [`Self::check_with`] instead.
+    /// The default gate renders through the thread-local shared
+    /// [`Renderer`]; custom profiles/faces construct per call, so bulk
+    /// gates with custom profiles should build one and call
+    /// [`Self::check_with`] instead.
     ///
     /// # Errors
     ///
@@ -57,8 +59,9 @@ impl GroupedStore {
         faces: &tuiscotti_render::profile::FontFaces<'_>,
         pixel_threshold: f64,
     ) -> Result<GroupedOutcome, SnapshotError> {
-        let mut renderer = Renderer::new(profile, faces)?;
-        self.check_with(&mut renderer, name, actual, pixel_threshold)
+        Renderer::with_profile(profile, faces, |r| {
+            self.check_with(r, name, actual, pixel_threshold)
+        })
     }
 
     /// [`Self::check`] through a caller-owned [`Renderer`], so a suite

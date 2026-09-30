@@ -15,13 +15,13 @@
 use std::fs;
 use std::path::Path;
 
+use tuiscotti_core::screen::canonical_string;
 use tuiscotti_core::screen::{Screen, ScreenError};
 use tuiscotti_insta::assert::{
     AttemptIdentity, EvidenceId, Location, Policy, check_consistent, frame_from_screen,
     generation_id, png_generation, png_tag_generation, render_sample, resolve_snapshot_identity,
     resolve_snapshot_identity_in, sample_binding, sanitize_segment,
 };
-use tuiscotti_insta::insta_proto::insta_string;
 use tuiscotti_render::diff::{AlphaPolicy, compare_png_with_alpha};
 use tuiscotti_render::profile::{Profile, VENDORED_FACES};
 use tuiscotti_render::render::Renderer;
@@ -74,7 +74,7 @@ fn styled_screen() -> Result<Screen, ScreenError> {
 #[test]
 fn canonical_identical_render_different_repro() {
     let screen = styled_screen().expect("valid test screen");
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
 
     // Same sample through the pinned pipeline.
     let sample = render_sample(&screen).expect("render sample");
@@ -90,7 +90,7 @@ fn canonical_identical_render_different_repro() {
     let alt_image = renderer.render(&frame).expect("render frame");
 
     // Canonical text is identical (same screen) ...
-    assert_eq!(canonical, insta_string(&screen));
+    assert_eq!(canonical, canonical_string(&screen));
     // ... but the pixels differ, and the decoded-pixel comparison — the same
     // function the PNG comparator delegates to — fails loudly.
     assert_ne!(sample.png, alt_image.png);
@@ -137,7 +137,7 @@ fn write_binary_snap(
 #[test]
 fn partial_acceptance_fails_the_strict_gate() {
     let screen = styled_screen().expect("valid test screen");
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let generation = generation_id(&canonical);
     let sample = render_sample(&screen).expect("render sample");
     let tagged = png_tag_generation(&sample.png, &generation);
@@ -320,10 +320,7 @@ fn assert_bundle_matches_sample(
     );
     let image = fs::read(bundle.join("image.png")).map_err(|e| e.to_string())?;
     assert_eq!(png_generation(&image).as_deref(), Some(binding.as_str()));
-    assert_eq!(
-        manifest["snapshot"]["canonical"].as_str(),
-        Some(scenario)
-    );
+    assert_eq!(manifest["snapshot"]["canonical"].as_str(), Some(scenario));
     assert_eq!(manifest["snapshot"]["png"].as_str(), Some(png_stem));
     Ok(binding)
 }
@@ -376,12 +373,14 @@ fn evidence_bundle_is_published_before_failure() {
     );
     assert_eq!(segs[2], "g6_evidence_first", "scenario segment: {rel}");
     assert!(segs[3].starts_with("run-"), "run segment: {rel}");
-    assert!(
-        segs[4].starts_with("attempt-"),
-        "attempt segment: {rel}"
-    );
-    assert_bundle_matches_sample(&bundle, &screen, "g6_evidence_first", "g6_evidence_first-img")
-        .expect("bundle matches sample");
+    assert!(segs[4].starts_with("attempt-"), "attempt segment: {rel}");
+    assert_bundle_matches_sample(
+        &bundle,
+        &screen,
+        "g6_evidence_first",
+        "g6_evidence_first-img",
+    )
+    .expect("bundle matches sample");
     // Atomic publication: no temp leftovers anywhere under the root.
     for (rel, _) in collect_files(&evidence).expect("collect files") {
         assert!(
@@ -427,18 +426,13 @@ fn first_run_publishes_both_pendings_in_one_cycle() {
     assert!(msg.contains("candidate bundle:"), "{msg}");
     // Approving the published bundle passes on rerun: no second repair cycle.
     let bundle = single_bundle(&evidence).expect("single bundle");
-    let binding = assert_bundle_matches_sample(
-        &bundle,
-        &screen,
-        "g6_both_pendings",
-        "g6_both_pendings-img",
-    )
-    .expect("bundle matches sample");
+    let binding =
+        assert_bundle_matches_sample(&bundle, &screen, "g6_both_pendings", "g6_both_pendings-img")
+            .expect("bundle matches sample");
     let canonical = fs::read_to_string(bundle.join("canonical.txt")).expect("read canonical");
     let image = fs::read(bundle.join("image.png")).expect("read image");
     write_text_snap(&snaps, "g6_both_pendings", &binding, &canonical).expect("write text snap");
-    write_binary_snap(&snaps, "g6_both_pendings-img", &binding, &image)
-        .expect("write binary snap");
+    write_binary_snap(&snaps, "g6_both_pendings-img", &binding, &image).expect("write binary snap");
     tuiscotti_insta::assert_screenshot!("g6_both_pendings", &screen, &policy);
 }
 
@@ -481,8 +475,7 @@ fn suffixed_snapshots_resolve_and_gate_end_to_end() {
         .expect("bundle matches sample");
         let canonical = fs::read_to_string(bundle.join("canonical.txt")).expect("read canonical");
         let image = fs::read(bundle.join("image.png")).expect("read image");
-        write_text_snap(&snaps, "g6_variant@dark", &binding, &canonical)
-            .expect("write text snap");
+        write_text_snap(&snaps, "g6_variant@dark", &binding, &canonical).expect("write text snap");
         write_binary_snap(&snaps, "g6_variant-img@dark", &binding, &image)
             .expect("write binary snap");
         // Rerun under the same suffix passes: the gate read the suffixed files.
@@ -560,12 +553,20 @@ fn snapshot_identity_is_caller_relative_and_suffixed() {
 fn sample_binding_covers_canonical_render_and_payload() {
     let screen = styled_screen().expect("valid test screen");
     let sample = render_sample(&screen).expect("render sample");
-    let base = sample_binding(&sample.canonical, "tuiscotti-default/rv1/straight-rgba", &sample.png);
+    let base = sample_binding(
+        &sample.canonical,
+        "tuiscotti-default/rv1/straight-rgba",
+        &sample.png,
+    );
     assert!(base.starts_with("v2-"), "{base}");
     // Deterministic.
     assert_eq!(
         base,
-        sample_binding(&sample.canonical, "tuiscotti-default/rv1/straight-rgba", &sample.png)
+        sample_binding(
+            &sample.canonical,
+            "tuiscotti-default/rv1/straight-rgba",
+            &sample.png
+        )
     );
     // Canonical change moves it.
     assert_ne!(
@@ -579,7 +580,11 @@ fn sample_binding_covers_canonical_render_and_payload() {
     );
     assert_ne!(
         base,
-        sample_binding(&sample.canonical, "tuiscotti-default/rv2/straight-rgba", &sample.png)
+        sample_binding(
+            &sample.canonical,
+            "tuiscotti-default/rv2/straight-rgba",
+            &sample.png
+        )
     );
     // Payload-only change moves it.
     let mut png = sample.png.clone();
@@ -587,14 +592,18 @@ fn sample_binding_covers_canonical_render_and_payload() {
     png[last] ^= 0xFF;
     assert_ne!(
         base,
-        sample_binding(&sample.canonical, "tuiscotti-default/rv1/straight-rgba", &png)
+        sample_binding(
+            &sample.canonical,
+            "tuiscotti-default/rv1/straight-rgba",
+            &png
+        )
     );
 }
 
 #[test]
 fn missing_or_partial_bindings_fail_the_strict_gate() {
     let screen = styled_screen().expect("valid test screen");
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let binding = sample_binding(&canonical, "prof/rv1/straight-rgba", b"png-bytes");
     let sample = render_sample(&screen).expect("render sample");
     let tagged = png_tag_generation(&sample.png, &binding);
@@ -643,7 +652,10 @@ fn attempt_identity_parses_nextest_shape() {
     let mut env = HashMap::new();
     env.insert("NEXTEST_RUN_ID".to_string(), "run-1".to_string());
     env.insert("NEXTEST_ATTEMPT".to_string(), "2".to_string());
-    env.insert("NEXTEST_ATTEMPT_ID".to_string(), "run-1:bin$test".to_string());
+    env.insert(
+        "NEXTEST_ATTEMPT_ID".to_string(),
+        "run-1:bin$test".to_string(),
+    );
     env.insert("NEXTEST_STRESS_CURRENT".to_string(), "3".to_string());
     env.insert("TUISCOTTI_SHARD".to_string(), "0/4".to_string());
     let id = AttemptIdentity::from_map(&env);
@@ -708,4 +720,3 @@ fn evidence_identity_partitions_and_never_escapes() {
         assert!(s != ".." && s != ".", "no dot segments: {s}");
     }
 }
-

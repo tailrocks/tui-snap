@@ -3,14 +3,31 @@
 use std::sync::{Condvar, Mutex};
 use std::time::Instant;
 
-use tuiscotti_core::screen::Observation;
+use tuiscotti_core::screen::{CaptureReason, Observation};
 
 use super::error::CancelToken;
 use super::exit::ExitStatus;
 use super::limits::WAIT_SLICE;
 
+/// Cheap metadata of the latest published observation (F12): revision plus
+/// grid geometry, readable under one short lock without cloning the screen.
+/// [`Session::meta`](super::session::Session::meta) serves this; anything
+/// needing cells still takes an [`Observation`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionMeta {
+    /// Latest published revision.
+    pub revision: u64,
+    /// Latest grid width in columns.
+    pub cols: u16,
+    /// Latest grid height in rows.
+    pub rows: u16,
+    /// Why the latest capture was taken.
+    pub reason: CaptureReason,
+}
+
 struct SharedState {
     latest: Option<Observation>,
+    meta: Option<SessionMeta>,
     exit: Option<ExitStatus>,
     closed: bool,
     teardown_error: Option<String>,
@@ -26,6 +43,7 @@ impl Shared {
         Self {
             state: Mutex::new(SharedState {
                 latest: None,
+                meta: None,
                 exit: None,
                 closed: false,
                 teardown_error: None,
@@ -42,6 +60,12 @@ impl Shared {
         if exit.is_some() {
             s.exit = exit;
         }
+        s.meta = Some(SessionMeta {
+            revision: obs.revision,
+            cols: obs.screen.cols(),
+            rows: obs.screen.rows(),
+            reason: obs.reason,
+        });
         s.latest = Some(obs);
         drop(s);
         self.changed.notify_all();
@@ -63,9 +87,18 @@ impl Shared {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .latest
-            .as_ref()
-            .map_or(0, |o| o.revision)
+            .meta
+            .map_or(0, |m| m.revision)
+    }
+
+    /// Latest metadata without cloning the screen. `None` only before the
+    /// worker publishes revision 0 (unreachable on a spawned session: spawn
+    /// blocks for it and fails otherwise).
+    pub(crate) fn meta(&self) -> Option<SessionMeta> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .meta
     }
 
     pub(crate) fn exit(&self) -> Option<ExitStatus> {

@@ -160,8 +160,10 @@ impl Store {
     /// the library form of the CLI `report` subcommand. Unmatched gates do
     /// not error here: inspect [`StoreReport::failed`] and the outcomes.
     ///
-    /// This constructs a fresh [`render::Renderer`] per call; bulk callers
-    /// should build one and use [`Self::report_with`].
+    /// The default gate renders through the thread-local shared
+    /// [`render::Renderer`]; custom profiles/faces construct per call, so
+    /// bulk callers with custom profiles should build one and use
+    /// [`Self::report_with`].
     ///
     /// # Errors
     ///
@@ -173,8 +175,9 @@ impl Store {
         pixel_threshold: f64,
         title: &str,
     ) -> Result<StoreReport, SnapshotError> {
-        let mut renderer = render::Renderer::new(profile, faces)?;
-        self.report_with(&mut renderer, pixel_threshold, title)
+        render::Renderer::with_profile(profile, faces, |r| {
+            self.report_with(r, pixel_threshold, title)
+        })
     }
 
     /// [`Self::report`] through a caller-owned [`render::Renderer`].

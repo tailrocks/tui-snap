@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect()
     }
 
-    let mut s = Tui::new([
+    let s = Tui::new([
         "/bin/sh",
         "-c",
         "printf 'menu: alpha\\nmenu: beta\\n'; sleep 30",

@@ -1,6 +1,6 @@
 //! Public assertion facade: snapshot/screenshot macros + frozen policy (M2: I01, I02, I06, I07).
 //!
-//! - [`crate::assert_snapshot!`]: styled canonical state ([`crate::insta_proto::insta_string`])
+//! - [`crate::assert_snapshot!`]: styled canonical state ([`tuiscotti_core::screen::canonical_string`])
 //!   through native Insta review, with a content-derived generation binding carried in
 //!   the snapshot description.
 //! - [`crate::assert_screenshot!`]: canonical state PLUS an independently rendered PNG as ONE
@@ -91,12 +91,12 @@ pub use frozen::{
 pub(crate) use import::check_scenario_name;
 pub use import::{FrozenTree, ImportError, ImportedScenario, import_frozen_v1};
 pub use macros::Location;
-pub(crate) use paths::{description_for, render_identity};
 pub use paths::{
-    SnapshotIdentity, active_snapshot_suffix, evidence_dir, generation_id, resolve_snapshot_identity,
-    resolve_snapshot_identity_in, sample_binding, snapshot_dir_override, snapshot_file_stem,
-    suffixed_name,
+    SnapshotIdentity, active_snapshot_suffix, evidence_dir, generation_id,
+    resolve_snapshot_identity, resolve_snapshot_identity_in, sample_binding, snapshot_dir_override,
+    snapshot_file_stem, suffixed_name,
 };
+pub(crate) use paths::{description_for, render_identity};
 pub use sample::{
     AssertError, PreparedScreenshot, Sample, aggregate_compound_result, frame_from_screen,
     panic_message, png_comparator, png_snapshot_base, prepare_screenshot, prepare_snapshot,

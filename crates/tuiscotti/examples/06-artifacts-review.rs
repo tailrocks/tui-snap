@@ -10,8 +10,8 @@ use tuiscotti::assert::{
     FrozenError, assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept,
     generation_id, import_frozen_v1, png_tag_generation, render_sample,
 };
-use tuiscotti::insta_proto::insta_string;
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
+use tuiscotti::screen::canonical_string;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let screen = render_screen(
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Frozen root: approved canonical + tagged PNG, then the read-only gates.
     let root = tmp.path().join("frozen");
     std::fs::create_dir(&root)?;
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let sample = render_sample(&screen)?;
     let generation = generation_id(&canonical);
     std::fs::write(root.join("review-demo.canonical.txt"), &canonical)?;

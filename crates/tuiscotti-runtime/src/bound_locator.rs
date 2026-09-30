@@ -1,25 +1,54 @@
-//! Session-bound locators: fresh observation, unique targets, stale checks (G6).
+//! Session-bound locators: immediate lookup, retrying expectation, atomic clicks (F11).
 //!
-//! [`BoundLocator`] ties a [`Locator`] to a live [`Session`]. Every method
-//! takes a FRESH observation — no manually fabricated revisions — resolves to
-//! a UNIQUE viewport target, and actions re-validate against the current
-//! revision before delivery: scrollback is never clicked and a target that
-//! moved is refused with [`LocateError::StaleTarget`] instead of being
-//! delivered stale. Readiness retries never touch the action sink, and
-//! destructive input is never retried because an assertion has not passed.
+//! [`BoundLocator`] ties a [`Locator`] to a live [`Session`]. Ordinary
+//! callers need no fabricated revisions and no hand-rolled observer
+//! closures: every method observes afresh through the session.
 //!
-//! Detached query evaluation ([`Locator::resolve`], [`Locator::resolve_obs`])
+//! - **Immediate lookup** ([`BoundLocator::visible_now`]): one fresh
+//!   observation, resolved to the UNIQUE viewport target. Ambiguous,
+//!   missing, or scrollback-only targets fail at once, without waiting.
+//! - **Retrying expectation** ([`BoundLocator::expect_visible`]): the same
+//!   unique-target resolution, retried on fresh observations to ONE bounded
+//!   default deadline ([`BoundLocator::DEFAULT_EXPECT_VISIBLE`]);
+//!   [`BoundLocator::expect_visible_within`] overrides the bound for
+//!   advanced callers. Permanent errors
+//!   ([`LocateError::Usage`]/[`LocateError::Unsupported`]) fail immediately,
+//!   never wait out the deadline; anything else resolves to
+//!   [`LocateError::Timeout`] naming the last observed state.
+//! - **Atomic click** ([`BoundLocator::click`]): the OWNING worker builds one
+//!   fresh observation, resolves the unique target at its own current
+//!   revision, and delivers press + release with no interleaving op — one
+//!   input submission, never two reads plus a separate unchecked click. The
+//!   acted-on [`Span`] is returned so the caller can audit what was clicked.
+//!   The click is attempted at most once: a reply timeout means the click
+//!   may already have been delivered, so it is never retried.
+//!
+//! ## Remaining race (external, honest)
+//!
+//! The worker resolves and delivers atomically against the EMULATOR, but the
+//! application reads the delivered bytes later: if the app redraws between
+//! the emulator state the click resolved against and its own input
+//! processing, the click lands where the target was, not where it is. No
+//! harness-side re-validation can close that window — the bytes are already
+//! in flight. Tests that need app-level confirmation must wait on an
+//! app-observable effect after clicking (a redrawn marker, a mode change),
+//! never on the click's return alone.
+//!
+//! Detached query evaluation ([`Locator::resolve`], [`Locator::resolve_obs`],
+//! the detached `expect_*` family, [`PendingAction`](tuiscotti_core::locate::PendingAction))
 //! stays available in `tuiscotti_core::locate` for advanced offline use.
 
-use tuiscotti_core::locate::{Action, LocateError, Locator, Span};
+use std::time::{Duration, Instant};
 
-use crate::tui::{MouseButton, MouseMods, Session, TuiError};
+use tuiscotti_core::locate::{LocateError, Locator, Span};
+
+use crate::tui::{MouseButton, MouseMods, Session};
 
 /// A locator action refused or failed: either side retains its typed source.
 #[derive(Debug)]
 pub enum ActionError {
     /// Fresh observation or input delivery failed.
-    Session(TuiError),
+    Session(crate::tui::TuiError),
     /// Resolution, uniqueness, or staleness refused the action.
     Locate(LocateError),
 }
@@ -42,8 +71,8 @@ impl std::error::Error for ActionError {
     }
 }
 
-impl From<TuiError> for ActionError {
-    fn from(e: TuiError) -> Self {
+impl From<crate::tui::TuiError> for ActionError {
+    fn from(e: crate::tui::TuiError) -> Self {
         Self::Session(e)
     }
 }
@@ -82,51 +111,91 @@ impl Session {
     }
 }
 
+/// Poll cadence for the retrying expectation (matches the detached
+/// `expect_*` family in `tuiscotti_core::locate`, which owns its own copy).
+const BOUND_POLL: Duration = Duration::from_millis(5);
+
 impl BoundLocator<'_> {
+    /// Default bound for [`BoundLocator::expect_visible`] (10s, matching
+    /// [`Session::DEFAULT_WAIT`](crate::tui::Session::DEFAULT_WAIT)).
+    pub const DEFAULT_EXPECT_VISIBLE: Duration = Duration::from_secs(10);
+
     /// The underlying detached locator (for offline composition).
     #[must_use]
     pub fn locator(&self) -> &Locator {
         &self.locator
     }
 
-    /// Fresh observation, resolved to the UNIQUE viewport match. Ambiguous,
-    /// missing, or scrollback-only targets fail without side effects.
+    /// Immediate lookup: one fresh observation, resolved to the UNIQUE
+    /// viewport target. Ambiguous, missing, or scrollback-only targets fail
+    /// at once — use [`BoundLocator::expect_visible`] to wait for one.
     /// # Errors
     ///
     /// Returns [`ActionError`] when observation fails or no unique target resolves.
-    pub fn expect_visible(&self) -> Result<Span, ActionError> {
+    pub fn visible_now(&self) -> Result<Span, ActionError> {
         let obs = self.session.observe_now()?;
         Ok(self.locator.resolve_unique(&obs.screen, obs.revision)?)
     }
 
-    /// Left-click the unique viewport target: resolve on a fresh observation,
-    /// then stale-check against the current revision before delivery. The
-    /// click is delivered at most once; a moved target fails with
-    /// [`LocateError::StaleTarget`] and is never delivered.
+    /// Retrying expectation: [`BoundLocator::expect_visible_within`] with the
+    /// bounded default deadline ([`BoundLocator::DEFAULT_EXPECT_VISIBLE`]).
     /// # Errors
     ///
-    /// Returns [`ActionError`] when observation, resolution, or delivery fails.
-    pub fn click(&self) -> Result<(), ActionError> {
-        let obs = self.session.observe_now()?;
-        let pending = self.locator.prepare_action(&obs)?;
-        let current = self.session.observe_now()?;
-        let mut delivered: Option<Action> = None;
-        pending.click(&current, &mut |action| {
-            delivered = Some(action);
-        })?;
-        match delivered {
-            Some(Action::Click { x, y }) => {
-                self.session
-                    .click(MouseButton::Left, x, y, MouseMods::NONE)?;
-                Ok(())
+    /// Returns [`ActionError`] when observation fails, permanently on
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`], or with
+    /// [`LocateError::Timeout`] past the deadline.
+    pub fn expect_visible(&self) -> Result<Span, ActionError> {
+        self.expect_visible_within(Self::DEFAULT_EXPECT_VISIBLE)
+    }
+
+    /// Retrying expectation with an explicit bound (advanced override):
+    /// poll fresh observations until the locator resolves to a UNIQUE
+    /// viewport target, or the ONE `timeout` deadline. Permanent errors fail
+    /// immediately without waiting; at the deadline the error is
+    /// [`LocateError::Timeout`] naming the last observed state. Readiness
+    /// retries never touch the input sink.
+    /// # Errors
+    ///
+    /// Returns [`ActionError`] when observation fails, permanently on
+    /// [`LocateError::Usage`]/[`LocateError::Unsupported`], or with
+    /// [`LocateError::Timeout`] past the deadline.
+    pub fn expect_visible_within(&self, timeout: Duration) -> Result<Span, ActionError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let obs = self.session.observe_now()?;
+            match self.locator.resolve_unique(&obs.screen, obs.revision) {
+                Ok(span) => return Ok(span),
+                Err(e) if e.is_immediate() => return Err(ActionError::Locate(e)),
+                Err(e) => {
+                    if Instant::now() >= deadline {
+                        return Err(ActionError::Locate(LocateError::Timeout {
+                            waited: timeout,
+                            reason: format!("no unique visible target: {e}"),
+                        }));
+                    }
+                }
             }
-            Some(Action::Submit { .. }) => {
-                // Unreachable: `click` delivers `Action::Click` only.
-                Ok(())
-            }
-            None => Err(ActionError::Locate(LocateError::Usage(
-                "action sink never ran".to_string(),
-            ))),
+            std::thread::sleep(BOUND_POLL);
         }
+    }
+
+    /// Left-click the unique viewport target as ONE worker step: the owning
+    /// worker builds one fresh observation, resolves the unique target at its
+    /// own current revision, and delivers press + release with no
+    /// interleaving op. Returns the acted-on [`Span`] (audit what was
+    /// clicked, including its revision).
+    ///
+    /// Single attempt, never retried: on a reply timeout the click may
+    /// already have been delivered, and a retry would send a second press.
+    /// See the module docs for the remaining external application race.
+    /// # Errors
+    ///
+    /// Returns [`ActionError`] when resolution refuses (not found, ambiguous,
+    /// scrollback-only), delivery is refused (mouse reporting off, child
+    /// exited, session closed), or the reply times out (delivery then
+    /// unknown — do not retry).
+    pub fn click(&self) -> Result<Span, ActionError> {
+        self.session
+            .click_target(self.locator.clone(), MouseButton::Left, MouseMods::NONE)
     }
 }

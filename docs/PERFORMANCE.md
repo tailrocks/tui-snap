@@ -73,3 +73,36 @@ not a release profile. Re-run before quoting.
   are local Apple-silicon numbers; CI runs `linux-x64`
   GitHub-hosted runners, so the 120 s budget must be re-proven
   with CI timings, not this file.
+
+### F12 before/after (all fixes: rows 13-18)
+
+Same machine class as row 12 (Apple M5 Max, 18 CPUs, 128 GiB,
+macOS 27, rustc 1.98.1): "before" is the F11/F12 base tree,
+"after" adds the bounded op channel + `Feed` coalescing, the
+thread-local shared renderers, and cheap `Session::meta`. Method:
+a scratch release-mode bench (`/tmp`, path deps on the workspace,
+not committed) with a counting global allocator and
+`getrusage(RUSAGE_SELF)` peak RSS. Corpus: capture/control on a
+quiet 80x24 session (300/200 samples); close over 25
+spawn(printf-ready)+close cycles; shot over 12 `render_sample`
+PNGs of an 80x24 mixed-style screen; flood = `seq 1 200000`
+through an 80x24 PTY to natural exit + `wait_stable` drain.
+Queue limits (Watcher caps, op-channel bound), explicit
+`CancelToken`s, and decoded-pixel exact verification (PNG bytes
+identical before/after: 895,917 B) throughout.
+
+| # | Suite | Metric | Value |
+|---|---|---|---|
+| 13 | bench capture (before -> after) | observe_now mean / p95 | 0.152 / 0.227 ms -> 0.081-0.131 / 0.111-0.174 ms (run-to-run noise on a shared box; no mechanism changed: same round trip, same ~240 KiB allocs per read) |
+| 14 | bench control (before -> after) | send_text round-trip mean / p95 | 0.149 / 0.224 ms -> 0.061-0.068 / 0.103-0.108 ms (same noise caveat; unchanged mechanism) |
+| 15 | bench close (before -> after) | spawn+close mean / p95 | 56.2 / 62.8 ms -> 56.6 / 60.4 ms (unchanged, as expected: teardown path untouched) |
+| 16 | bench shot (before -> after) | render_sample throughput; allocs | 72.8 png/s; 395 MB -> 104.8 png/s (1.44x); 228 MB (shared default renderer: faces parsed once per thread) |
+| 17 | bench flood (before -> after) | exit wall; post-exit drain; revisions; peak RSS; allocs | 0.98 s; 3.01 s; 31,031 revs; 28.7 MB; 5.7 GB / 93M -> 0.27 s; 0.22 s (14x); ~4,550 revs (7x); 25.9 MB; 0.59 GB / 8.9M (10x). Peak RSS is dominated by the emulator's intended 10k-line scrollback either way; the queue win shows in drain latency, revision count, and allocator churn |
+| 18 | `cargo test -p tuiscotti --test render_qual` (before -> after) | wall, same machine | 2.93 s (32 tests) -> 0.97 s (33 tests, one added): shared strict renderers, zero coverage change |
+
+New cheap path (not a before/after: it did not exist): 20,000
+`Session::meta()` reads complete in well under 1 s (<50 us each:
+one short lock, no worker round trip, no screen clone), pinned by
+`concurrent::session_meta_is_cheap_and_current`; the equivalent
+`observe_now` loop would take ~seconds and allocate ~240 KiB per
+read.

@@ -3,7 +3,8 @@ use super::harness::*;
 use super::*;
 use std::fs;
 use tuiscotti::diff::AlphaPolicy;
-use tuiscotti::insta_proto::{PngPixelComparator, insta_string, insta_value};
+use tuiscotti::insta_proto::PngPixelComparator;
+use tuiscotti::screen::{canonical_string, canonical_value};
 
 fn assert_send_sync<T: Send + Sync>() {}
 
@@ -52,19 +53,19 @@ fn check_mismatch_cases(
 fn projection_deterministic_and_complete() {
     let g1 = screen_gen1().expect("screen_gen1 succeeds");
     assert_eq!(
-        insta_string(&g1),
-        insta_string(&screen_gen1().expect("screen_gen1 succeeds"))
+        canonical_string(&g1),
+        canonical_string(&screen_gen1().expect("screen_gen1 succeeds"))
     );
     assert_eq!(
-        insta_value(&g1),
-        insta_value(&screen_gen1().expect("screen_gen1 succeeds"))
+        canonical_value(&g1),
+        canonical_value(&screen_gen1().expect("screen_gen1 succeeds"))
     );
     assert_ne!(
-        insta_string(&g1),
-        insta_string(&screen_gen2().expect("screen_gen2 succeeds"))
+        canonical_string(&g1),
+        canonical_string(&screen_gen2().expect("screen_gen2 succeeds"))
     );
 
-    let text = insta_string(&g1);
+    let text = canonical_string(&g1);
     for needle in [
         "geometry cols=4 rows=2 ox=5 oy=7",
         "cursor x=1 y=0 visible=true style=block blinking=true",
@@ -83,7 +84,7 @@ fn projection_deterministic_and_complete() {
     // Every cell present exactly once, row-major.
     assert_eq!(text.lines().filter(|l| l.starts_with("cell ")).count(), 8);
 
-    let v = insta_value(&g1);
+    let v = canonical_value(&g1);
     assert_eq!(v["cols"], serde_json::json!(4));
     assert_eq!(v["rows"], serde_json::json!(2));
     assert_eq!(v["ox"], serde_json::json!(5));

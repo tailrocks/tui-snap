@@ -7,8 +7,10 @@ use tuiscotti_core::frame::Frame;
 
 /// Render a validated frame to PNG bytes under `profile`.
 ///
-/// One-shot convenience: constructs a fresh [`Renderer`] per call (8 font
-/// parses, cold glyph cache). Bulk gates should keep a `Renderer` instead.
+/// One-shot convenience: the default gate renders through the thread-local
+/// shared [`Renderer`] (faces parsed once per thread, warm glyph cache);
+/// custom profiles/faces construct a fresh instance per call (bulk gates
+/// with custom profiles should keep a `Renderer` instead).
 ///
 /// # Errors
 ///
@@ -18,13 +20,14 @@ pub fn render_png(
     profile: &Profile,
     faces: &FontFaces<'_>,
 ) -> Result<Vec<u8>, RenderError> {
-    Renderer::new(profile, faces)?.render_png(frame)
+    Renderer::with_profile(profile, faces, |r| r.render_png(frame))
 }
 
 /// Render plus exact coverage accounting (see [`Fidelity`](super::Fidelity)).
 ///
-/// One-shot convenience: constructs a fresh [`Renderer`] per call (8 font
-/// parses, cold glyph cache). Bulk gates should keep a `Renderer` instead.
+/// One-shot convenience: same sharing as [`render_png`] — the default gate
+/// reuses the thread-local shared [`Renderer`], custom profiles/faces
+/// construct per call.
 ///
 /// # Errors
 ///
@@ -34,7 +37,7 @@ pub fn render_png_report(
     profile: &Profile,
     faces: &FontFaces<'_>,
 ) -> Result<Rendered, RenderError> {
-    Renderer::new(profile, faces)?.render(frame)
+    Renderer::with_profile(profile, faces, |r| r.render(frame))
 }
 
 /// Normalized ANSI dump (SGR runs from canonical state — for debugging, not

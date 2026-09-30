@@ -5,10 +5,11 @@ use super::{
     active_snapshot_suffix, current_test_name, description_for, generation_id, png_tag_generation,
     render_identity, sample_binding, write_bundle_in,
 };
-use crate::insta_proto::{PngPixelComparator, insta_string};
+use crate::insta_proto::PngPixelComparator;
 use std::path::{Path, PathBuf};
 use tuiscotti_core::frame::Frame;
 use tuiscotti_core::screen::Screen;
+use tuiscotti_core::screen::canonical_string;
 use tuiscotti_render::diff::AlphaPolicy;
 use tuiscotti_render::profile::{Profile, VENDORED_FACES};
 use tuiscotti_render::render::Renderer;
@@ -35,7 +36,7 @@ pub fn frame_from_screen(screen: &Screen) -> Frame {
 /// One visual sample: canonical state plus all four rendered artifacts.
 #[derive(Debug, Clone)]
 pub struct Sample {
-    /// Styled canonical state ([`crate::insta_proto::insta_string`]).
+    /// Styled canonical state ([`tuiscotti_core::screen::canonical_string`]).
     pub canonical: String,
     /// Normalized SGR dump.
     pub ansi: String,
@@ -74,7 +75,9 @@ impl From<tuiscotti_render::render::RenderError> for AssertError {
 }
 
 /// Render one sample from a screen: canonical projection plus all four artifacts
-/// from a single [`Renderer`] pass over the default profile and vendored faces.
+/// from a single [`Renderer`] pass over the default profile and vendored faces
+/// (through the thread-local shared instance: faces parsed once per thread,
+/// glyph cache shared across samples).
 ///
 /// # Errors
 ///
@@ -82,10 +85,11 @@ impl From<tuiscotti_render::render::RenderError> for AssertError {
 pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
     let frame = frame_from_screen(screen);
     let profile = Profile::default_profile();
-    let mut renderer = Renderer::new(&profile, &VENDORED_FACES)?;
-    let artifacts = renderer.render_artifacts(&frame, "tuiscotti")?;
+    let artifacts = Renderer::with_profile(&profile, &VENDORED_FACES, |r| {
+        r.render_artifacts(&frame, "tuiscotti")
+    })?;
     Ok(Sample {
-        canonical: insta_string(screen),
+        canonical: canonical_string(screen),
         ansi: artifacts.ansi,
         txt: artifacts.txt,
         html: artifacts.html,
@@ -126,7 +130,7 @@ pub fn snapshot_settings(
 #[doc(hidden)]
 #[must_use]
 pub fn prepare_snapshot(screen: &Screen) -> (String, String) {
-    let canonical = insta_string(screen);
+    let canonical = canonical_string(screen);
     let generation = generation_id(&canonical);
     (canonical, generation)
 }
@@ -212,7 +216,10 @@ pub fn aggregate_compound_result(
 ) -> Option<String> {
     let mut failures = Vec::new();
     if let Err(payload) = canonical {
-        failures.push(format!("canonical snapshot failed: {}", panic_message(payload)));
+        failures.push(format!(
+            "canonical snapshot failed: {}",
+            panic_message(payload)
+        ));
     }
     if let Err(payload) = png {
         failures.push(format!("png snapshot failed: {}", panic_message(payload)));

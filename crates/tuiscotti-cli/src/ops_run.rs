@@ -135,10 +135,34 @@ pub(crate) fn cmd_session(cmd: SessionCmd) -> i32 {
 /// frames. Assertions remain on `Observation`s, never on this output.
 /// Detached process sessions have no input transport (stdin is null), so
 /// stdin bytes are drained and discarded; EOF on stdin detaches.
-fn cmd_session_attach(name: &str) -> i32 {
+/// Drain stdin on a thread (process sessions have no input transport,
+/// so the bytes are discarded): returns the flag the drain sets on EOF.
+fn spawn_stdin_drain() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
     use std::io::Read;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    let eof = Arc::new(AtomicBool::new(false));
+    let stdin_eof = Arc::clone(&eof);
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        let mut stdin = std::io::stdin().lock();
+        let mut discarded: u64 = 0;
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => discarded += n as u64,
+            }
+        }
+        if discarded > 0 {
+            eprintln!("note: discarded {discarded} input byte(s): no input transport");
+        }
+        stdin_eof.store(true, Ordering::SeqCst);
+    });
+    eof
+}
+
+fn cmd_session_attach(name: &str) -> i32 {
+    use std::sync::atomic::Ordering;
     // Validated + containment-checked first: a hostile `--name` must not
     // steer the log path outside the runtime dir.
     let log_path = match proto::session_log_path(name) {
@@ -175,36 +199,33 @@ fn cmd_session_attach(name: &str) -> i32 {
     ) {
         return code;
     }
-    let eof = Arc::new(AtomicBool::new(false));
-    let stdin_eof = Arc::clone(&eof);
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 1024];
-        let mut stdin = std::io::stdin().lock();
-        let mut discarded: u64 = 0;
-        loop {
-            match stdin.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => discarded += n as u64,
-            }
-        }
-        if discarded > 0 {
-            eprintln!("note: discarded {discarded} input byte(s): no input transport");
-        }
-        stdin_eof.store(true, Ordering::SeqCst);
-    });
-    let mut offset: usize = 0;
+    let eof = spawn_stdin_drain();
+    // Bounded incremental tail (F12): each poll reads only new bytes
+    // (never the whole file), capped per poll and over the attach's life.
+    let mut tail = match proto::LogTail::open(&log_path) {
+        Ok(t) => t,
+        Err(e) => return op_error(&e),
+    };
+    let mut truncation_noted = false;
     loop {
         if eof.load(Ordering::SeqCst) {
             // A closed pipe here is also a clean exit 0 (same code either
             // way), so the writer result folds into the return.
             return crate::write_line("detached: stdin EOF").unwrap_or(0);
         }
-        let bytes = std::fs::read(&log_path).unwrap_or_default();
-        if bytes.len() > offset {
-            if let Some(code) = crate::write_bytes(&bytes[offset..]) {
-                return code;
+        match tail.poll() {
+            Ok(bytes) => {
+                if !bytes.is_empty()
+                    && let Some(code) = crate::write_bytes(&bytes)
+                {
+                    return code;
+                }
             }
-            offset = bytes.len();
+            Err(e) => return op_error(&e),
+        }
+        if tail.truncated() && !truncation_noted {
+            truncation_noted = true;
+            eprintln!("note: log tail truncated (cap reached or log replaced); following");
         }
         let alive = proto::session_list().is_ok_and(|l| {
             l.iter()

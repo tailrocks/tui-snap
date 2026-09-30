@@ -32,3 +32,17 @@ pub(crate) const KILL_GRACE: Duration = Duration::from_secs(2);
 /// the only PTY reader), so a child that survives kill would block `read()`
 /// forever — past this grace the thread is detached, never joined forever.
 pub(crate) const JOIN_GRACE: Duration = Duration::from_secs(5);
+/// Op-channel capacity (F12): the reader-to-worker queue is bounded, so a
+/// flooding child applies backpressure through the PTY (like a real
+/// terminal) instead of piling unbounded `Feed` batches in memory. At the
+/// 8 KiB reader batch size this caps queued flood bytes near 512 KiB.
+pub(crate) const OP_QUEUE_LIMIT: usize = 64;
+/// Bound for one session-side op send (F12): past this the worker is
+/// genuinely stuck (not merely draining a flood — draining is fast), so
+/// the send fails instead of blocking forever.
+pub(crate) const OP_SEND_TIMEOUT: Duration = Duration::from_secs(10);
+/// Maximum bytes merged into one worker emulator advance (F12): pending
+/// `Feed` batches coalesce up to this cap, so a flood costs one grid build
+/// per cap instead of one per 8 KiB batch. Larger floods keep the remainder
+/// queued (bounded by [`OP_QUEUE_LIMIT`]) for the next advance.
+pub(crate) const COALESCE_BYTES: usize = 256 * 1024;

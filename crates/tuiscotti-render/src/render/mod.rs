@@ -43,8 +43,8 @@ pub mod text;
 
 pub use bundle::{BundleManifest, ContractBytes, check_contract_bytes};
 pub use cache::{
-    CACHE_FINGERPRINT_VERSION, CacheKey, RenderCache, render_cache_disabled, screen_content_hash,
-    set_no_cache_override,
+    CACHE_FINGERPRINT_VERSION, CacheKey, CacheOptions, RenderCache, render_cache_disabled,
+    screen_content_hash,
 };
 pub(crate) use draw::draw_symbol;
 pub use fidelity::{Artifacts, FallbackGlyph, Fidelity, MissingGlyph, Rendered};

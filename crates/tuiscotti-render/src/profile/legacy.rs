@@ -62,6 +62,26 @@ impl Profile {
         self
     }
 
+    /// True when this is exactly the reproducible gate profile: every
+    /// field equals [`Profile::default_profile`]. The shared-renderer
+    /// fast path ([`crate::render::Renderer::with_profile`]) serves only
+    /// these; anything else renders through a fresh instance.
+    #[must_use]
+    pub fn is_default_gate(&self) -> bool {
+        let d = Self::default_profile();
+        self.name == d.name
+            && self.font_px.to_bits() == d.font_px.to_bits()
+            && self.cell_w == d.cell_w
+            && self.cell_h == d.cell_h
+            && self.pad == d.pad
+            && self.scale == d.scale
+            && self.default_fg == d.default_fg
+            && self.default_bg == d.default_bg
+            && self.font_sha256 == d.font_sha256
+            && self.font_desc == d.font_desc
+            && self.cursor_visible == d.cursor_visible
+    }
+
     /// A reusable [`crate::render::Renderer`] pinned to this profile: faces
     /// parsed once, glyph rasters cached across frames. Bulk gates
     /// (`Store::check_with`/`Store::report_with`) should go through one of

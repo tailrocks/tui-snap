@@ -158,8 +158,8 @@ fn readme_api_map_observe_export_and_pins() {
 #[test]
 fn readme_macro_gates_pass_preapproved() {
     use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
-    use tuiscotti::insta_proto::insta_string;
     use tuiscotti::ratatui::{EdgePolicy, render_screen};
+    use tuiscotti::screen::canonical_string;
 
     let tmp = tempfile::tempdir().expect("tempdir");
     let snaps = tmp.path().join("snaps");
@@ -182,7 +182,7 @@ fn readme_macro_gates_pass_preapproved() {
     .into_screen();
 
     // Pre-approve the canonical text gate.
-    let canonical = insta_string(&screen);
+    let canonical = canonical_string(&screen);
     let generation = generation_id(&canonical);
     std::fs::write(
         snaps.join("readme-lock.snap"),
@@ -237,9 +237,8 @@ fn bundle_has(evidence: &std::path::Path, scenario: &str, file: &str) -> bool {
             if p.is_dir() {
                 stack.push(p);
             } else if p.file_name().is_some_and(|n| n == file)
-                && p.strip_prefix(evidence).is_ok_and(|rel| {
-                    rel.components().any(|c| c.as_os_str() == scenario)
-                })
+                && p.strip_prefix(evidence)
+                    .is_ok_and(|rel| rel.components().any(|c| c.as_os_str() == scenario))
             {
                 return true;
             }

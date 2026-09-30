@@ -91,10 +91,7 @@ impl AttemptIdentity {
                 s.parse::<u64>().ok()
             }
         });
-        let shard = env
-            .get(SHARD_ENV)
-            .filter(|s| !s.is_empty())
-            .cloned();
+        let shard = env.get(SHARD_ENV).filter(|s| !s.is_empty()).cloned();
         let attempt_uid = env
             .get("NEXTEST_ATTEMPT_ID")
             .filter(|s| !s.is_empty())
@@ -172,10 +169,7 @@ impl EvidenceId {
 /// the thread is unnamed.
 #[must_use]
 pub fn current_test_name() -> String {
-    std::thread::current()
-        .name()
-        .unwrap_or("main")
-        .to_string()
+    std::thread::current().name().unwrap_or("main").to_string()
 }
 
 /// Sanitize one path segment: keep `[A-Za-z0-9._-]`, map everything else

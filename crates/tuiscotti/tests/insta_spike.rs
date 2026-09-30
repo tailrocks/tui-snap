@@ -24,7 +24,7 @@
 //! explicitly internal), and `MetaData::snapshot_kind` (binary extension) is
 //! `pub(crate)`, so an external comparator cannot re-check extension equality
 //! like `DefaultComparator` does. Upstream ask: `as_binary() -> Option<&[u8]>`.
-//! `assert_json_snapshot!` over `insta_value` needs only the `json` feature,
+//! `assert_json_snapshot!` over `canonical_value` needs only the `json` feature,
 //! but Insta serializes via its own `Content` pretty-printer (not reproducible
 //! outside Insta), so the structured projection is pinned by direct asserts,
 //! not by an approved JSON file.

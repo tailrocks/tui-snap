@@ -11,6 +11,7 @@
 //! `Rgb`); they are not duplicated here. This module adds `Hash` impls for
 //! those types so observations hash deterministically.
 
+mod canonical;
 mod error;
 mod grid;
 mod hash;
@@ -18,6 +19,7 @@ mod observation;
 mod region;
 mod validate;
 
+pub use canonical::{canonical_string, canonical_value};
 pub use error::{MAX_DIM, ScreenError};
 pub use grid::Screen;
 pub use observation::{CaptureProvenance, CaptureReason, Maybe, Observation, TermState};

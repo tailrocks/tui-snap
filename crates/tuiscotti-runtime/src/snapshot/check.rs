@@ -73,8 +73,10 @@ impl Store {
     /// `pixel_threshold`: strict gates pass 1.0; review passes lower it
     /// explicitly. Dimensions must match exactly either way.
     ///
-    /// This constructs a fresh [`render::Renderer`] per call; bulk gates
-    /// should build one and call [`Self::check_with`] instead.
+    /// The default gate renders through the thread-local shared
+    /// [`render::Renderer`]; custom profiles/faces construct per call, so
+    /// bulk gates with custom profiles should build one and call
+    /// [`Self::check_with`] instead.
     ///
     /// # Errors
     ///
@@ -87,8 +89,9 @@ impl Store {
         faces: &tuiscotti_render::profile::FontFaces<'_>,
         pixel_threshold: f64,
     ) -> Result<CompareOutcome, SnapshotError> {
-        let mut renderer = render::Renderer::new(profile, faces)?;
-        self.check_with(&mut renderer, name, actual, pixel_threshold)
+        render::Renderer::with_profile(profile, faces, |r| {
+            self.check_with(r, name, actual, pixel_threshold)
+        })
     }
 
     /// [`Self::check`] through a caller-owned [`render::Renderer`], so a

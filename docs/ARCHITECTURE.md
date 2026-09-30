@@ -23,26 +23,39 @@ crates/
 
 Internal edges only; external deps per crate follow.
 
+Backbone (the edge list below is authoritative):
+
 ```text
-tuiscotti-cli ──▶ tuiscotti ──▶ tuiscotti-runtime ──▶ tuiscotti-insta
-                      │  │            │                         │  │
-                      │  │            │                         │  └───────┐
-                      │  │            └─────────────┐           │          ▼
-                      │  └────────────┐             │           │   tuiscotti-core
-                      │               ▼             ▼           │          ▲
-                      │        tuiscotti-render ◀──┴───────────┘          │
-                      └──────────────────────────────────────────────────┘
-
-tuiscotti-fixtures ──▶ (normal: anyhow, crossterm, ratatui only;
-                       tuiscotti/core/render are DEV-dependencies)
-
-xtask ──▶ (nothing; standalone binary)
+tuiscotti-cli ──▶ tuiscotti ──┬──▶ tuiscotti-runtime ──▶ tuiscotti-render ──▶ tuiscotti-core
+                              └──▶ tuiscotti-insta ──────▶ tuiscotti-core
 ```
 
+Internal edges, exhaustively (normal deps):
+
+- `tuiscotti-cli` → `tuiscotti`
+- `tuiscotti` → `tuiscotti-runtime`, `tuiscotti-render`,
+  `tuiscotti-insta`, `tuiscotti-core`
+- `tuiscotti-runtime` → `tuiscotti-render`, `tuiscotti-core`
+  (`tuiscotti-insta` is still listed in the runtime manifest but
+  unused by any runtime code since F12 — a dead edge whose removal
+  belongs to the dep-graph owner once `Cargo.lock` settles)
+- `tuiscotti-insta` → `tuiscotti-render`, `tuiscotti-core`
+- `tuiscotti-render` → `tuiscotti-core`
+
+`tuiscotti-fixtures` (normal: anyhow, crossterm, ratatui only;
+tuiscotti/core/render are DEV-dependencies) and `xtask`
+(standalone binary) have no internal normal edges.
+
 The facade depends on all four leaf crates directly; the runtime
-additionally depends on render + insta (gates next to execution).
-The CLI reaches fixtures only through the facade — there is no
-direct CLI → fixtures edge.
+additionally depends on render (stores + op protocol render PNGs —
+load-bearing, not incidental). The runtime → insta edge is dead
+since F12: the only thing the runtime took from insta was the pure
+canonical projection, which now lives in core next to `Screen`
+(`screen::canonical_string` / `canonical_value`); no runtime module
+names `tuiscotti_insta` anymore, and the manifest line is left for the
+dep-graph owner to delete with the lockfile. The CLI reaches
+fixtures only through the facade — there is no direct CLI →
+fixtures edge.
 
 External dependency shape (workspace-pinned, `=x.y.z` in root
 `Cargo.toml`):
@@ -63,7 +76,10 @@ Feature flags (`pty`, default on): `tuiscotti-cli/pty` →
 `tuiscotti-runtime` with `default-features = false` and re-adds the
 terminal runtime only via its own `pty` feature, so
 `--no-default-features` builds pure-view tests without PTY or
-native deps. No other crate defines features.
+native deps. The runtime also defines `test-overrides` (F12, never
+default): it gates the test-only `set_runtime_dir_override` so the
+function cannot exist in production builds; the facade forwards it
+and only the CLI dev-dependencies enable it.
 
 Layering rules:
 
@@ -109,12 +125,17 @@ AGENT PATH (no PTY required):
 - `core::screen::Screen` — validated observation model built from a
   `Frame` (`Screen::from_frame`) or a live session. `Observation`
   pairs a screen with revision, capture reason, terminal state, and
-  provenance.
+  provenance. `canonical_string`/`canonical_value` are the
+  deterministic state projections every gate binds (F12: moved from
+  the insta spike into core, next to the type they project).
 - `render::profile::Profile` — pinned render contract: font bytes
   (SHA-256), 10×21 cells at 16px, palette, scale ×2, cursor policy.
   `tuiscotti-default` is the one shipping profile.
 - `render::Renderer` — `Frame`/`Screen` → PNG/SVG/ANSI/HTML +
   fidelity sidecar. Per-glyph fallback chain; never system fonts.
+  One-shot callers go through the thread-local shared instances
+  (`with_profile`/`with_strict`, F12): faces parsed once per thread,
+  glyph caches shared; custom profiles still construct per call.
 - `runtime::snapshot::Store` — classic store: `approved/` +
   `actual/` + `diff/` + `report.html` under one root.
 - `runtime::grouped::GroupedStore` — nested scenario names,
@@ -122,6 +143,10 @@ AGENT PATH (no PTY required):
   (`.ansi`/`.txt`/`.png`/`.html`).
 - `runtime::tui::Tui`/`Session` — owned PTY sessions: spawn, key
   chords, mouse, resize, waits that fail with evidence on timeout.
+  The reader→worker op channel is bounded with PTY backpressure and
+  the worker coalesces pending `Feed` batches (F12); `Session::meta`
+  serves revision + geometry without a screen clone; bound locators
+  (`get_by*`) click atomically in the owning worker (F11).
 - `runtime::proto::{Op, execute}` — typed op protocol (15 ops) +
   named sessions + bounded recording; the agent control plane.
 

@@ -20,7 +20,7 @@ impl Session {
     /// # Errors
     ///
     /// Returns `TuiError` on timeout, close races, or teardown failures.
-    pub fn finish(mut self, deadline: Instant) -> Result<ExitStatus, TuiError> {
+    pub fn finish(self, deadline: Instant) -> Result<ExitStatus, TuiError> {
         let cancel = CancelToken::new();
         match self.close_input() {
             Ok(()) | Err(TuiError::ChildExited(_)) => {}
@@ -68,12 +68,14 @@ impl Session {
     }
 
     /// Forceful idempotent teardown: kill a living child (bounded grace),
-    /// reap, join threads. Returns the first teardown error, if any.
+    /// reap, join threads. Takes `&self` (interior mutability): concurrent
+    /// closes are safe, exactly one sends the shutdown, the rest join.
+    /// Returns the first teardown error, if any.
     ///
     /// # Errors
     ///
     /// Returns `TuiError::Teardown` when teardown recorded a failure.
-    pub fn close(&mut self) -> Result<(), TuiError> {
+    pub fn close(&self) -> Result<(), TuiError> {
         self.teardown();
         if let Some(msg) = self.shared.teardown_error() {
             return Err(TuiError::Teardown(msg));
@@ -88,23 +90,30 @@ impl Session {
     }
 
     /// Run teardown exactly once; never panics (safe from `Drop`).
-    pub(crate) fn teardown(&mut self) {
+    pub(crate) fn teardown(&self) {
         if self.closed.swap(true, Ordering::SeqCst) {
             // A previous close/drop already shut down; still join in case a
             // concurrent teardown is in flight.
             self.join_threads();
             return;
         }
-        if let Some(tx) = self.op_tx.take() {
-            // The worker may already be gone; the joins below still reap.
-            if tx.send(Op::Shutdown).is_err() {
-                // Worker gone; join_threads below still reaps.
+        let tx = self
+            .op_tx
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(tx) = tx {
+            // Bounded: the worker usually drains immediately, but a stuck
+            // worker must never hang teardown — the joins below still reap,
+            // and the dropped sender disconnects the worker once it drains.
+            if super::session::send_bounded(&tx, Op::Shutdown, JOIN_GRACE).is_err() {
+                // Worker stuck or gone; join_threads below still reaps.
             }
         }
         self.join_threads();
     }
 
-    pub(crate) fn join_threads(&mut self) {
+    pub(crate) fn join_threads(&self) {
         let worker = self.worker.lock().map_or(None, |mut g| g.take());
         let reader = self.reader.lock().map_or(None, |mut g| g.take());
         if let Some(h) = worker {

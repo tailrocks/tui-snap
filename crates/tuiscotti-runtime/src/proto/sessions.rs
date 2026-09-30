@@ -96,13 +96,19 @@ pub(crate) struct SessionEndpoint {
 
 /// Runtime dir: `$TUISCOTTI_RUNTIME_DIR`, else `$XDG_RUNTIME_DIR/tuiscotti`, else a
 /// per-uid temp dir. Created owner-only (0o700) on Unix.
+#[cfg(any(test, feature = "test-overrides"))]
 static RUNTIME_DIR_OVERRIDE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
-/// Test-only runtime-dir override (no `unsafe`, unlike `set_var`, which is an
-/// `unsafe fn` in edition 2024 and cannot be used under the workspace lints).
-/// Checked before `$TUISCOTTI_RUNTIME_DIR` by [`runtime_dir`]. Callers sharing a
-/// process must serialize (see the CLI tests' `ENV_LOCK`); pass `None` to
-/// clear. Never set in production code.
+/// Test-only runtime-dir override (F12: a truly test-only mechanism — this
+/// function exists only under `cfg(test)` or the `test-overrides` feature,
+/// so production builds cannot call it). No `unsafe`, unlike `set_var`,
+/// which is an `unsafe fn` in edition 2024 and cannot be used under the
+/// workspace lints. Checked before `$TUISCOTTI_RUNTIME_DIR` by
+/// [`runtime_dir`]. Callers sharing a process must serialize (see the CLI
+/// tests' `ENV_LOCK`); pass `None` to clear. Tests that can run
+/// concurrently should spawn subprocesses with `TUISCOTTI_RUNTIME_DIR` in
+/// the child environment instead (explicit per-process context).
+#[cfg(any(test, feature = "test-overrides"))]
 pub fn set_runtime_dir_override(dir: Option<PathBuf>) {
     *RUNTIME_DIR_OVERRIDE
         .lock()
@@ -115,6 +121,7 @@ pub fn set_runtime_dir_override(dir: Option<PathBuf>) {
 ///
 /// Returns [`OpError`] when the dir cannot be created or secured.
 pub fn runtime_dir() -> Result<PathBuf, OpError> {
+    #[cfg(any(test, feature = "test-overrides"))]
     if let Some(d) = RUNTIME_DIR_OVERRIDE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)

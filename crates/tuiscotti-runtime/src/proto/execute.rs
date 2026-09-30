@@ -166,12 +166,11 @@ fn execute_render(frame_json: &str, format: &str) -> Result<OpResult, OpError> {
     let frame = tuiscotti_core::frame::Frame::from_json(frame_json)
         .map_err(|e| OpError::new("invalid-input", format!("bad frame JSON: {e}")))?;
     let profile = tuiscotti_render::profile::Profile::default_profile();
-    let mut renderer = Renderer::new(&profile, &VENDORED_FACES)
-        .map_err(|e| OpError::new("render", e.to_string()))?;
     match format {
         "png" => {
-            let image = renderer
-                .render(&frame)
+            // Shared default renderer (F12): faces parsed once per
+            // thread, glyph cache shared across renders.
+            let image = Renderer::with_profile(&profile, &VENDORED_FACES, |r| r.render(&frame))
                 .map_err(|e| OpError::new("render", e.to_string()))?;
             Ok(OpResult::Rendered {
                 format: format.to_string(),
@@ -195,9 +194,10 @@ fn execute_render(frame_json: &str, format: &str) -> Result<OpResult, OpError> {
             data_b64: false,
         }),
         "html" => {
-            let html = renderer
-                .render_html(&frame, "frame")
-                .map_err(|e| OpError::new("render", e.to_string()))?;
+            let html = Renderer::with_profile(&profile, &VENDORED_FACES, |r| {
+                r.render_html(&frame, "frame")
+            })
+            .map_err(|e| OpError::new("render", e.to_string()))?;
             Ok(OpResult::Rendered {
                 format: format.to_string(),
                 data: html,
