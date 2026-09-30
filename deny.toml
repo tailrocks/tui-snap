@@ -1,6 +1,30 @@
 # Tuiscotti deny.toml (G7 appendix, verbatim). Target: <repo-root>/deny.toml
 [advisories]
-ignore = []
+# T-DENY2: ratatui is pinned at =0.29.0 because >=0.30 pulls foldhash (Zlib),
+# which the user-supplied license allowlist excludes. Residual cost of the pin:
+# one ignore below. Revisit on ratatui upgrade (upstream lru>=0.18.2 +
+# paste->pastey migration removes the need for it).
+#
+# NOTE (no lru ignores): cargo-deny reports `unsound` advisories only for
+# workspace-scoped crates by default (a direct dependent must be a workspace
+# member; see cargo-deny 0.20.2 src/advisories/{cfg,}.rs Scope::Workspace).
+# The workspace's direct `lru` dep was removed (zero .rs usage), so lru 0.12.4
+# is now transitive-only via ratatui and RUSTSEC-2026-0002/-0253 do not fire.
+# Do NOT pre-add ignores for them: their non-triggerability evidence depends on
+# ratatui-only usage, so if lru ever becomes a direct dep again the advisory
+# MUST fire to force re-analysis. (Evidence: ratatui 0.29.0 touches its
+# thread-local LruCache<(Rect, Layout), (Segments, Spacers)> layout cache only
+# via new/resize/get_or_insert (layout.rs:39,284,657) -- never iter_mut/pop --
+# and the K/V types have no panicking Drop (Rect is Copy, Layout derive-only,
+# values are Rc<[Rect]>); workspace has zero lru use.)
+ignore = [
+    # RUSTSEC-2024-0436 (paste unmaintained): maintenance status, not a
+    # soundness defect. paste 1.0.15 is proc-macro=true (build-time only);
+    # ratatui uses only the paste! macro (stylize.rs) for identifier
+    # concatenation; no runtime linkage. No upgrade path short of upstream
+    # ratatui migrating to pastey. Accepted transitive risk, revisit on bump.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained-not-unsound transitive proc-macro (build-time only, no runtime linkage); no upgrade path until upstream ratatui migrates to pastey" },
+]
 
 [bans]
 multiple-versions = "warn"

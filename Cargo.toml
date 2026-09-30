@@ -31,7 +31,6 @@ unicode-width = "=0.2.0"
 # PTY runtime backend, temporarily retained under tuiscotti-runtime only (G1 swap later).
 portable-pty = "=0.9.0"
 alacritty_terminal = "=0.26.0"
-lru = "=0.12.4"
 libc = "=0.2.189"
 tempfile = "=3.27.0"
 

@@ -10,7 +10,6 @@ serde.workspace = true
 serde_json.workspace = true
 ratatui.workspace = true
 unicode-width.workspace = true
-lru.workspace = true
 
 [lints]
 workspace = true
