@@ -240,6 +240,34 @@ Builds (dev profile, warm registry):
 | edit→verdict, view touch → `tuiscotti-fixtures --test view_contracts` (green) | 5701 ms — misses 2 s | 4868 / 2796 ms — miss reproduces 3/3 |
 | full nextest (658 tests) | 61.9 s wall, 654 pass, 4 fail, 1 skip | 89.5 s (646, run 1) / 34.3 s (646, run 2) |
 
+### g7-view-edit optimization study (HEAD `a24bba7` + profile fix)
+
+Probe-equivalent `cargo test -p tuiscotti-fixtures --test view_contracts`
+after a one-file `views/menu.rs` touch, `CARGO_BUILD_JOBS=4`, sequential, on
+host H1. Touches alternated two contents (real-edit semantics; strictly
+harder than the probe's content-identical rewrite, which additionally
+benefits from content-keyed cache reuse).
+
+| Condition | Run walls (s) | Verdict |
+|---|---|---|
+| HEAD, contended (load 20–50, sibling nextest) | 4.01 / 2.19 / 3.00 / 2.62 | FAIL — reproduces the run-1–3 miss |
+| HEAD, quiet (load ~5) | 1.51 / 1.35 / 1.30 | PASS — HEAD already passes quiet |
+| + `[profile.test] debug=line-tables-only`, quiet | 1.41 / 1.19 / 1.27 then 1.33 / 0.90 / 0.86 / 0.56 / 0.74 | PASS, green 12/12 every run |
+
+Dominant cost (`--timings` + `-Z time-passes`): one view touch rebuilds 5
+test-profile units — fixtures lib + `view_contracts` + the 3 PTY fixture
+binaries (coupled via `CARGO_BIN_EXE`; `cargo build --test` builds them too,
+so no probe-command flag can shed them). Quiet per-unit walls pre-fix: test
+0.7 s, bins 0.6–0.7 s, lib 0.6 s; post-fix: 0.4 / 0.4 / 0.2 s. Full-DWARF
+codegen for all five was pure verdict-gate overhead; line tables keep failure
+backtraces file:line-accurate, and dev/release profiles keep full debuginfo.
+Rejected: `--no-default-features` probe (2.25–3.56 s, no significant move —
+the cost is unit count + DWARF, not the pty closure), splitting
+`view_contracts` into its own package (needs `.github/ci` inventory regen +
+docs churn outside this fix's scope). Steady-state floor (nothing dirty):
+~0.6–0.8 s wall. Core/render legs post-fix (quiet, probe-method touch):
+0.74 s / 0.39 s, green — no regression.
+
 ## Validity and caveats
 
 - Dirty tree, shared box: 31+ dirty files during every run; sibling
@@ -253,10 +281,13 @@ Builds (dev profile, warm registry):
   runtime/spawn refactor area, F07). g8 needs a green rerun at the final
   head; the 34–90 s walls show the 120 s budget has room, but a red run
   cannot pass the gate by construction.
-- g7-view-edit reproduces 3/3 (4.9 s → 2.8 s → 5.7 s, all green
-  verdicts): incremental `view_contracts` after a one-file view touch
-  misses the 2 s budget. Not a harness artifact (same touch replays the
-  developer flow; content unchanged; verdict green each time).
+- g7-view-edit reproduces 3/3 on contended runs (4.9 s → 2.8 s → 5.7 s,
+  all green verdicts): incremental `view_contracts` after a one-file view
+  touch misses the 2 s budget. Not a harness artifact (same touch replays
+  the developer flow; content unchanged; verdict green each time) — but a
+  quiet-box study at HEAD `a24bba7` passes (1.51 / 1.35 / 1.30 s), so the
+  miss is contention-driven; see the optimization study above for the
+  dominant-cost profile and the `[profile.test]` fix.
 - Run-3 g4a pooled p95 (138 ms) is superseded by run 4 (18.6 ms): the
   earlier figure mixed 8-worker sweep contention into the latency gate.
   The sweep tail itself (max 185 ms at 8 workers) is reported above as a
@@ -268,9 +299,11 @@ Builds (dev profile, warm registry):
 
 ## Findings for follow-up
 
-1. g7-view-edit (2.8–5.7 s vs 2 s, 3/3 reproductions): profile the
-   fixtures-test incremental link; likely test-target codegen, not the
-   one-file recompile.
+1. g7-view-edit — RESOLVED (study above): 5 test-profile units per touch
+   (lib + test + 3 `CARGO_BIN_EXE`-coupled fixture binaries), full-DWARF
+   codegen on all five. Fix: `[profile.test] debug="line-tables-only"`.
+   Contended-box misses were environmental (quiet HEAD already passes);
+   re-prove on the quiet final-head rerun like every other number here.
 2. compare-changed cost (93 ms p50 at 200x60): the hybrid-diagnostic +
    diff-PNG path dominates mismatch verdicts; stream or downscale the
    diagnostic (never the strict verdict).

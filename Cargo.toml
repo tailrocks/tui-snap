@@ -73,3 +73,11 @@ allow_attributes = "warn"
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 private_intra_doc_links = "deny"
+
+[profile.test]
+# g7: a one-file view touch rebuilds 5 test-profile units (fixtures lib +
+# view_contracts + 3 PTY fixture binaries coupled via CARGO_BIN_EXE). Full
+# DWARF emission for all five is pure verdict-gate overhead, so test builds
+# keep line tables only (failure backtraces stay file:line-accurate).
+# Dev/release profiles keep full debuginfo.
+debug = "line-tables-only"
