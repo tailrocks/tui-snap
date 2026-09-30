@@ -12,8 +12,10 @@ pub const HELP: &str = "\
 usage: cargo xtask package\n\
 \n\
 for every publishable member (no publish = false): verifies description\n\
-metadata exists and runs cargo package --list --offline. Any failure or\n\
-missing metadata fails.\n\
+metadata exists, runs cargo package --list (online: fresh runners have no\n\
+cargo cache), and refuses junk paths in the packaged set (target/ output,\n\
+.DS_Store, *.swp, *.snap.new). Any failure, junk path, or missing\n\
+metadata fails.\n\
 ";
 
 /// Run the packaging dry-run.
@@ -91,19 +93,17 @@ fn check_member(root: &Path, manifest: &Path) -> Result<Status> {
         println!("package: FAIL {rel} has no [package] name");
         return Ok(Status::Fail);
     };
-    match util::run_cargo(
-        root,
-        &[
-            "package",
-            "--list",
-            "--offline",
-            "--allow-dirty",
-            "-p",
-            &name,
-        ],
-    ) {
+    match util::run_cargo(root, &["package", "--list", "--allow-dirty", "-p", &name]) {
         Ok(list) => {
-            println!("package: PASS {name} ({} files)", list.lines().count());
+            let junk: Vec<&str> = list.lines().filter(|p| is_junk(p)).collect();
+            if junk.is_empty() {
+                println!("package: PASS {name} ({} files)", list.lines().count());
+            } else {
+                for path in junk {
+                    println!("package: FAIL {name} ships junk path: {path}");
+                }
+                status = Status::Fail;
+            }
         }
         Err(err) => {
             println!("package: FAIL {name}: {err}");
@@ -111,6 +111,23 @@ fn check_member(root: &Path, manifest: &Path) -> Result<Status> {
         }
     }
     Ok(status)
+}
+
+/// Junk that must never ship inside a published crate.
+///
+/// Cargo's default include set is exactly the tracked source (verified: every
+/// tracked file ships, nothing else does), so manifests carry no
+/// include/exclude lists and this deny-list is the wiring that keeps it that
+/// way. `Cargo.toml.orig` / `.cargo_vcs_info.json` are cargo-generated and
+/// legitimate, so only real stray classes are refused.
+fn is_junk(path: &str) -> bool {
+    let base = path.rsplit('/').next().unwrap_or(path);
+    path.starts_with("target/")
+        || base == ".DS_Store"
+        || Path::new(base)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("swp"))
+        || base.ends_with(".snap.new")
 }
 
 /// Package name from the `[package]` section of a manifest.

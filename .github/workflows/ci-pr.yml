@@ -756,10 +756,86 @@ jobs:
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
+  github-hosted-rustdoc-gate:
+    name: "Documentation · Rustdoc gate (workspace docs, warnings denied) · github-hosted — rustdoc-gate"
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"rustdoc-gate"') && (true) }}
+    needs: [plan]
+    uses: ./.github/workflows/ci-unit-docs.yml
+    with:
+      unit: rustdoc-gate
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: rust
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_admission: github-hosted
+  github-hosted-no-default-gate:
+    name: "Documentation · No-default-features isolation gate · github-hosted — no-default-gate"
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"no-default-gate"') && (true) }}
+    needs: [plan]
+    uses: ./.github/workflows/ci-unit-docs.yml
+    with:
+      unit: no-default-gate
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest"
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_admission: github-hosted
+  github-hosted-xtask-gates:
+    name: "Documentation · xtask umbrella (policy, deps, package) · github-hosted — xtask-gates"
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"xtask-gates"') && (true) }}
+    needs: [plan]
+    uses: ./.github/workflows/ci-unit-docs.yml
+    with:
+      unit: xtask-gates
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: rust
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_admission: github-hosted
+  github-hosted-msrv-gate:
+    name: "Documentation · MSRV floor gate (1.98.0 builds and tests all) · github-hosted — msrv-gate"
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(needs.plan.outputs.units, '"unit_id":"msrv-gate"') && (true) }}
+    needs: [plan]
+    uses: ./.github/workflows/ci-unit-docs.yml
+    with:
+      unit: msrv-gate
+      provider: github-hosted
+      selected_units: ${{ needs.plan.outputs.units }}
+      selected_unit_ids: ${{ needs.plan.outputs.unit_ids }}
+      scope: ${{ needs.plan.outputs.scope }}
+      full_units: ${{ needs.plan.outputs.full_units }}
+      plan_digest: ${{ needs.plan.outputs.plan_digest }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+      head_sha: ${{ needs.plan.outputs.head_sha }}
+      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest"
+      unit_platform: linux-x64
+      unit_trust: untrusted-ok
+      unit_admission: github-hosted
   ci-required:
     name: ci-required
     if: ${{ !cancelled() }}
-    needs: [plan, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-bench, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask, github-hosted-repo-shape]
+    needs: [plan, github-hosted-rust-policy, github-hosted-rust-tuiscotti, github-hosted-rust-tuiscotti-bench, github-hosted-rust-tuiscotti-cli, github-hosted-rust-tuiscotti-core, github-hosted-rust-tuiscotti-fixtures, github-hosted-rust-tuiscotti-insta, github-hosted-rust-tuiscotti-render, github-hosted-rust-tuiscotti-runtime, github-hosted-rust-xtask, github-hosted-repo-shape, github-hosted-rustdoc-gate, github-hosted-no-default-gate, github-hosted-xtask-gates, github-hosted-msrv-gate]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -844,7 +920,7 @@ jobs:
           SELECTED_UNITS: ${{ needs.plan.outputs.units }}
           PLAN_DIGEST: ${{ needs.plan.outputs.plan_digest }}
           EXCLUDED: ${{ needs.plan.outputs.excluded }}
-          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-bench\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-bench\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"},{\"job_id\":\"github-hosted-repo-shape\",\"provider\":\"github-hosted\",\"unit_id\":\"repo-shape\"}]"
+          EXPECTED_CALLERS: "[{\"job_id\":\"github-hosted-rust-policy\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-policy\"},{\"job_id\":\"github-hosted-rust-tuiscotti\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti\"},{\"job_id\":\"github-hosted-rust-tuiscotti-bench\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-bench\"},{\"job_id\":\"github-hosted-rust-tuiscotti-cli\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-cli\"},{\"job_id\":\"github-hosted-rust-tuiscotti-core\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-core\"},{\"job_id\":\"github-hosted-rust-tuiscotti-fixtures\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-fixtures\"},{\"job_id\":\"github-hosted-rust-tuiscotti-insta\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-insta\"},{\"job_id\":\"github-hosted-rust-tuiscotti-render\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-render\"},{\"job_id\":\"github-hosted-rust-tuiscotti-runtime\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-tuiscotti-runtime\"},{\"job_id\":\"github-hosted-rust-xtask\",\"provider\":\"github-hosted\",\"unit_id\":\"rust-xtask\"},{\"job_id\":\"github-hosted-repo-shape\",\"provider\":\"github-hosted\",\"unit_id\":\"repo-shape\"},{\"job_id\":\"github-hosted-rustdoc-gate\",\"provider\":\"github-hosted\",\"unit_id\":\"rustdoc-gate\"},{\"job_id\":\"github-hosted-no-default-gate\",\"provider\":\"github-hosted\",\"unit_id\":\"no-default-gate\"},{\"job_id\":\"github-hosted-xtask-gates\",\"provider\":\"github-hosted\",\"unit_id\":\"xtask-gates\"},{\"job_id\":\"github-hosted-msrv-gate\",\"provider\":\"github-hosted\",\"unit_id\":\"msrv-gate\"}]"
           PROVIDER_ADMITTED_GITHUB_HOSTED: ${{ true }}
         shell: bash
         run: |
@@ -1128,6 +1204,98 @@ jobs:
               skipped) ;;
               success) echo "unexpected CI job github-hosted-repo-shape succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
               *) echo "unexpected CI job github-hosted-repo-shape ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "rustdoc-gate" "github-hosted"; then
+            result="$(result_for_job github-hosted-rustdoc-gate)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-rustdoc-gate was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-rustdoc-gate was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-rustdoc-gate did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-rustdoc-gate ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-rustdoc-gate)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-rustdoc-gate succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-rustdoc-gate ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "no-default-gate" "github-hosted"; then
+            result="$(result_for_job github-hosted-no-default-gate)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-no-default-gate was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-no-default-gate was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-no-default-gate did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-no-default-gate ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-no-default-gate)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-no-default-gate succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-no-default-gate ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "xtask-gates" "github-hosted"; then
+            result="$(result_for_job github-hosted-xtask-gates)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-xtask-gates was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-xtask-gates was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-xtask-gates did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-xtask-gates ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-xtask-gates)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-xtask-gates succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-xtask-gates ran outside the expected set: $result" >&2; exit 1 ;;
+            esac
+          fi
+          if plan_expects "msrv-gate" "github-hosted"; then
+            result="$(result_for_job github-hosted-msrv-gate)"
+            if [[ "$PROVIDER_ADMITTED_GITHUB_HOSTED" == true ]]; then
+              case "$result" in
+                success) ;;
+                skipped) echo "expected CI job github-hosted-msrv-gate was skipped: a skipped expected result cannot pass" >&2; exit 1 ;;
+                cancelled) echo "expected CI job github-hosted-msrv-gate was cancelled: a cancelled expected result cannot pass" >&2; exit 1 ;;
+                *) echo "expected CI job github-hosted-msrv-gate did not pass: $result" >&2; exit 1 ;;
+              esac
+            else
+              case "$result" in
+                skipped) ;;
+                *) echo "selected CI job github-hosted-msrv-gate ran outside its provider admission (PROVIDER_ADMITTED_GITHUB_HOSTED=$PROVIDER_ADMITTED_GITHUB_HOSTED): $result" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            result="$(result_for_job github-hosted-msrv-gate)"
+            case "$result" in
+              skipped) ;;
+              success) echo "unexpected CI job github-hosted-msrv-gate succeeded outside the expected set: the plan did not declare it" >&2; exit 1 ;;
+              *) echo "unexpected CI job github-hosted-msrv-gate ran outside the expected set: $result" >&2; exit 1 ;;
             esac
           fi
   required:

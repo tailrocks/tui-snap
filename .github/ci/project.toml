@@ -284,3 +284,79 @@ testcontainers = false
 services_with_readiness = false
 browser_binaries = false
 native_macos_arm64 = false
+
+[[unit]]
+id = "rustdoc-gate"
+label = "Rustdoc gate (workspace docs, warnings denied)"
+kind = "docs"
+root = "."
+watch = ["**/*.rs", "Cargo.lock", "Cargo.toml", "crates/*/Cargo.toml", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml"]
+pr_commands = ["mise run ci-rustdoc"]
+full_commands = ["mise run ci-rustdoc"]
+platform = "linux-x64"
+trust = "untrusted-ok"
+[unit.capabilities]
+docker = false
+nested_privileged_docker = false
+buildx_compose = false
+testcontainers = false
+services_with_readiness = false
+browser_binaries = false
+native_macos_arm64 = false
+
+[[unit]]
+id = "no-default-gate"
+label = "No-default-features isolation gate"
+kind = "docs"
+root = "."
+watch = ["**/*.rs", ".config/nextest.toml", "Cargo.lock", "Cargo.toml", "crates/*/Cargo.toml", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml"]
+pr_commands = ["mise run ci-no-default"]
+full_commands = ["mise run ci-no-default"]
+platform = "linux-x64"
+trust = "untrusted-ok"
+[unit.capabilities]
+docker = false
+nested_privileged_docker = false
+buildx_compose = false
+testcontainers = false
+services_with_readiness = false
+browser_binaries = false
+native_macos_arm64 = false
+
+[[unit]]
+id = "xtask-gates"
+label = "xtask umbrella (policy, deps, package)"
+kind = "docs"
+root = "."
+watch = ["**/*.cjs", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.py", "**/*.pyi", "**/*.rs", "**/*.ts", "**/*.tsx", "**/package.json", "**/pyproject.toml", ".alint.yml", ".config/nextest.toml", "AGENTS.md", "CODEOWNERS", "Cargo.lock", "Cargo.toml", "clippy.toml", "crates/*/Cargo.toml", "deny.toml", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml", "rustfmt.toml"]
+pr_commands = ["mise run ci-xtask-policy", "mise run ci-xtask-deps", "mise run ci-package"]
+full_commands = ["mise run ci-xtask-policy", "mise run ci-xtask-deps", "mise run ci-package"]
+platform = "linux-x64"
+trust = "untrusted-ok"
+[unit.capabilities]
+docker = false
+nested_privileged_docker = false
+buildx_compose = false
+testcontainers = false
+services_with_readiness = false
+browser_binaries = false
+native_macos_arm64 = false
+
+[[unit]]
+id = "msrv-gate"
+label = "MSRV floor gate (1.98.0 builds and tests all)"
+kind = "docs"
+root = "."
+watch = ["**/*.rs", ".config/nextest.toml", "Cargo.lock", "Cargo.toml", "crates/*/Cargo.toml", "mise.lock", "mise.toml", "rust-toolchain", "rust-toolchain.toml"]
+pr_commands = ["mise run ci-msrv"]
+full_commands = ["mise run ci-msrv"]
+platform = "linux-x64"
+trust = "untrusted-ok"
+[unit.capabilities]
+docker = false
+nested_privileged_docker = false
+buildx_compose = false
+testcontainers = false
+services_with_readiness = false
+browser_binaries = false
+native_macos_arm64 = false

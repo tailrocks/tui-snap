@@ -19,3 +19,41 @@ rust = "1.98.1"
 [tasks.alint]
 description = "Repo shape and line gates: alint check at the repo root"
 run = "alint check"
+
+# CI lanes (each wired into CI via a [[units]] row in
+# .github-gen/velnor-workflow.toml naming the task in ci_tasks). Tasks run
+# online (no --offline): fresh CI runners have no cargo cache. Every command
+# below is verified locally; see the F13 lane notes in the workflow source.
+
+[tasks.ci-rustdoc]
+description = "Rustdoc gate: workspace docs build with warnings denied"
+run = 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked'
+
+[tasks.ci-no-default]
+description = "No-default gate: pure-view builds, lints, tests, and pty-free graph"
+run = [
+  "cargo check --workspace --no-default-features --locked --all-targets",
+  "cargo clippy --workspace --no-default-features --locked --all-targets -- -D warnings",
+  "cargo nextest run --workspace --no-default-features --locked",
+  'out=$(cargo tree -p tuiscotti --no-default-features --locked --prefix none) || exit 1; printf "%s\n" "$out" | grep -q -E "portable-pty|alacritty_terminal" && exit 1 || true',
+]
+
+[tasks.ci-xtask-policy]
+description = "xtask umbrella: source policies (crates-only, scripts, line limits)"
+run = "cargo run -p xtask -- policy"
+
+[tasks.ci-xtask-deps]
+description = "xtask umbrella: dependency inspection (bans, git sources, lockfile)"
+run = "cargo run -p xtask -- deps"
+
+[tasks.ci-package]
+description = "xtask umbrella: packaging dry-run for publishable members"
+run = "cargo run -p xtask -- package"
+
+[tasks.ci-msrv]
+description = "MSRV gate: 1.98.0 (the declared rust-version floor) builds and tests all"
+run = [
+  "rustup toolchain install 1.98.0 --profile minimal",
+  "rustup run 1.98.0 cargo check --workspace --locked --all-targets --all-features",
+  "rustup run 1.98.0 cargo nextest run --workspace --locked --all-features",
+]
