@@ -2,16 +2,16 @@
 
 /// Vendored pinned font bytes (reproducible on any machine).
 pub const VENDORED_FONT: &[u8] =
-    include_bytes!("../../../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf");
+    include_bytes!("../../fonts/JetBrainsMonoNerdFontMono-Regular.ttf");
 /// Vendored bold face bytes.
 pub const VENDORED_FONT_BOLD: &[u8] =
-    include_bytes!("../../../../assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf");
+    include_bytes!("../../fonts/JetBrainsMonoNerdFontMono-Bold.ttf");
 /// Vendored italic face bytes.
 pub const VENDORED_FONT_ITALIC: &[u8] =
-    include_bytes!("../../../../assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf");
+    include_bytes!("../../fonts/JetBrainsMonoNerdFontMono-Italic.ttf");
 /// Vendored bold-italic face bytes.
 pub const VENDORED_FONT_BOLD_ITALIC: &[u8] =
-    include_bytes!("../../../../assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf");
+    include_bytes!("../../fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf");
 
 /// The four faces of one pinned monospace family, selected by `cell.mods`
 /// (bold → Bold, italic → Italic, both → `BoldItalic`). The regular face pins
@@ -53,20 +53,17 @@ pub const VENDORED_FACES: FontFaces<'static> = FontFaces {
 /// Vendored per-glyph fallback faces: Noto subsets covering what the primary
 /// family lacks (see `assets/fonts/FONTS.md`; subsets reproducible via
 /// `tools/subset_fonts.py`, SIL OFL 1.1, `LICENSE-Noto.txt`).
-pub const VENDORED_SYMBOLS2_FONT: &[u8] =
-    include_bytes!("../../../../assets/fonts/NotoSansSymbols2-subset.ttf");
+pub const VENDORED_SYMBOLS2_FONT: &[u8] = include_bytes!("../../fonts/NotoSansSymbols2-subset.ttf");
 /// SHA-256 of [`VENDORED_SYMBOLS2_FONT`], pinned at load.
 pub const VENDORED_SYMBOLS2_FONT_SHA256: &str =
     "e1d177a40af910100eceb0e825331e55f0cfd005bc0f26087fd4e58fbe60e6c5";
 /// Vendored Noto Sans Symbols subset bytes.
-pub const VENDORED_SYMBOLS_FONT: &[u8] =
-    include_bytes!("../../../../assets/fonts/NotoSansSymbols-subset.ttf");
+pub const VENDORED_SYMBOLS_FONT: &[u8] = include_bytes!("../../fonts/NotoSansSymbols-subset.ttf");
 /// SHA-256 of [`VENDORED_SYMBOLS_FONT`], pinned at load.
 pub const VENDORED_SYMBOLS_FONT_SHA256: &str =
     "6f9cc93e71f8676361c5db286368be046e75d42c0b841afbf3f50da6bb0a2b8a";
 /// Vendored Noto Sans CJK JP subset bytes.
-pub const VENDORED_CJK_FONT: &[u8] =
-    include_bytes!("../../../../assets/fonts/NotoSansCJKjp-subset.otf");
+pub const VENDORED_CJK_FONT: &[u8] = include_bytes!("../../fonts/NotoSansCJKjp-subset.otf");
 /// SHA-256 of [`VENDORED_CJK_FONT`], pinned at load.
 pub const VENDORED_CJK_FONT_SHA256: &str =
     "777bee41f0c6076c00ad919384359a6e396b8822cf9056041fca8fcf2759d897";
