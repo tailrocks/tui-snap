@@ -10,6 +10,10 @@ repository.workspace = true
 [[bin]]
 name = "tuiscotti"
 path = "src/main.rs"
+# The bin shares its name with the `tuiscotti` facade lib; documenting both
+# collides at target/doc/tuiscotti/index.html (cargo#6313). The bin carries no
+# library API, so only the lib is documented.
+doc = false
 
 # No required-features: the binary always builds. Offline commands (inspect,
 # render, diff, review, accept, report, import, trace) work without `pty`;

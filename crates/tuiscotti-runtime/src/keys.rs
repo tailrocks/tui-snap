@@ -1,9 +1,9 @@
-//! Typed key chords with [`FromStr`](std::str::FromStr) parsing (G6).
+//! Typed key chords with [`FromStr`] parsing (G6).
 //!
-//! [`KeyChord`] pairs a [`Key`](crate::tui::Key) with its
-//! [`KeyMods`](crate::tui::KeyMods); chord strings (`"Ctrl+P"`, `"Alt+Enter"`)
-//! parse through [`FromStr`](std::str::FromStr), and bare key names parse as
-//! [`Key`](crate::tui::Key) directly. Raw bytes and paste stay explicit on
+//! [`KeyChord`] pairs a [`Key`] with its
+//! [`KeyMods`]; chord strings (`"Ctrl+P"`, `"Alt+Enter"`)
+//! parse through [`FromStr`], and bare key names parse as
+//! [`Key`] directly. Raw bytes and paste stay explicit on
 //! [`Session`](crate::tui::Session) (`send_bytes`, `paste`).
 
 use std::str::FromStr;
@@ -12,7 +12,7 @@ use crate::tui::{Key, KeyMods, TuiError, parse_chord};
 
 /// A key plus its modifiers, e.g. `Ctrl+P`.
 ///
-/// Parses via [`FromStr`](std::str::FromStr); see [`parse_chord`] for the
+/// Parses via [`FromStr`]; see [`parse_chord`] for the
 /// accepted grammar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyChord {

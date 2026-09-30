@@ -1,4 +1,4 @@
-//! Legacy [`Profile`](super::Profile): geometry, palette, cursor policy.
+//! Legacy [`Profile`]: geometry, palette, cursor policy.
 
 use super::{FontFaces, VENDORED_FONT};
 use sha2::{Digest, Sha256};

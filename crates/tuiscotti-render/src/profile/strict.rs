@@ -1,4 +1,4 @@
-//! Strict [`RenderProfile`](super::RenderProfile) construction and hashing.
+//! Strict [`RenderProfile`] construction and hashing.
 
 use super::{
     BlinkPhase, CursorPolicy, FallbackFace, FontFaces, MissingGlyphPolicy, PalettePolicy, Profile,

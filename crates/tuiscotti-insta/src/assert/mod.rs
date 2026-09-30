@@ -53,7 +53,7 @@
 //! - [`EVIDENCE_DIR_ENV`]: candidate-evidence root for [`crate::assert_screenshot!`] (default
 //!   `target/tuiscotti-evidence`). Bundles land in
 //!   `<root>/<package>/<test>/<scenario>[@<variant>]/<run>/<attempt>/`.
-//! - [`SHARD_ENV`](evidence::SHARD_ENV): explicit shard label for evidence paths.
+//! - [`SHARD_ENV`]: explicit shard label for evidence paths.
 //!
 //! Only public Insta APIs are used; there is no Insta fork or private clone.
 

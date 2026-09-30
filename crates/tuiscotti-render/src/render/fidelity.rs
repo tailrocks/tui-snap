@@ -1,4 +1,4 @@
-//! Coverage accounting: [`Fidelity`](super::Fidelity), [`Rendered`](super::Rendered), [`Artifacts`](super::Artifacts).
+//! Coverage accounting: [`Fidelity`], [`Rendered`], [`Artifacts`].
 
 use serde::Serialize;
 

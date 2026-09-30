@@ -1,4 +1,4 @@
-//! Facade macros plus the caller [`Location`](super::Location) they capture.
+//! Facade macros plus the caller [`Location`] they capture.
 //!
 //! Both macros expand the Insta assertions AT THE CALLER and drive them from
 //! ONE resolved [`SnapshotIdentity`](super::SnapshotIdentity) (caller

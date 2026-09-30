@@ -1,4 +1,4 @@
-//! Pinned export knobs: per-format policies plus [`ExportPolicies`](super::ExportPolicies).
+//! Pinned export knobs: per-format policies plus [`ExportPolicies`].
 
 // ---------------------------------------------------------------------------
 // Policies (all pins in one place)

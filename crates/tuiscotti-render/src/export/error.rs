@@ -1,4 +1,4 @@
-//! Export failure type: [`ExportError`](super::ExportError).
+//! Export failure type: [`ExportError`].
 
 // ---------------------------------------------------------------------------
 // Errors

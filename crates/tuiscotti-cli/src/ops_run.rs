@@ -1,6 +1,6 @@
 //! Run commands: `capture`, `record`, `session`.
 //!
-//! These spawn children. Child argv arrives as [`OsString`](std::ffi::OsString)
+//! These spawn children. Child argv arrives as [`OsString`]
 //! from `args_os` and spawns byte-exact; only the UTF-8 JSON records
 //! (manifests, session endpoints) carry lossy projections, each documented at
 //! the conversion.

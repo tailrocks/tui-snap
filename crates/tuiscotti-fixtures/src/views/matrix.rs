@@ -26,7 +26,7 @@ pub enum Screen {
 /// Fixture model: everything the view reads. Tests construct this directly.
 #[derive(Debug, Clone)]
 pub struct Model {
-    /// Which screen [`render`](crate::views::matrix::render) shows.
+    /// Which screen [`render`] shows.
     pub screen: Screen,
     /// Counter shown in the home title bar.
     pub count: i32,

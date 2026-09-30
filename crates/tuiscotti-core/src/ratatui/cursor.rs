@@ -21,7 +21,7 @@ pub const CURSOR_SENTINEL: Position = Position {
 };
 
 /// Plant [`CURSOR_SENTINEL`] on a test terminal before `draw` so the capture
-/// paths can recover post-draw cursor visibility via [`normalize_cursor`].
+/// paths can recover post-draw cursor visibility via `normalize_cursor()`.
 /// Adapter-owned draws ([`super::render_screen`], [`super::draw_frame`])
 /// plant automatically; callers that draw directly must plant first.
 ///

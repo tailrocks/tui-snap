@@ -1,4 +1,4 @@
-//! Strict profile types: version pins, policies, [`RenderProfile`](super::RenderProfile).
+//! Strict profile types: version pins, policies, [`RenderProfile`].
 
 use super::{FallbackFace, FontFaces};
 

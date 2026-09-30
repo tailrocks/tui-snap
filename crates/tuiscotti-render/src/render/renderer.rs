@@ -1,4 +1,4 @@
-//! Reusable [`Renderer`](super::Renderer): pinned faces, cached rasters, PNG/HTML.
+//! Reusable [`Renderer`]: pinned faces, cached rasters, PNG/HTML.
 
 use super::{
     Artifacts, FallbackGlyph, Fidelity, FontSet, GlyphCache, MissingGlyph, RenderError, Rendered,

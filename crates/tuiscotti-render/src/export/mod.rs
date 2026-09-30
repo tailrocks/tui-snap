@@ -4,7 +4,7 @@
 //! - [`gif`] / [`apng`]: animated image exports from PNG frames via the
 //!   `image` crate (GIF) plus hand-assembled APNG chunk surgery (`image` 0.25
 //!   ships an APNG *decoder* but no APNG encoder).
-//! - [`mp4`]: MP4 via an EXTERNAL `ffmpeg` binary only (never vendored).
+//! - [`mp4()`]: MP4 via an EXTERNAL `ffmpeg` binary only (never vendored).
 //! - [`scan_graphics`]: Sixel + Kitty payload inspection with bounded decode.
 //!
 //! ## Determinism table

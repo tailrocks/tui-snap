@@ -9,8 +9,8 @@
 //! anything regardless of viewer quirks.
 //!
 //! Every untrusted string (title, cell text, text projection) crosses the
-//! [`escape_html`](crate::render::escape_html) /
-//! [`escape_html_attr`](crate::render::escape_html_attr) chokepoints.
+//! [`escape_html`] /
+//! [`escape_html_attr`] chokepoints.
 //! [`assert_static_offline`] rejects script elements, event-handler
 //! attributes, `javascript:` URLs, external references, and embedded
 //! frames/objects.

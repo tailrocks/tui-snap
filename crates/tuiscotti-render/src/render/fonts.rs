@@ -1,4 +1,4 @@
-//! Font loading: [`LoadedFont`](super::LoadedFont), [`FontSet`](super::FontSet), geometry pins.
+//! Font loading: [`LoadedFont`], [`FontSet`], geometry pins.
 //!
 //! Raster backend is `swash` (Fontations/skrifa outlines, unhinted): the
 //! previous backend (`fontdue`) pulled the unmaintained `ttf-parser`
