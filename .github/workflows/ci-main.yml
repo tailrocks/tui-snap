@@ -287,13 +287,6 @@ jobs:
         rust-toolchain.toml
       mbx_freshness_files: |
         assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-core/**/*.rs
         crates/tuiscotti-core/benches/**
         crates/tuiscotti-core/examples/**
@@ -307,6 +300,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         crates/tuiscotti-runtime/**/*.rs
@@ -360,13 +360,6 @@ jobs:
         rust-toolchain.toml
       mbx_freshness_files: |
         assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-bench/**/*.rs
         crates/tuiscotti-bench/benches/**
         crates/tuiscotti-bench/examples/**
@@ -390,6 +383,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         crates/tuiscotti-runtime/**/*.rs
@@ -443,13 +443,6 @@ jobs:
         rust-toolchain.toml
       mbx_freshness_files: |
         assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-cli/**/*.rs
         crates/tuiscotti-cli/benches/**
         crates/tuiscotti-cli/examples/**
@@ -469,6 +462,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         crates/tuiscotti-runtime/**/*.rs
@@ -566,13 +566,6 @@ jobs:
         rust-toolchain.toml
       mbx_freshness_files: |
         assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-core/**/*.rs
         crates/tuiscotti-core/benches/**
         crates/tuiscotti-core/examples/**
@@ -591,6 +584,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         crates/tuiscotti-runtime/**/*.rs
@@ -644,13 +644,6 @@ jobs:
         rust-toolchain.toml
       mbx_freshness_files: |
         assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-core/**/*.rs
         crates/tuiscotti-core/benches/**
         crates/tuiscotti-core/examples/**
@@ -664,6 +657,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         mise.lock
@@ -706,13 +706,6 @@ jobs:
         rust-toolchain
         rust-toolchain.toml
       mbx_freshness_files: |
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-core/**/*.rs
         crates/tuiscotti-core/benches/**
         crates/tuiscotti-core/examples/**
@@ -721,6 +714,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         mise.lock
@@ -763,13 +763,6 @@ jobs:
         rust-toolchain
         rust-toolchain.toml
       mbx_freshness_files: |
-        assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
-        assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
-        assets/fonts/NotoSansCJKjp-subset.otf
-        assets/fonts/NotoSansSymbols-subset.ttf
-        assets/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-core/**/*.rs
         crates/tuiscotti-core/benches/**
         crates/tuiscotti-core/examples/**
@@ -778,6 +771,13 @@ jobs:
         crates/tuiscotti-render/**/*.rs
         crates/tuiscotti-render/benches/**
         crates/tuiscotti-render/examples/**
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Bold.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Italic.ttf
+        crates/tuiscotti-render/fonts/JetBrainsMonoNerdFontMono-Regular.ttf
+        crates/tuiscotti-render/fonts/NotoSansCJKjp-subset.otf
+        crates/tuiscotti-render/fonts/NotoSansSymbols-subset.ttf
+        crates/tuiscotti-render/fonts/NotoSansSymbols2-subset.ttf
         crates/tuiscotti-render/src/**
         crates/tuiscotti-render/tests/**
         crates/tuiscotti-runtime/**/*.rs
