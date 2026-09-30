@@ -58,7 +58,7 @@ pub struct GuardianReport {
     /// The direct child's start time still matched at sweep time
     /// (`None` = start time unavailable on this platform/run).
     pub start_verified: Option<bool>,
-    /// Pids sent SIGKILL (bounded to [`MAX_SWEEP_TARGETS`]).
+    /// Pids sent SIGKILL (bounded to `MAX_SWEEP_TARGETS`).
     pub signalled: Vec<u32>,
     /// Group members still alive after the sweep (bounded).
     pub survivors: Vec<u32>,

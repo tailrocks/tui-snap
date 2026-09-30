@@ -38,10 +38,14 @@
 //!   `score >= pixel_threshold` to pass, diff PNG written on any
 //!   sub-1.0 score.
 //!
-//! Statuses reuse [`Status`]: cell-gate failures read as
-//! [`Status::CellsDiffer`], render-level/pixel failures as
-//! [`Status::PixelsDiffer`], any missing approved artifact as
-//! [`Status::MissingApproval`] (fail-closed, never silently). Approvals
+//! Statuses reuse [`Status`](crate::snapshot::Status): cell-gate
+//! failures read as
+//! [`Status::CellsDiffer`](crate::snapshot::Status::CellsDiffer),
+//! render-level/pixel failures as
+//! [`Status::PixelsDiffer`](crate::snapshot::Status::PixelsDiffer), any
+//! missing approved artifact as
+//! [`Status::MissingApproval`](crate::snapshot::Status::MissingApproval)
+//! (fail-closed, never silently). Approvals
 //! change solely through explicit [`GroupedStore::accept`] /
 //! [`GroupedStore::accept_all`] — there is no env-var auto-bless.
 //!
@@ -53,8 +57,9 @@
 //! threshold matches; anything stale is recomputed via `check`, never
 //! silently reused — so report status equals check status on the same inputs.
 //! A candidate with a missing manifest member (e.g. frame present but PNG
-//! write lost) reports [`Status::MissingApproval`] (C08-grouped), never a
-//! pixel verdict or a pass.
+//! write lost) reports
+//! [`Status::MissingApproval`](crate::snapshot::Status::MissingApproval)
+//! (C08-grouped), never a pixel verdict or a pass.
 //!
 //! Default roots for an approved root `snapshots/`: actual `snapshots.actual/`,
 //! diff `snapshots.diff/`, report `snapshots.actual/report.html` — siblings,

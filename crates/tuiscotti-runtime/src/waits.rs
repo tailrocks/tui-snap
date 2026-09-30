@@ -1,8 +1,8 @@
-//! Duration-based wait conveniences over [`Session`](crate::tui::Session) (G6).
+//! Duration-based wait conveniences over [`Session`] (G6).
 //!
 //! The simple path: each wait takes a [`Duration`] bound and manages its own
 //! cancellation internally. The explicit deadline + [`CancelToken`] forms on
-//! [`Session`](crate::tui::Session) (`wait_predicate`, `wait_stable`,
+//! [`Session`] (`wait_predicate`, `wait_stable`,
 //! `wait_frame`, `wait_exit`, `expect_exit`) stay available for advanced
 //! control without any required token boilerplate here.
 

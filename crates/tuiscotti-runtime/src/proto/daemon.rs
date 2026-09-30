@@ -58,7 +58,9 @@
 // Split into one module per area so each file stays under the repo line
 // gate; behavior is unchanged.
 
-use super::{EXIT_OP_ERROR, OpError};
+use super::EXIT_OP_ERROR;
+#[cfg(all(unix, feature = "pty"))]
+use super::OpError;
 #[cfg(all(unix, feature = "pty"))]
 use super::{checked_daemon_path, runtime_dir};
 #[cfg(all(unix, feature = "pty"))]

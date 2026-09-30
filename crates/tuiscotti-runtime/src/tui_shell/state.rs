@@ -91,7 +91,7 @@ pub struct Hyperlink {
 /// [`TermSnapshot::from_observation`] fills only what a live
 /// [`Observation`] carries (title/bells/modes/palette); the rest is
 /// [`Maybe::Unsupported`] because the live path drops it. Replay
-/// ([`Replayed::state`]) fills everything.
+/// ([`Replayed::state`](crate::tui_shell::Replayed::state)) fills everything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TermSnapshot {
     /// Window/icon title.

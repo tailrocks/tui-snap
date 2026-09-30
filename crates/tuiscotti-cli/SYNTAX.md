@@ -141,7 +141,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 |---|---|
 | Op protocol over stdio | `tuiscotti machine < ops.jsonl` (envelope JSON per line; exit 0/3) |
 | Typed ops (spawn/observe/input/assert/…) | `proto::Op`, `proto::execute`, `proto::run_machine_line` |
-| Named sessions | `session {start --name N [--force] -- argv… \| stop \| list \| prune \| attach --name N}` |
+| Named sessions | `session {start --name N [--force] -- argv… \| stop \| list \| prune \| attach --name N \| input --name N (--text T \| --chord C \| --bytes-b64 B) \| observe --name N}` |
 | Session API | `proto::session_start_os (OsString) / session_start / session_stop / session_list / session_prune` |
 
 ## Cleanup

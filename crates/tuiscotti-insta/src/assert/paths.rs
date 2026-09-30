@@ -36,7 +36,7 @@ pub fn generation_id(canonical: &str) -> String {
 /// under a different profile (or different pixels entirely) still matches by
 /// generation. The binding additionally covers WHAT RENDERED the sample
 /// (profile name, renderer version, alpha policy via
-/// [`render_identity`](super::assert::snapshot_settings)) and the exact PNG
+/// [`render_identity`]) and the exact PNG
 /// payload (`png` here is the untagged renderer output; the tag chunk carries
 /// the binding but never participates in it). Deterministic: identical
 /// screen + profile + renderer always yield the identical binding. Run and

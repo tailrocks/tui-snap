@@ -14,10 +14,14 @@
 //! it tails the named session's log as text frames. Assertions remain on
 //! `Observation`s, never on attach output.
 
+#[cfg(feature = "pty")]
 mod pty;
+#[cfg(feature = "pty")]
 mod replay;
 mod text;
 
+#[cfg(feature = "pty")]
 pub use pty::*;
+#[cfg(feature = "pty")]
 pub use replay::*;
 pub use text::*;
