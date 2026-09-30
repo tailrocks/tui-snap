@@ -2,7 +2,7 @@ use super::convert::{convert_color, convert_mods};
 use super::{ClippedCell, EdgePolicy, REPLACEMENT, ScreenCapture};
 use crate::frame::{Cell, Cursor, CursorStyle};
 use crate::screen::{Screen, ScreenError};
-use ratatui::backend::TestBackend;
+use ratatui::backend::{Backend, TestBackend};
 use ratatui::buffer::{Buffer, Cell as RCell};
 use ratatui::layout::Position;
 use ratatui::widgets::{StatefulWidget, Widget};
@@ -202,7 +202,7 @@ fn convert_buffer(
 /// | HIDDEN | `mods.hidden` | preserved (intent; renderers omit the glyph) |
 /// | `SLOW_BLINK/RAPID_BLINK` | `mods.blink` | preserved (intent; stills freeze phase) |
 /// | underline color | `underline_color` | preserved via the `underline-color` cargo feature (`Reset` → `Default`) |
-/// | underline style | `mods.underline` | PARTIAL: ratatui 0.30 exposes only the UNDERLINED bit (no style API), so every ratatui underline maps to `Single` |
+/// | underline style | `mods.underline` | PARTIAL: ratatui 0.29 exposes only the UNDERLINED bit (no style API), so every ratatui underline maps to `Single` |
 /// | hyperlinks (OSC 8) | — | NOT exposed: `Buffer`/`Cell` store no link targets |
 /// | title, bells, modes, palette, clipboard, graphics | — | NOT exposed by `Buffer`/`TestBackend` |
 /// | cursor position + visibility | `Cursor` x/y/visible | preserved (post-draw) |
@@ -221,18 +221,23 @@ pub fn screen_from_buffer(
 }
 
 /// Capture the completed state of a `TestBackend` terminal: buffer + cursor
-/// (M05). Reads post-draw cursor position/visibility so cursor-only changes
+/// (M05). Reads post-draw cursor position/visibility (the terminal must have
+/// been planted with [`super::CURSOR_SENTINEL`] before its last draw) so cursor-only changes
 /// are gated; buffer origin is preserved like [`screen_from_buffer`].
 ///
 /// # Errors
 ///
-/// Same failures as [`screen_from_buffer`].
+/// Same failures as [`screen_from_buffer`], plus backend cursor-position I/O
+/// failures (unreachable on `TestBackend`).
 pub fn screen_from_test_backend(
     term: &mut ratatui::Terminal<TestBackend>,
     policy: EdgePolicy,
 ) -> Result<ScreenCapture, ScreenError> {
-    let backend = term.backend();
-    let cursor = Some((backend.cursor_position(), backend.cursor_visible()));
+    let backend = term.backend_mut();
+    let pos = backend
+        .get_cursor_position()
+        .map_err(|e| ScreenError(format!("cursor position: {e}")))?;
+    let cursor = Some(super::cursor::normalize_cursor(pos));
     let buf = backend.buffer().clone();
     convert_buffer(&buf, cursor, policy)
 }
@@ -256,6 +261,8 @@ pub fn render_screen(
     let backend = TestBackend::new(cols, rows);
     let mut term =
         ratatui::Terminal::new(backend).map_err(|e| ScreenError(format!("test terminal: {e}")))?;
+    super::cursor::plant_cursor_sentinel(&mut term)
+        .map_err(|e| ScreenError(format!("plant sentinel: {e}")))?;
     term.draw(draw)
         .map_err(|e| ScreenError(format!("draw: {e}")))?;
     screen_from_test_backend(&mut term, policy)

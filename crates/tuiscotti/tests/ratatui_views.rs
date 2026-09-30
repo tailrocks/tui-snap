@@ -8,8 +8,8 @@ use ratatui::style::{Color as RColor, Modifier, Style};
 use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use tuiscotti::frame::CursorStyle;
 use tuiscotti::ratatui::{
-    EdgePolicy, REPLACEMENT, render_screen, screen_from_buffer, screen_from_test_backend,
-    stateful_screen, widget_screen,
+    EdgePolicy, REPLACEMENT, plant_cursor_sentinel, render_screen, screen_from_buffer,
+    screen_from_test_backend, stateful_screen, widget_screen,
 };
 
 fn row_text(screen: &tuiscotti::Screen, y: u16) -> Result<String, Box<dyn std::error::Error>> {
@@ -178,6 +178,7 @@ fn buffer_cursor_outside_area_captured_hidden_with_note() {
 fn test_backend_capture_includes_cursor() {
     let backend = TestBackend::new(16, 4);
     let mut term = Terminal::new(backend).expect("Terminal::new succeeds");
+    plant_cursor_sentinel(&mut term).expect("plant_cursor_sentinel succeeds");
     term.draw(|f| {
         f.render_widget(Paragraph::new("tb"), f.area());
         f.set_cursor_position((3, 1));

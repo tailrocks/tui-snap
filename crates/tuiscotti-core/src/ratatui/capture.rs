@@ -7,7 +7,9 @@ use ratatui::layout::Position;
 /// Convert a buffer plus explicit cursor state into a [`Frame`].
 ///
 /// `cursor`: `(position, visible)`. Read it from
-/// `TestBackend::get_cursor_position` after draw; `None` hides the cursor.
+/// `TestBackend::get_cursor_position` after draw (`None` hides the cursor).
+/// Visibility needs a terminal planted with [`super::CURSOR_SENTINEL`]
+/// before its last draw ([`draw_frame`] plants automatically).
 #[must_use]
 pub fn from_buffer(
     buf: &Buffer,
@@ -95,7 +97,7 @@ pub fn capture(
     let cursor = backend
         .get_cursor_position()
         .ok()
-        .map(|pos| (pos, backend.cursor_visible()));
+        .map(super::cursor::normalize_cursor);
     // `Buffer::clone` via re-read: TestBackend exposes `buffer()`.
     let buf = backend.buffer().clone();
     from_buffer(&buf, area.width, area.height, cursor, provenance)
@@ -124,6 +126,10 @@ where
 /// # Panics
 ///
 /// Panics when the test terminal or the draw closure itself fails.
+#[expect(
+    clippy::expect_used,
+    reason = "test-only constructor; the panic contract above is the API. Ratatui 0.29 types TestBackend failures as io::Error where 0.30 used Infallible, which trips this lint on the same calls"
+)]
 pub fn draw_frame(
     cols: u16,
     rows: u16,
@@ -132,6 +138,7 @@ pub fn draw_frame(
 ) -> Frame {
     let backend = ratatui::backend::TestBackend::new(cols, rows);
     let mut term = ratatui::Terminal::new(backend).expect("test terminal");
+    super::cursor::plant_cursor_sentinel(&mut term).expect("plant sentinel");
     term.draw(draw).expect("draw");
     capture(&mut term, provenance)
 }

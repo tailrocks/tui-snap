@@ -27,10 +27,12 @@
 
 mod capture;
 mod convert;
+pub(crate) mod cursor;
 mod edge;
 mod screen;
 
 pub use capture::{capture, draw_frame, from_buffer, widget_frame};
+pub use cursor::{CURSOR_SENTINEL, plant_cursor_sentinel};
 pub use edge::{ClippedCell, EdgePolicy, REPLACEMENT, ScreenCapture};
 pub use screen::{
     render, render_screen, screen_from_buffer, screen_from_test_backend, stateful_screen,
