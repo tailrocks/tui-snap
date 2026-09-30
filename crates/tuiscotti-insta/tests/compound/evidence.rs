@@ -1,12 +1,16 @@
 //! Evidence publication: ordering, pendings, suffixed identities.
 
 use std::fs;
+use std::path::PathBuf;
 
 use super::helpers::{
     assert_bundle_matches_sample, collect_files, insta_updates_in_place, insta_writes_new_files,
     panic_message, single_bundle, styled_screen, write_binary_snap, write_text_snap,
 };
-use tuiscotti_insta::assert::Policy;
+use tuiscotti_insta::assert::{
+    GEN_DESC_PREFIX, Location, Policy, png_generation, resolve_snapshot_identity,
+    snapshot_dir_override,
+};
 
 #[test]
 fn evidence_bundle_is_published_before_failure() {
@@ -159,4 +163,165 @@ fn suffixed_snapshots_resolve_and_gate_end_to_end() {
         tuiscotti_insta::assert_screenshot!("g6_variant", &screen, &policy);
     }));
     assert!(outcome.is_err(), "unsuffixed identity must stay unapproved");
+}
+
+/// Removes default-placement pendings (and the dir, when left empty) even
+/// when the test panics mid-way: caller `snapshots/` keeps no residue.
+struct PendingGuard {
+    dir: PathBuf,
+    files: Vec<PathBuf>,
+}
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        for f in &self.files {
+            let _gone = fs::remove_file(f);
+        }
+        // Only removes the dir when OUR run left it empty.
+        let _dir = fs::remove_dir(&self.dir);
+    }
+}
+
+#[test]
+fn default_placement_lands_in_caller_snapshots() {
+    if insta_updates_in_place() || !insta_writes_new_files() {
+        return;
+    }
+    // An explicit snapshot-dir override would redirect placement: untestable.
+    if snapshot_dir_override().is_some() {
+        return;
+    }
+    let name = "f_default_placement";
+    let loc = Location {
+        file: file!(),
+        line: line!(),
+    };
+    let expected = resolve_snapshot_identity(env!("CARGO_MANIFEST_DIR"), loc, name, None);
+    let pendings = vec![
+        expected.dir.join(format!("{name}.snap")),
+        expected.dir.join(format!("{name}.snap.new")),
+    ];
+    // First-run state (also clears residue from an aborted run).
+    for p in &pendings {
+        let _gone = fs::remove_file(p);
+    }
+    let _guard = PendingGuard {
+        dir: expected.dir.clone(),
+        files: pendings.clone(),
+    };
+    let screen = styled_screen().expect("valid test screen");
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tuiscotti_insta::assert_snapshot!(name, &screen);
+    }));
+    assert!(outcome.is_err(), "unapproved snapshot must fail");
+    assert!(
+        expected.dir.join(format!("{name}.snap.new")).is_file(),
+        "None-override pending must land in caller snapshots/: {}",
+        expected.dir.display()
+    );
+}
+
+#[test]
+fn insta_source_names_caller_on_real_pendings() {
+    if insta_updates_in_place() || !insta_writes_new_files() {
+        return;
+    }
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let snaps = tmp.path().join("snaps");
+    let evidence = tmp.path().join("evidence");
+    fs::create_dir(&snaps).expect("create snaps dir");
+    fs::create_dir(&evidence).expect("create evidence dir");
+    let policy = Policy::EvolvingIn {
+        snapshots: snaps.clone(),
+        evidence: evidence.clone(),
+    };
+    let screen = styled_screen().expect("valid test screen");
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tuiscotti_insta::assert_screenshot!("g_source_names_caller", &screen, &policy);
+    }));
+    assert!(outcome.is_err(), "unapproved snapshot must fail");
+    // Both real pendings name THIS caller file in `source:`.
+    let caller = file!().rsplit('/').next().expect("caller file name");
+    for pending in [
+        "g_source_names_caller.snap.new",
+        "g_source_names_caller-img.snap.new",
+    ] {
+        let text = fs::read_to_string(snaps.join(pending)).expect("read pending");
+        let source = text
+            .lines()
+            .find_map(|l| l.strip_prefix("source:"))
+            .expect("source line");
+        assert!(source.contains(caller), "source names caller: {source}");
+    }
+}
+
+/// Binding token from a pending `.snap.new` description header.
+fn pending_binding(pending: &str) -> Option<String> {
+    let mut lines = pending.lines();
+    if lines.next()? != "---" {
+        return None;
+    }
+    for line in lines {
+        if line == "---" {
+            break;
+        }
+        if let Some(v) = line.trim().strip_prefix("description:") {
+            let v = v.trim().trim_matches('"');
+            let binding = v.strip_prefix(GEN_DESC_PREFIX)?;
+            return binding.split_whitespace().next().map(str::to_string);
+        }
+    }
+    None
+}
+
+#[test]
+fn first_run_accept_by_rename_passes_on_rerun() {
+    if insta_updates_in_place() || !insta_writes_new_files() {
+        return;
+    }
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let snaps = tmp.path().join("snaps");
+    let evidence = tmp.path().join("evidence");
+    fs::create_dir(&snaps).expect("create snaps dir");
+    fs::create_dir(&evidence).expect("create evidence dir");
+    let policy = Policy::EvolvingIn {
+        snapshots: snaps.clone(),
+        evidence: evidence.clone(),
+    };
+    let screen = styled_screen().expect("valid test screen");
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tuiscotti_insta::assert_screenshot!("k_accept_by_rename", &screen, &policy);
+    }));
+    assert!(outcome.is_err(), "unapproved snapshot must fail");
+    // Parse the REAL pending headers + PNG tag (no synthesized approvals).
+    let canonical_new = fs::read_to_string(snaps.join("k_accept_by_rename.snap.new"))
+        .expect("read canonical pending");
+    let png_new = fs::read_to_string(snaps.join("k_accept_by_rename-img.snap.new"))
+        .expect("read png pending");
+    let sidecar_new = fs::read(snaps.join("k_accept_by_rename-img.snap.new.png"))
+        .expect("read png sidecar pending");
+    let c = pending_binding(&canonical_new).expect("canonical pending binding");
+    let p = pending_binding(&png_new).expect("png pending binding");
+    let t = png_generation(&sidecar_new).expect("sidecar tag");
+    assert!(c.starts_with("v2-"), "{c}");
+    assert_eq!(p, c, "png header must bind the same sample");
+    assert_eq!(t, c, "sidecar tag must bind the same sample");
+    // Accept exactly like `cargo insta accept`: rename pendings into place.
+    fs::rename(
+        snaps.join("k_accept_by_rename.snap.new"),
+        snaps.join("k_accept_by_rename.snap"),
+    )
+    .expect("accept canonical");
+    fs::rename(
+        snaps.join("k_accept_by_rename-img.snap.new"),
+        snaps.join("k_accept_by_rename-img.snap"),
+    )
+    .expect("accept png meta");
+    fs::rename(
+        snaps.join("k_accept_by_rename-img.snap.new.png"),
+        snaps.join("k_accept_by_rename-img.snap.png"),
+    )
+    .expect("accept png sidecar");
+    // Rerun passes: no second repair cycle.
+    tuiscotti_insta::assert_screenshot!("k_accept_by_rename", &screen, &policy);
 }

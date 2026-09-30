@@ -81,7 +81,7 @@ Every artifact of one capture belongs to one `formats::Generation`
 (frame + profile name). For the macro gates,
 `assert::generation_id` is the hex SHA-256 of the canonical text,
 embedded in each `.snap` description (`tuiscotti generation <hex>
-render <profile>/rv<N>/straight-rgba at <file>:<line>`) AND in the
+render <profile>/rv<N>/straight-rgba/profile-<hash> at <file>:<line>`) AND in the
 PNG `tEXt` chunk (`png_tag_generation`). `check_consistent` reads
 all three bindings (canonical `.snap`, PNG `.snap`, sidecar bytes)
 and fails on any mix — never half-passes. A changed screen yields a

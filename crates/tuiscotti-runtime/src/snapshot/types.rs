@@ -210,9 +210,13 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     s
 }
 
-/// Atomic file write (tmp in same dir + rename). Tmp names carry pid, a
-/// process-wide counter, and the thread id, so same-name writers from
-/// different threads never share a tmp file.
+/// Atomic file write (exclusive tmp in same dir + rename). Tmp names carry
+/// pid, a process-wide counter, and the thread id, so same-name writers from
+/// different threads never share a tmp file. The tmp file is created
+/// exclusively ([`std::fs::OpenOptions::create_new`]): a planted symlink (or
+/// any pre-existing file) at the tmp name fails the write instead of being
+/// followed or truncated, and the rename below replaces the TARGET name
+/// itself, never a symlink target. A failed write removes its tmp orphan.
 ///
 /// # Errors
 ///
@@ -231,10 +235,24 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
         std::process::id(),
         std::thread::current().id()
     ));
-    std::fs::write(&tmp, bytes)
-        .map_err(|e| SnapshotError(format!("cannot write {}: {e}", tmp.display())))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| SnapshotError(format!("cannot publish {}: {e}", path.display())))?;
+    let write = (|| -> std::io::Result<()> {
+        use std::io::Write as _;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        drop(f);
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    })();
+    if let Err(e) = write {
+        let _orphan = std::fs::remove_file(&tmp);
+        return Err(SnapshotError(format!(
+            "cannot write {}: {e}",
+            path.display()
+        )));
+    }
     Ok(())
 }
 

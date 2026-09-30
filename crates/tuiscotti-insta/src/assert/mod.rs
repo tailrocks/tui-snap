@@ -35,8 +35,8 @@
 //!   `bind` scope that never leaks outward.
 //! - The caller location is ALSO embedded in the snapshot description
 //!   (`... at <file>:<line>`), which review tools display, together with the
-//!   render identity (`<profile>/rv<version>/<alpha>`) the PNG verdict
-//!   depends on.
+//!   render identity (`<profile>/rv<version>/<alpha>/profile-<hash>`) the PNG
+//!   verdict depends on.
 //! - New-format samples carry a MANDATORY complete compound binding
 //!   ([`sample_binding`]: canonical + render identity + PNG payload); the
 //!   macro path enforces it with the strict [`check_consistent`] gate —
@@ -70,6 +70,7 @@ pub const PNG_SNAPSHOT_SUFFIX: &str = "-img";
 /// File stem used by [`emit_four`] (`snapshot.{ansi,txt,png,html}`).
 pub const FOUR_STEM: &str = "snapshot";
 
+pub mod emit;
 pub mod evidence;
 pub mod frozen;
 pub mod import;
@@ -78,28 +79,30 @@ pub mod paths;
 pub mod sample;
 pub mod underline;
 
+pub use emit::{EmittedPaths, emit_four};
 pub use evidence::{
     AttemptIdentity, EvidenceId, SHARD_ENV, current_test_name, png_generation, png_tag_generation,
     sanitize_segment,
 };
 pub(crate) use evidence::{BundlePayload, snap_generation, write_bundle_in};
 pub use frozen::{
-    ConsistencyError, EmittedPaths, FrozenError, Policy, assert_frozen_screenshot,
-    assert_frozen_snapshot, check_consistent, check_frozen_screenshot, check_frozen_snapshot,
-    emit_four, frozen_accept,
+    ConsistencyError, FrozenError, Policy, assert_frozen_screenshot,
+    assert_frozen_screenshot_with_cache, assert_frozen_snapshot, check_consistent,
+    check_frozen_screenshot, check_frozen_screenshot_with_cache, check_frozen_snapshot,
+    frozen_accept,
 };
 pub(crate) use import::check_scenario_name;
 pub use import::{FrozenTree, ImportError, ImportedScenario, import_frozen_v1};
 pub use macros::Location;
 pub use paths::{
-    SnapshotIdentity, active_snapshot_suffix, evidence_dir, generation_id,
-    resolve_snapshot_identity, resolve_snapshot_identity_in, sample_binding, snapshot_dir_override,
-    snapshot_file_stem, suffixed_name,
+    SnapshotIdentity, active_snapshot_suffix, evidence_dir, generation_id, render_identity,
+    render_identity_for, resolve_snapshot_identity, resolve_snapshot_identity_in, sample_binding,
+    snapshot_dir_override, snapshot_file_stem, suffixed_name,
 };
-pub(crate) use paths::{description_for, render_identity};
+pub(crate) use paths::{default_sample_profile, description_for};
 pub use sample::{
     AssertError, PreparedScreenshot, Sample, aggregate_compound_result, frame_from_screen,
     panic_message, png_comparator, png_snapshot_base, prepare_screenshot, prepare_snapshot,
-    render_sample, screenshot_png_comparator, snapshot_settings,
+    render_sample, render_sample_with_faces, screenshot_png_comparator, snapshot_settings,
 };
 pub use underline::{assert_underline_at, check_underline_at};

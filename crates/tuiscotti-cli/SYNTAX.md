@@ -99,7 +99,7 @@ machine ops, cleanup. Rust paths are `tuiscotti::…` unless noted.
 | Canonical state | `tuiscotti::assert_snapshot!(name, &screen[, &policy])` |
 | Canonical + PNG, one sample | `tuiscotti::assert_screenshot!(name, &screen[, &policy])` (PNG = `<name>-img`) |
 | Policies | `Policy::{Evolving, EvolvingIn{snapshots, evidence}, Frozen{root}}` |
-| Metadata | `source:` + `assertion_line:` name the caller; description carries generation + `render <profile>/rv<N>/<alpha>` + caller |
+| Metadata | `source:` + `assertion_line:` name the caller; description carries generation + `render <profile>/rv<N>/<alpha>/profile-<hash>` + caller |
 | Compound gate | `check_consistent` (strict) / lenient inside `assert_screenshot!` |
 | Same-sample evidence | `<name>.{png,ansi,txt,html}` written BEFORE any failure |
 

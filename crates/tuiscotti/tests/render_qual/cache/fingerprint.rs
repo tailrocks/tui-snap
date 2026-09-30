@@ -5,9 +5,9 @@ use super::helpers::{
     ProfileParts, cell_variants, placeholder_rp, screen_at_origin, screen_of, screen_with_cursor,
     styled_lead,
 };
-use tuiscotti::profile::VENDORED_FALLBACK_FACES;
+use tuiscotti::profile::{VENDORED_FALLBACK_FACES, font_sha256};
 use tuiscotti::render::{RenderCache, screen_content_hash};
-use tuiscotti::{CursorStyle, Rgb};
+use tuiscotti::{CursorStyle, FallbackFace, FontFaces, Rgb};
 
 #[test]
 fn one_field_screen_mutations_each_move_the_key() {
@@ -181,8 +181,9 @@ fn one_field_profile_mutations_each_move_the_key() {
         );
     }
 
-    // Face pins cannot vary on a VALID profile: strict construction refuses
-    // a pin that does not match the bytes, so no second key exists there.
+    // Face pins cannot LIE on a valid profile: strict construction refuses
+    // a pin that does not match the bytes (positive key-move for TRUE pin
+    // changes lives in face_pin_moves_the_key_on_valid_profiles).
     let err = RenderProfile::strict(
         "qual".to_string(),
         VENDORED_FACES,
@@ -206,4 +207,109 @@ fn one_field_profile_mutations_each_move_the_key() {
     )
     .expect_err("wrong face pin must refuse the profile");
     assert!(err.to_string().contains("sha256 mismatch"), "{err}");
+}
+
+/// Second font fixture: `DejaVuSansM` Nerd Font Mono, vendored for reference
+/// (distinct bytes from every styled face of the default family).
+static SECOND_FACE: &[u8] =
+    include_bytes!("../../../../../assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf");
+
+#[test]
+fn face_pin_moves_the_key_on_valid_profiles() {
+    let screen = screen_of(styled_lead()).expect("screen_of succeeds");
+    let base = RenderCache::key_for(
+        &screen,
+        &ProfileParts::base().build().expect("profile builds"),
+    );
+    let second_sha = font_sha256(SECOND_FACE);
+    // Sanity: the fixture really is a second face, not a copy.
+    for pin in [
+        VENDORED_FONT_SHA256,
+        VENDORED_FONT_BOLD_SHA256,
+        VENDORED_FONT_ITALIC_SHA256,
+        VENDORED_FONT_BOLD_ITALIC_SHA256,
+    ] {
+        assert_ne!(second_sha, pin);
+    }
+    // Each styled slot swapped to the second face WITH its true pin: the
+    // profile stays valid (strict construction accepts it) and the key moves.
+    for slot in 0..4 {
+        let mut p = ProfileParts::base();
+        let mut faces = VENDORED_FACES;
+        match slot {
+            0 => faces.regular = SECOND_FACE,
+            1 => faces.bold = SECOND_FACE,
+            2 => faces.italic = SECOND_FACE,
+            _ => faces.bold_italic = SECOND_FACE,
+        }
+        p.faces = faces;
+        p.pins[slot] = second_sha.clone();
+        let rp = p.build().expect("second-face profile builds");
+        assert_ne!(
+            RenderCache::key_for(&screen, &rp),
+            base,
+            "face slot {slot} must move the key"
+        );
+    }
+    // Validity is preserved: the second face under a WRONG pin still refuses.
+    let mut p = ProfileParts::base();
+    p.faces = FontFaces {
+        regular: SECOND_FACE,
+        ..VENDORED_FACES
+    };
+    p.pins[0] = VENDORED_FONT_SHA256.to_string();
+    let err = p
+        .build()
+        .expect_err("wrong pin for second face must refuse");
+    assert!(err.contains("sha256 mismatch"), "{err}");
+}
+
+#[test]
+fn fallback_face_sha_moves_the_key() {
+    let screen = screen_of(styled_lead()).expect("screen_of succeeds");
+    let base = RenderCache::key_for(
+        &screen,
+        &ProfileParts::base().build().expect("profile builds"),
+    );
+    let second_sha = font_sha256(SECOND_FACE);
+    // Same chain slot, same desc, different bytes + true pin: the sha alone
+    // moves the key.
+    let mut p = ProfileParts::base();
+    let desc = p.fallbacks[0].desc;
+    p.fallbacks[0] = FallbackFace {
+        bytes: SECOND_FACE,
+        sha256: &second_sha,
+        desc,
+    };
+    let rp = p.build().expect("second-fallback profile builds");
+    assert_ne!(
+        RenderCache::key_for(&screen, &rp),
+        base,
+        "fallback sha must move the key"
+    );
+    // Dropping a chain face moves the key too (chain length participates).
+    let mut p = ProfileParts::base();
+    p.fallbacks.pop();
+    let rp = p.build().expect("shorter chain builds");
+    assert_ne!(
+        RenderCache::key_for(&screen, &rp),
+        base,
+        "fallback count must move the key"
+    );
+}
+
+#[test]
+fn cache_key_hex_is_pinned() {
+    // Both version inputs (CACHE_FINGERPRINT_VERSION, renderer_version) are
+    // compile-time pins: no two VALID profiles can differ in version (a wrong
+    // version refuses strict construction), so version participation is pinned
+    // by this golden instead — dropping the version bytes from the pre-image
+    // moves it. Key encodings are explicit bytes (never Debug), so this is
+    // stable across platforms and toolchains.
+    let screen = screen_of(styled_lead()).expect("screen_of succeeds");
+    let rp = ProfileParts::base().build().expect("profile builds");
+    assert_eq!(
+        RenderCache::key_for(&screen, &rp).hex(),
+        "43a9644309db75ebd01db2baebbb6af1ee63266adc19d583d67041840d983d59"
+    );
 }

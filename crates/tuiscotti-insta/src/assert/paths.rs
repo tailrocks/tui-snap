@@ -11,7 +11,7 @@
 use super::{EVIDENCE_DIR_ENV, GEN_DESC_PREFIX, Location, SNAPSHOT_DIR_ENV};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use tuiscotti_render::profile::Profile;
+use tuiscotti_render::profile::{MissingGlyphPolicy, RenderProfile};
 
 /// Content-derived generation binding: hex SHA-256 of the canonical text.
 ///
@@ -70,18 +70,38 @@ pub(crate) fn description_for(binding: &str, location: Location) -> String {
     )
 }
 
-/// Render identity the PNG verdict depends on: default profile name,
-/// renderer version, and screenshot alpha policy. Recorded in every snapshot
-/// description so a canonical-identical/render-different drift names its
-/// cause, and covered by [`sample_binding`]. [`snap_generation`](super::snap_generation)
-/// only reads the first token, so this stays parse-safe.
-pub(crate) fn render_identity() -> String {
-    let profile = Profile::default_profile();
+/// Strict mirror of the legacy sample path ([`super::render_sample`]:
+/// default profile, vendored faces, default fallback chain, cursor shown,
+/// blink frozen-visible, placeholder missing-glyphs). The identity and the
+/// frozen-gate cache key derive from this ONE profile, so they can never
+/// describe different render inputs than the sample renderer consumes.
+pub(crate) fn default_sample_profile() -> RenderProfile<'static> {
+    RenderProfile::vendored().with_missing(MissingGlyphPolicy::Placeholder)
+}
+
+/// Render identity the PNG verdict depends on, for an explicit strict
+/// profile: profile name, renderer version, screenshot alpha policy, and
+/// the full strict content hash (styled-face pins, ordered fallback chain,
+/// geometry, scale, palette, cursor/blink/missing policies, version).
+/// Recorded in every snapshot description so a
+/// canonical-identical/render-different drift names its cause, and covered
+/// by [`sample_binding`]. Only the first description token is binding-parsed,
+/// so this stays parse-safe.
+#[must_use]
+pub fn render_identity_for(rp: &RenderProfile<'_>) -> String {
     format!(
-        "{}/rv{}/straight-rgba",
-        profile.name,
-        tuiscotti_render::profile::RENDERER_VERSION
+        "{}/rv{}/straight-rgba/profile-{}",
+        rp.name(),
+        rp.renderer_version(),
+        rp.hash()
     )
+}
+
+/// Render identity of the pinned sample path
+/// ([`render_identity_for`] over the legacy-mirror strict profile).
+#[must_use]
+pub fn render_identity() -> String {
+    render_identity_for(&default_sample_profile())
 }
 
 /// One resolved snapshot identity: the absolute directory Insta reads/writes

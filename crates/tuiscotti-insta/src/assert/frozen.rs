@@ -1,13 +1,14 @@
-//! Compound consistency gates, frozen policy, and four-artifact export.
+//! Compound consistency gates and frozen policy.
 
 use super::{
-    AssertError, FOUR_STEM, check_scenario_name, generation_id, png_generation, render_sample,
-    snap_generation,
+    check_scenario_name, default_sample_profile, png_generation, render_identity, render_sample,
+    sample_binding, snap_generation,
 };
 use std::path::{Path, PathBuf};
 use tuiscotti_core::screen::Screen;
 use tuiscotti_core::screen::canonical_string;
 use tuiscotti_render::diff::{AlphaPolicy, compare_png_with_alpha};
+use tuiscotti_render::render::RenderCache;
 
 /// Compound-consistency failure: mixed or unreadable generation bindings.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,20 +186,20 @@ pub fn check_frozen_snapshot(root: &Path, name: &str, screen: &Screen) -> Result
     Ok(())
 }
 
-/// Check canonical state plus PNG pixels against a frozen root. Also fails when
-/// a tagged approved PNG disagrees with the canonical generation (untagged
-/// legacy PNGs keep the pixel verdict). Reads only.
-///
-/// # Errors
-///
-/// Returns [`FrozenError`] when the canonical check fails, the approved PNG is
-/// missing or undecodable, the pixels differ, or a PNG generation tag
-/// disagrees with the canonical generation.
-pub fn check_frozen_screenshot(
+/// Approved PNG plus its path (error context) for the screenshot gates.
+struct LoadedScreenshot {
+    path: PathBuf,
+    approved_png: Vec<u8>,
+}
+
+/// Canonical check plus approved-PNG load shared by both screenshot gates:
+/// the canonical approval must match, and the approved PNG must exist and
+/// decode, before any actual rendering happens.
+fn load_frozen_screenshot(
     root: &Path,
     name: &str,
     screen: &Screen,
-) -> Result<(), FrozenError> {
+) -> Result<LoadedScreenshot, FrozenError> {
     check_frozen_snapshot(root, name, screen)?;
     let path = frozen_png_path(root, name);
     let approved_png = read_approved(&path)?;
@@ -206,15 +207,29 @@ pub fn check_frozen_screenshot(
         path: path.clone(),
         reason: format!("PNG does not decode: {e}"),
     })?;
-    let sample = render_sample(screen).map_err(|e| FrozenError::Corrupt {
-        path: path.clone(),
-        reason: format!("cannot render actual: {e}"),
+    Ok(LoadedScreenshot { path, approved_png })
+}
+
+/// Pixel + binding verdict over an actual sample. The approved tag must equal
+/// the full v2 [`sample_binding`] (canonical + render identity + PNG
+/// payload), so a stale approval rendered under different profile/face pins
+/// fails with the render cause named; untagged legacy PNGs keep the pixel
+/// verdict.
+fn verify_screenshot_sample(
+    name: &str,
+    approved: &LoadedScreenshot,
+    canonical: &str,
+    actual_png: &[u8],
+) -> Result<(), FrozenError> {
+    let verdict = compare_png_with_alpha(
+        &approved.approved_png,
+        actual_png,
+        AlphaPolicy::StraightRgba,
+    )
+    .map_err(|e| FrozenError::Corrupt {
+        path: approved.path.clone(),
+        reason: e.to_string(),
     })?;
-    let verdict = compare_png_with_alpha(&approved_png, &sample.png, AlphaPolicy::StraightRgba)
-        .map_err(|e| FrozenError::Corrupt {
-            path: path.clone(),
-            reason: e.to_string(),
-        })?;
     if !verdict.pixels_equal {
         return Err(FrozenError::Mismatch {
             name: name.to_string(),
@@ -224,16 +239,74 @@ pub fn check_frozen_screenshot(
             ),
         });
     }
-    let generation = generation_id(&sample.canonical);
-    if let Some(tag) = png_generation(&approved_png)
-        && tag != generation
+    let render = render_identity();
+    let binding = sample_binding(canonical, &render, actual_png);
+    if let Some(tag) = png_generation(&approved.approved_png)
+        && tag != binding
     {
         return Err(FrozenError::Mismatch {
             name: name.to_string(),
-            detail: format!("generation mismatch: canonical={generation} png-bytes={tag}"),
+            detail: format!(
+                "sample binding mismatch: sample={binding} png-bytes={tag} (render {render})"
+            ),
         });
     }
     Ok(())
+}
+
+/// Check canonical state plus PNG pixels against a frozen root. Also fails when
+/// a tagged approved PNG disagrees with the v2 sample binding (untagged
+/// legacy PNGs keep the pixel verdict). Reads only.
+///
+/// # Errors
+///
+/// Returns [`FrozenError`] when the canonical check fails, the approved PNG is
+/// missing or undecodable, the pixels differ, or a PNG binding tag disagrees
+/// with the actual sample.
+pub fn check_frozen_screenshot(
+    root: &Path,
+    name: &str,
+    screen: &Screen,
+) -> Result<(), FrozenError> {
+    let approved = load_frozen_screenshot(root, name, screen)?;
+    let sample = render_sample(screen).map_err(|e| FrozenError::Corrupt {
+        path: approved.path.clone(),
+        reason: format!("cannot render actual: {e}"),
+    })?;
+    verify_screenshot_sample(name, &approved, &sample.canonical, &sample.png)
+}
+
+/// [`check_frozen_screenshot`] through a caller-owned [`RenderCache`]: the
+/// actual PNG is served from the cache on a key hit (screen + pinned sample
+/// profile) and rendered + stored on a miss. Verdict-identical to the
+/// uncached gate in every case (match, mismatch, corrupt): the cache only
+/// replaces byte-identical renders, and a store failure never fails the gate.
+///
+/// # Errors
+///
+/// Returns [`FrozenError`] exactly when [`check_frozen_screenshot`] does.
+pub fn check_frozen_screenshot_with_cache(
+    root: &Path,
+    name: &str,
+    screen: &Screen,
+    cache: &mut RenderCache,
+) -> Result<(), FrozenError> {
+    let approved = load_frozen_screenshot(root, name, screen)?;
+    let key = RenderCache::key_for(screen, &default_sample_profile());
+    let cached = cache.get(&key);
+    let (canonical, actual_png) = if let Some(hit) = cached {
+        (canonical_string(screen), hit)
+    } else {
+        let sample = render_sample(screen).map_err(|e| FrozenError::Corrupt {
+            path: approved.path.clone(),
+            reason: format!("cannot render actual: {e}"),
+        })?;
+        // Advisory: a store failure must not fail the gate (cached and
+        // uncached verdicts are proven identical).
+        let _stored = cache.put(&key, &sample.png);
+        (sample.canonical, sample.png)
+    };
+    verify_screenshot_sample(name, &approved, &canonical, &actual_png)
 }
 
 /// Assert canonical state against a frozen root. Panics on any [`FrozenError`].
@@ -268,6 +341,27 @@ pub fn assert_frozen_screenshot(root: &Path, name: &str, screen: &Screen) {
     }
 }
 
+/// [`assert_frozen_screenshot`] through a caller-owned [`RenderCache`]
+/// (see [`check_frozen_screenshot_with_cache`]).
+///
+/// # Panics
+///
+/// Panics with the [`FrozenError`] message when the cached check fails.
+#[expect(
+    clippy::panic,
+    reason = "assert_* API panics by contract, like std assert"
+)]
+pub fn assert_frozen_screenshot_with_cache(
+    root: &Path,
+    name: &str,
+    screen: &Screen,
+    cache: &mut RenderCache,
+) {
+    if let Err(e) = check_frozen_screenshot_with_cache(root, name, screen, cache) {
+        panic!("tuiscotti frozen screenshot {name:?} failed: {e}");
+    }
+}
+
 /// Frozen roots reject acceptance unconditionally: always returns
 /// [`FrozenError::AcceptRejected`] and writes nothing.
 ///
@@ -279,48 +373,4 @@ pub fn frozen_accept(root: &Path, name: &str) -> Result<(), FrozenError> {
         root: root.to_path_buf(),
         name: name.to_string(),
     })
-}
-
-// ---------------------------------------------------------------------------
-// Four-artifact export + read-only frozen-tree importer (I07)
-// ---------------------------------------------------------------------------
-
-/// Paths written by [`emit_four`].
-#[derive(Debug, Clone)]
-pub struct EmittedPaths {
-    /// Directory the artifacts were written to.
-    pub dir: PathBuf,
-    /// `<dir>/snapshot.ansi` (normalized SGR dump).
-    pub ansi: PathBuf,
-    /// `<dir>/snapshot.txt` (plain text).
-    pub txt: PathBuf,
-    /// `<dir>/snapshot.png` (authoritative PNG).
-    pub png: PathBuf,
-    /// `<dir>/snapshot.html` (standalone render).
-    pub html: PathBuf,
-}
-
-/// Emit ANSI/TXT/PNG/HTML from one [`Screen`] in a single sample pass.
-/// Byte-deterministic: the same screen always yields identical bytes.
-///
-/// # Errors
-///
-/// Returns [`AssertError`] when rendering fails or an artifact cannot be
-/// written.
-pub fn emit_four(screen: &Screen, dir: &Path) -> Result<EmittedPaths, AssertError> {
-    let sample = render_sample(screen)?;
-    let io = |p: &Path, e: std::io::Error| AssertError::Io(format!("{}: {e}", p.display()));
-    std::fs::create_dir_all(dir).map_err(|e| io(dir, e))?;
-    let paths = EmittedPaths {
-        dir: dir.to_path_buf(),
-        ansi: dir.join(format!("{FOUR_STEM}.ansi")),
-        txt: dir.join(format!("{FOUR_STEM}.txt")),
-        png: dir.join(format!("{FOUR_STEM}.png")),
-        html: dir.join(format!("{FOUR_STEM}.html")),
-    };
-    std::fs::write(&paths.ansi, sample.ansi.as_bytes()).map_err(|e| io(&paths.ansi, e))?;
-    std::fs::write(&paths.txt, sample.txt.as_bytes()).map_err(|e| io(&paths.txt, e))?;
-    std::fs::write(&paths.png, &sample.png).map_err(|e| io(&paths.png, e))?;
-    std::fs::write(&paths.html, sample.html.as_bytes()).map_err(|e| io(&paths.html, e))?;
-    Ok(paths)
 }

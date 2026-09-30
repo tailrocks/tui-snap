@@ -11,7 +11,10 @@ use tuiscotti_core::frame::Frame;
 use tuiscotti_core::screen::Screen;
 use tuiscotti_core::screen::canonical_string;
 use tuiscotti_render::diff::AlphaPolicy;
-use tuiscotti_render::profile::{Profile, VENDORED_FACES};
+use tuiscotti_render::profile::{
+    FontFaces, Profile, VENDORED_FACES, VENDORED_FONT_BOLD_ITALIC_SHA256,
+    VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256, VENDORED_FONT_SHA256, font_sha256,
+};
 use tuiscotti_render::render::Renderer;
 
 /// Deterministic [`Frame`] from a [`Screen`] for rendering evidence.
@@ -77,17 +80,36 @@ impl From<tuiscotti_render::render::RenderError> for AssertError {
 /// Render one sample from a screen: canonical projection plus all four artifacts
 /// from a single [`Renderer`] pass over the default profile and vendored faces
 /// (through the thread-local shared instance: faces parsed once per thread,
-/// glyph cache shared across samples).
+/// glyph cache shared across samples). The primary faces are hash-verified
+/// against the vendored pins before rendering (the renderer re-verifies the
+/// fallback chain at load); a swapped primary face refuses loudly instead of
+/// shifting pixels.
 ///
 /// # Errors
 ///
-/// Returns [`AssertError::Render`] when the pinned renderer refuses the frame.
+/// Returns [`AssertError::Render`] when a face pin mismatches or the pinned
+/// renderer refuses the frame.
 pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
+    render_sample_with_faces(screen, &VENDORED_FACES)
+}
+
+/// [`render_sample`] over explicit primary faces: every face is verified
+/// against its vendored SHA-256 pin first, so only the pinned family renders
+/// on the Insta path.
+///
+/// # Errors
+///
+/// Returns [`AssertError::Render`] when a face pin mismatches or the pinned
+/// renderer refuses the frame.
+pub fn render_sample_with_faces(
+    screen: &Screen,
+    faces: &FontFaces<'_>,
+) -> Result<Sample, AssertError> {
+    verify_primary_pins(faces)?;
     let frame = frame_from_screen(screen);
     let profile = Profile::default_profile();
-    let artifacts = Renderer::with_profile(&profile, &VENDORED_FACES, |r| {
-        r.render_artifacts(&frame, "tuiscotti")
-    })?;
+    let artifacts =
+        Renderer::with_profile(&profile, faces, |r| r.render_artifacts(&frame, "tuiscotti"))?;
     Ok(Sample {
         canonical: canonical_string(screen),
         ansi: artifacts.ansi,
@@ -95,6 +117,31 @@ pub fn render_sample(screen: &Screen) -> Result<Sample, AssertError> {
         html: artifacts.html,
         png: artifacts.png,
     })
+}
+
+/// Verify the four primary faces against the vendored pins (regular, bold,
+/// italic, bold-italic): a pin mismatch refuses to render, never silently
+/// substitutes.
+fn verify_primary_pins(faces: &FontFaces<'_>) -> Result<(), AssertError> {
+    let slots = [
+        ("regular", faces.regular, VENDORED_FONT_SHA256),
+        ("bold", faces.bold, VENDORED_FONT_BOLD_SHA256),
+        ("italic", faces.italic, VENDORED_FONT_ITALIC_SHA256),
+        (
+            "bold-italic",
+            faces.bold_italic,
+            VENDORED_FONT_BOLD_ITALIC_SHA256,
+        ),
+    ];
+    for (label, bytes, pin) in slots {
+        let actual = font_sha256(bytes);
+        if actual != pin {
+            return Err(AssertError::Render(format!(
+                "{label} face sha256 mismatch: pinned {pin}, got {actual} — refusing to render"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Comparator helper for PNG snapshots: decoded-pixel equality under an explicit

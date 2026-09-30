@@ -12,7 +12,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
+use tuiscotti::assert::{
+    Policy, png_tag_generation, render_identity, render_sample, sample_binding,
+};
 use tuiscotti::screen::canonical_string;
 use tuiscotti::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, Screen};
 
@@ -184,7 +186,8 @@ fn write_frozen(
     )?;
     let sample = render_sample(screen)?;
     let png = if tag_png {
-        png_tag_generation(&sample.png, &generation_id(&sample.canonical))
+        let binding = sample_binding(&sample.canonical, &render_identity(), &sample.png);
+        png_tag_generation(&sample.png, &binding)
     } else {
         sample.png
     };

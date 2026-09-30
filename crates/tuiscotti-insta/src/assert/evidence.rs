@@ -318,3 +318,73 @@ pub(crate) fn write_bundle_in(
     std::fs::rename(&tmp, &final_dir).map_err(|e| failed(io(&final_dir, e)))?;
     Ok(final_dir)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A mid-publish failure (here: a blocker file where the final bundle
+    /// dir must land, hit AFTER every artifact was staged in tmp) errors
+    /// AND removes the staged tmp dir: no partial bundle, no tmp leftover,
+    /// and the pre-existing path is preserved untouched.
+    #[test]
+    fn failed_bundle_writes_clean_their_tmp() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let id = EvidenceId {
+            package: "pkg".to_string(),
+            test: "t".to_string(),
+            scenario: "shot".to_string(),
+            variant: None,
+            attempt: AttemptIdentity::from_map(&HashMap::from([
+                ("NEXTEST_RUN_ID".to_string(), "r".to_string()),
+                ("NEXTEST_ATTEMPT".to_string(), "1".to_string()),
+            ])),
+        };
+        let identity = SnapshotIdentity {
+            dir: root.path().join("snaps"),
+            canonical: "shot".to_string(),
+            png_base: "shot-img".to_string(),
+        };
+        let final_dir = id.bundle_dir(root.path());
+        std::fs::create_dir_all(final_dir.parent().expect("bundle parent"))
+            .expect("create bundle parent");
+        std::fs::write(&final_dir, b"blocker").expect("write blocker");
+        let sample = Sample {
+            canonical: "canonical".to_string(),
+            ansi: "ansi".to_string(),
+            txt: "txt".to_string(),
+            html: "html".to_string(),
+            png: b"fake-png".to_vec(),
+        };
+        let payload = BundlePayload {
+            sample: &sample,
+            png_tagged: b"fake-png-tagged",
+            binding: "v2-test",
+            generation: "gen",
+            render_identity: "render",
+        };
+        let err = write_bundle_in(root.path(), &id, &identity, &payload)
+            .expect_err("blocked bundle publish must fail");
+        assert!(err.to_string().contains("attempt-1"), "{err}");
+        let mut leftovers = Vec::new();
+        let mut stack = vec![root.path().to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).expect("read dir") {
+                let p = e.expect("dir entry").path();
+                if p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().contains(".tmp-"))
+                {
+                    leftovers.push(p.clone());
+                }
+                if p.is_dir() {
+                    stack.push(p);
+                }
+            }
+        }
+        assert!(leftovers.is_empty(), "tmp leftovers: {leftovers:?}");
+        assert_eq!(
+            std::fs::read(&final_dir).expect("blocker intact"),
+            b"blocker"
+        );
+    }
+}

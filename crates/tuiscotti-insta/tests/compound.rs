@@ -23,3 +23,5 @@ mod evidence;
 mod helpers;
 #[path = "compound/identity.rs"]
 mod identity;
+#[path = "compound/render_identity.rs"]
+mod render_identity;

@@ -8,7 +8,7 @@
 
 use tuiscotti::assert::{
     FrozenError, assert_frozen_snapshot, check_frozen_screenshot, emit_four, frozen_accept,
-    generation_id, import_frozen_v1, png_tag_generation, render_sample,
+    import_frozen_v1, png_tag_generation, render_identity, render_sample, sample_binding,
 };
 use tuiscotti::ratatui::{EdgePolicy, render_screen};
 use tuiscotti::screen::canonical_string;
@@ -44,11 +44,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir(&root)?;
     let canonical = canonical_string(&screen);
     let sample = render_sample(&screen)?;
-    let generation = generation_id(&canonical);
+    let binding = sample_binding(&sample.canonical, &render_identity(), &sample.png);
     std::fs::write(root.join("review-demo.canonical.txt"), &canonical)?;
     std::fs::write(
         root.join("review-demo.png"),
-        png_tag_generation(&sample.png, &generation),
+        png_tag_generation(&sample.png, &binding),
     )?;
     check_frozen_screenshot(&root, "review-demo", &screen)?;
     assert_frozen_snapshot(&root, "review-demo", &screen);
@@ -59,9 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         other => return Err(format!("frozen_accept must reject, got {other:?}").into()),
     }
     println!(
-        "EXAMPLE-06-OK scenarios={} gen={}",
+        "EXAMPLE-06-OK scenarios={} bind={}",
         tree.scenarios.len(),
-        &generation[..12]
+        &binding[..12]
     );
     Ok(())
 }

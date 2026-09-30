@@ -1,7 +1,7 @@
 use super::*;
 use ratatui::widgets::Paragraph;
 use tuiscotti::VENDORED_FACES;
-use tuiscotti::snapshot::{Status, Store};
+use tuiscotti::snapshot::{Status, Store, write_atomic};
 
 #[test]
 fn concurrent_different_names_are_safe() {
@@ -88,6 +88,63 @@ fn dimension_mismatch_status() {
         .check("home", &other, &profile(), &VENDORED_FACES, 1.0)
         .expect("check");
     assert_eq!(outcome.status, Status::DimensionMismatch);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_plant_at_target_cannot_redirect_snapshot_writes() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let target = dir.path().join("actual").join("home.frame.json");
+    std::fs::create_dir_all(target.parent().expect("target parent")).expect("mkdir");
+    let victim = dir.path().join("victim");
+    std::fs::write(&victim, b"sentinel").expect("write victim");
+    std::os::unix::fs::symlink(&victim, &target).expect("plant symlink");
+    write_atomic(&target, b"snapshot-bytes").expect("write over a planted link succeeds");
+    // The plant was replaced, never followed: victim intact, live name real.
+    assert_eq!(std::fs::read(&victim).expect("read victim"), b"sentinel");
+    assert!(
+        !std::fs::symlink_metadata(&target)
+            .expect("symlink_metadata succeeds")
+            .file_type()
+            .is_symlink(),
+        "live target must not be a symlink"
+    );
+    assert_eq!(
+        std::fs::read(&target).expect("read target"),
+        b"snapshot-bytes"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_plants_at_tmp_names_fail_closed_without_following() {
+    // Tmp names carry pid + a process-wide counter + thread id. The counter
+    // value at this call is unknown (shared with every parallel test in the
+    // binary), so plants cover a counter range on THIS thread with wide
+    // margin over this binary's write volume: a hit fails closed (exclusive
+    // create) and a miss writes normally — the victim is unreachable either
+    // way.
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::create_dir_all(dir.path().join("actual")).expect("mkdir");
+    let victim = dir.path().join("victim");
+    std::fs::write(&victim, b"sentinel").expect("write victim");
+    let target = dir.path().join("actual").join("home.frame.json");
+    let pid = std::process::id();
+    let tid = format!("{:?}", std::thread::current().id());
+    for n in 0..1024u64 {
+        let tmp = target.with_extension(format!("tmp.{pid}.{n}.{tid}"));
+        std::os::unix::fs::symlink(&victim, &tmp).expect("plant symlink");
+    }
+    // Hit (a plant matched): Err, nothing written. Miss: Ok, bytes landed.
+    // Both are correct; the victim surviving is the property under test.
+    match write_atomic(&target, b"snapshot-bytes") {
+        Ok(()) => assert_eq!(
+            std::fs::read(&target).expect("read target"),
+            b"snapshot-bytes"
+        ),
+        Err(e) => assert!(!target.exists(), "failed write publishes nothing: {e}"),
+    }
+    assert_eq!(std::fs::read(&victim).expect("read victim"), b"sentinel");
 }
 
 #[test]

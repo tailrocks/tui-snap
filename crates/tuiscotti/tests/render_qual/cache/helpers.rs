@@ -1,8 +1,12 @@
 //! Shared fixtures for the render-cache qualification tests.
 
 use super::super::*;
-use tuiscotti::profile::{BlinkPhase, MissingGlyphPolicy, RenderProfile, VENDORED_FALLBACK_FACES};
-use tuiscotti::{FallbackFace, Rgb, UnderlineStyle};
+use tuiscotti::profile::{
+    BlinkPhase, MissingGlyphPolicy, RenderProfile, VENDORED_FACES, VENDORED_FALLBACK_FACES,
+    VENDORED_FONT_BOLD_ITALIC_SHA256, VENDORED_FONT_BOLD_SHA256, VENDORED_FONT_ITALIC_SHA256,
+    VENDORED_FONT_SHA256,
+};
+use tuiscotti::{FallbackFace, FontFaces, Rgb, UnderlineStyle};
 
 pub(super) fn styled_lead() -> Cell {
     Cell {
@@ -129,8 +133,10 @@ pub(super) fn cell_variants() -> Vec<(&'static str, Cell)> {
     variants
 }
 
-pub(super) struct ProfileParts {
+pub(super) struct ProfileParts<'a> {
     pub(super) name: String,
+    pub(super) faces: FontFaces<'a>,
+    pub(super) pins: [String; 4],
     pub(super) font_px: f32,
     pub(super) cell_w: u32,
     pub(super) cell_h: u32,
@@ -140,13 +146,20 @@ pub(super) struct ProfileParts {
     pub(super) cursor: CursorPolicy,
     pub(super) blink: BlinkPhase,
     pub(super) missing: MissingGlyphPolicy,
-    pub(super) fallbacks: Vec<FallbackFace<'static>>,
+    pub(super) fallbacks: Vec<FallbackFace<'a>>,
 }
 
-impl ProfileParts {
+impl ProfileParts<'static> {
     pub(super) fn base() -> Self {
         Self {
             name: "qual".to_string(),
+            faces: VENDORED_FACES,
+            pins: [
+                VENDORED_FONT_SHA256.to_string(),
+                VENDORED_FONT_BOLD_SHA256.to_string(),
+                VENDORED_FONT_ITALIC_SHA256.to_string(),
+                VENDORED_FONT_BOLD_ITALIC_SHA256.to_string(),
+            ],
             font_px: 16.0,
             cell_w: 10,
             cell_h: 21,
@@ -159,17 +172,15 @@ impl ProfileParts {
             fallbacks: VENDORED_FALLBACK_FACES.to_vec(),
         }
     }
+}
 
-    pub(super) fn build(self) -> Result<RenderProfile<'static>, String> {
+impl<'a> ProfileParts<'a> {
+    pub(super) fn build(self) -> Result<RenderProfile<'a>, String> {
+        let pins = std::array::from_fn(|i| self.pins[i].as_str());
         RenderProfile::strict(
             self.name,
-            VENDORED_FACES,
-            [
-                VENDORED_FONT_SHA256,
-                VENDORED_FONT_BOLD_SHA256,
-                VENDORED_FONT_ITALIC_SHA256,
-                VENDORED_FONT_BOLD_ITALIC_SHA256,
-            ],
+            self.faces,
+            pins,
             self.fallbacks,
             self.font_px,
             self.cell_w,

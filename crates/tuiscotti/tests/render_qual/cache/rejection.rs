@@ -2,6 +2,7 @@
 
 use super::super::*;
 use super::helpers::{placeholder_rp, screen_of, styled_lead};
+use tuiscotti::profile::font_sha256;
 use tuiscotti::render::{CacheKey, RenderCache, render_screen};
 
 #[test]
@@ -183,6 +184,144 @@ fn symlink_aliases_of_approved_roots_are_refused() {
     let cache_link = tmp.path().join("cache-link");
     std::os::unix::fs::symlink(&outside, &cache_link).expect("symlink succeeds");
     RenderCache::open(&cache_link, &[&real]).expect("external symlinked cache opens");
+}
+
+/// Patch the IHDR width/height of a valid PNG. The image stays
+/// structurally intact, so only the dimension bounds can reject it.
+fn png_with_ihdr_dims(base: &[u8], w: u32, h: u32) -> Vec<u8> {
+    assert!(base.len() > 24, "base PNG must hold an IHDR");
+    assert_eq!(&base[12..16], b"IHDR", "base PNG must start with IHDR");
+    let mut out = base.to_vec();
+    out[16..20].copy_from_slice(&w.to_be_bytes());
+    out[20..24].copy_from_slice(&h.to_be_bytes());
+    out
+}
+
+#[test]
+fn out_of_bounds_ihdr_dims_are_never_stored() {
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let mut cache =
+        RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
+    let rp = placeholder_rp();
+    let key = RenderCache::key_for(&screen_of(styled_lead()).expect("screen_of succeeds"), &rp);
+    let valid = cache_png().expect("cache_png succeeds");
+    // Huge (20000x20000), zero-width, zero-height, and pixel-overflow (each
+    // side within bounds, product past the pixel cap).
+    for (label, w, h) in [
+        ("huge", 20_000u32, 20_000u32),
+        ("zero-width", 0u32, 10u32),
+        ("zero-height", 10u32, 0u32),
+        ("pixel-overflow", 16_384u32, 4097u32),
+    ] {
+        let bad = png_with_ihdr_dims(&valid, w, h);
+        assert!(
+            cache.put(&key, &bad).is_err(),
+            "{label} IHDR must be refused"
+        );
+    }
+    assert_eq!(cache.stores(), 0);
+    assert!(cache.get(&key).is_none());
+    assert!(
+        dir.path()
+            .read_dir()
+            .expect("read_dir succeeds")
+            .next()
+            .is_none(),
+        "refused puts must leave no files behind"
+    );
+}
+
+/// Decode 64 lowercase hex chars to 32 bytes (entry reseal without a sha2
+/// dev-dependency: [`font_sha256`] hashes, this decodes).
+fn hex_decode_32(hex: &str) -> Result<[u8; 32], String> {
+    let bytes = hex.as_bytes();
+    if bytes.len() != 64 {
+        return Err(format!("expected 64 hex chars, got {}", bytes.len()));
+    }
+    let val = |b: u8| -> Result<u8, String> {
+        match b {
+            b'0'..=b'9' => Ok(b - b'0'),
+            b'a'..=b'f' => Ok(b - b'a' + 10),
+            _ => Err(format!("bad hex byte {b}")),
+        }
+    };
+    let mut out = [0u8; 32];
+    for (i, pair) in bytes.chunks(2).enumerate() {
+        out[i] = (val(pair[0])? << 4) | val(pair[1])?;
+    }
+    Ok(out)
+}
+
+#[test]
+fn out_of_bounds_ihdr_entries_are_rejected_and_removed() {
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let mut cache =
+        RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
+    let rp = placeholder_rp();
+    let key = RenderCache::key_for(&screen_of(styled_lead()).expect("screen_of succeeds"), &rp);
+    let valid = cache_png().expect("cache_png succeeds");
+    cache.put(&key, &valid).expect("put succeeds");
+    let entry = dir.path().join(key.file_name());
+    let full = std::fs::read(&entry).expect("read entry");
+    // Locate the embedded PNG by signature (no header offsets assumed); the
+    // entry checksum is resealed over each patched payload, so the IHDR
+    // bounds — not the checksum — are what reject the plants.
+    let sig = b"\x89PNG\r\n\x1a\n";
+    let at = full
+        .windows(sig.len())
+        .position(|w| w == sig)
+        .expect("entry holds a PNG");
+    let reseal = |patched: &mut Vec<u8>| -> Result<(), String> {
+        let sha = hex_decode_32(&font_sha256(&patched[at..]))?;
+        patched[at - 32..at].copy_from_slice(&sha);
+        Ok(())
+    };
+    // Positive control first: a resealed VALID entry hits, proving the
+    // reseal (and the layout it assumes) is sound — later misses are IHDR
+    // rejections, not reseal artifacts.
+    let mut control = full.clone();
+    reseal(&mut control).expect("reseal succeeds");
+    std::fs::write(&entry, &control).expect("plant control");
+    assert_eq!(cache.get(&key).expect("resealed valid entry hits"), valid);
+    for (label, w, h) in [("huge", 20_000u32, 20_000u32), ("zero-width", 0, 10)] {
+        let mut planted = full.clone();
+        planted[at + 16..at + 20].copy_from_slice(&w.to_be_bytes());
+        planted[at + 20..at + 24].copy_from_slice(&h.to_be_bytes());
+        reseal(&mut planted).expect("reseal succeeds");
+        std::fs::write(&entry, &planted).expect("plant entry");
+        assert!(cache.get(&key).is_none(), "{label} IHDR must miss");
+        assert!(!entry.exists(), "{label} IHDR entry must be removed");
+    }
+    assert_eq!(cache.rejected(), 2);
+    assert_eq!(cache.hits(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_plant_at_entry_path_cannot_redirect_cache_writes() {
+    let dir = tempfile::tempdir().expect("tempfile::tempdir() succeeds");
+    let mut cache =
+        RenderCache::open(dir.path(), &[]).expect("RenderCache::open(dir.path(), &[]) succeeds");
+    let rp = placeholder_rp();
+    let key = RenderCache::key_for(&screen_of(styled_lead()).expect("screen_of succeeds"), &rp);
+    let entry = dir.path().join(key.file_name());
+    let victim = dir.path().join("victim");
+    std::fs::write(&victim, b"sentinel").expect("write victim");
+    std::os::unix::fs::symlink(&victim, &entry).expect("plant symlink");
+    let png = cache_png().expect("cache_png succeeds");
+    cache
+        .put(&key, &png)
+        .expect("put over a planted link succeeds");
+    // The plant was replaced, never followed: victim intact, live name real.
+    assert_eq!(std::fs::read(&victim).expect("read victim"), b"sentinel");
+    assert!(
+        !std::fs::symlink_metadata(&entry)
+            .expect("symlink_metadata succeeds")
+            .file_type()
+            .is_symlink(),
+        "live entry must not be a symlink"
+    );
+    assert_eq!(cache.get(&key).expect("planted-over entry hits"), png);
 }
 
 #[test]
