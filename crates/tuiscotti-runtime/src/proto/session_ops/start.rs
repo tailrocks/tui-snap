@@ -194,8 +194,11 @@ fn admit_session_slot(dir: &Path) -> Result<(), OpError> {
 }
 
 /// Live sessions occupying slots: valid endpoints with a live child pid,
-/// both backends (pid reuse can only refuse a start). Mirrors
-/// [`super::session_list`]: foreign/symlink/dir entries never count.
+/// both backends (pid reuse can only refuse a start).
+/// Foreign/symlink/dir entries never count. Unlike
+/// [`super::session_list`] (which reports a corrupt record as an error),
+/// an unreadable or invalid entry simply occupies no slot: poison records
+/// (pid 0, tampered payloads) must never veto an unrelated start.
 fn live_session_count(dir: &Path) -> Result<usize, OpError> {
     let mut live = 0;
     let entries = std::fs::read_dir(dir)
@@ -208,14 +211,15 @@ fn live_session_count(dir: &Path) -> Result<usize, OpError> {
         if validate_session_name(stem).is_err() {
             continue;
         }
-        // Unstatable entries fall through to `read_endpoint`, which
-        // fails closed (same verdict as `session_list`).
         if entry.file_type().is_ok_and(|t| !t.is_file()) {
             continue;
         }
-        if let Some(ep) = read_endpoint(dir, stem)?
-            && pid_alive(ep.pid)
-        {
+        // Only the directory listing itself is a hard error: an entry that
+        // fails to read or validate occupies no slot (see doc comment).
+        let Ok(Some(ep)) = read_endpoint(dir, stem) else {
+            continue;
+        };
+        if pid_alive(ep.pid) {
             live += 1;
         }
     }
@@ -376,6 +380,17 @@ mod tests {
         // Highest valid pid: dead on every platform (pid_max ≪ 2³¹−1).
         seed(&dir, "dead", 2_147_483_647, owner);
         std::fs::write(dir.join("foreign.txt"), b"x").expect("seed foreign");
+        // Poison records: a pid-0 endpoint (invalid payload) and a directory
+        // at an entry path. Both must occupy no slot and veto no start.
+        std::fs::write(
+            dir.join("poison.json"),
+            format!(
+                r#"{{"version":{SESSION_ENDPOINT_VERSION},"name":"poison","pid":0,"argv":["x"],"backend":"process","started_unix":{},"owner":{owner}}}"#,
+                now_unix(),
+            ),
+        )
+        .expect("seed poison");
+        std::fs::create_dir(dir.join("dz.json")).expect("seed dir entry");
         // Full: typed rejection, nothing spawned or published.
         let before = std::fs::read_dir(&dir).expect("list dir").count();
         let argv = [OsString::from("/bin/sleep"), OsString::from("30")];
@@ -385,13 +400,16 @@ mod tests {
         assert_eq!(after, before, "refused start spawns nothing");
         assert!(!dir.join("newbie.json").exists(), "nothing published");
         assert!(!dir.join("newbie.lock").exists(), "reservation released");
-        // Dead records and foreign files occupy no slot; the start below cleans up fully.
+        // Dead records, foreign files, and poison entries occupy no slot;
+        // the start below cleans up fully and preserves the poison records.
         std::fs::remove_file(dir.join("live-0.json")).expect("free a slot");
         let info = session_start_os("newbie", &argv, false).expect("slot reopens");
         assert!(pid_alive(info.pid), "started child must be alive");
         session_stop("newbie").expect("stop succeeds");
         assert!(!dir.join("newbie.json").exists(), "endpoint removed");
         assert!(!pid_alive(info.pid), "stray child survived");
+        assert!(dir.join("poison.json").is_file(), "poison preserved");
+        assert!(dir.join("dz.json").is_dir(), "dir entry preserved");
         if std::fs::remove_dir_all(&dir).is_err() {
             // Leftover scratch in the temp dir is harmless.
         }
