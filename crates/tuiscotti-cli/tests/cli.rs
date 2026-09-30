@@ -109,7 +109,7 @@ mod ops;
 #[path = "cli/ops_session.rs"]
 mod ops_session;
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "pty"))]
 #[path = "cli/ops_session_pty.rs"]
 mod ops_session_pty;
 

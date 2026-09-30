@@ -1,9 +1,11 @@
 [package]
 name = "tuiscotti-cli"
 version = "0.2.0"
+description = "Capture, inspect, sessions, render, diff, review, and report CLI for TUI snapshots"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "tuiscotti"

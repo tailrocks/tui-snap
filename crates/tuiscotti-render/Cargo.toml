@@ -1,9 +1,11 @@
 [package]
 name = "tuiscotti-render"
 version = "0.2.0"
+description = "Pinned-profile rendering and evidence artifacts for TUI visual-regression testing"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }

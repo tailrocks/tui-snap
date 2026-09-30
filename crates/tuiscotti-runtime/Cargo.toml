@@ -1,9 +1,11 @@
 [package]
 name = "tuiscotti-runtime"
 version = "0.2.0"
+description = "Execution backends and artifact stores for TUI visual-regression testing"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [features]
 default = ["pty"]

@@ -1,7 +1,7 @@
 # CLI reference (`tuiscotti`)
 
 Transcribed from the implemented Clap grammar (`tuiscotti --help`,
-per-command `--help`) at head `75ff479`, verified by running the
+per-command `--help`) at head `1d448c1`, verified by running the
 binary. `crates/tuiscotti-cli/tests/readme_lock.rs` pins every
 subcommand and flag below against live `--help` output; removed
 commands (`check`, `run`) are pinned as exit-2 usage errors.
@@ -116,7 +116,7 @@ state is never modified.
 Read-only import of a frozen four-artifact tree. Writes nothing;
 unsupported trees error.
 
-### `session <start|stop|list|prune|attach>`
+### `session <start|stop|list|prune|attach|input|observe>`
 
 Named sessions (versioned endpoints, owner-only runtime dir):
 
@@ -126,6 +126,10 @@ Named sessions (versioned endpoints, owner-only runtime dir):
 - `list` — sessions with liveness.
 - `prune` — drop endpoints whose process already exited.
 - `attach --name <N>` — best-effort human view; EOF detaches.
+- `input --name <N> (--text <T> | --chord <C> | --bytes-b64 <B>)` —
+  send input to a retained PTY session (exactly one payload).
+- `observe --name <N>` — print a retained PTY session's current
+  screen text.
 
 ### `record --out <FILE> [--max-events <N>] [--max-bytes <N>] [-- <ARGV>...]`
 

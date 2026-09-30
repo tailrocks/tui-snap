@@ -1,9 +1,11 @@
 [package]
 name = "tuiscotti-insta"
 version = "0.2.0"
+description = "Snapshot/screenshot assertion facade over Insta for TUI visual-regression testing"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
