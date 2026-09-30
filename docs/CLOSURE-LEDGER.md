@@ -1,4 +1,4 @@
-# PR #6 Closure Ledger — v2
+# PR #6 Closure Ledger — v3
 
 Single source of truth for PR #6 closure. Every row: ID, impact, owner, reproducer/evidence, fixing commit, verifier, disposition. Unlisted items do not exist as findings. PENDING = not yet revalidated at current HEAD.
 
@@ -25,6 +25,37 @@ HEAD: `aed37ebfaa65c2cc2a3e69f8cff121fef1cacad2` · base `main@9dc86da` · PR OP
 | L8-CARGO-BIN-FIXTURES | Resolver contract + fixture inventory | ledger | `cargo_bin_path` order: `CARGO_BIN_EXE_<name>` exact → normalized → next-to-exe → `deps/` parent → cwd `target/debug`+`target/release` (`is_file` only, typed `SpawnError` lists all searched); `Tui::cargo_bin` delegates to it; 3 fixture bins: `menu_fixture`, `streams_fixture`, `protocol_fixture` | n/a (no defect) | ledger writer | VERIFIED |
 | TERMPANE-SRCQUAL-6/6 | Source qual: upstream rev works, registry still unqualified | ledger | `/tmp/termpane-srcqual` (git `rev=dc40286f9a8942f19f3a4cdebaaf1e18b7321709`, feature `pty`): `cargo test` 6/6 PASS — spawn_true/outcome, stty-size+resize, stdin-close-EOFs-cat, observe-revision, finish-kills-sleep, close-idempotent. SOURCE-ONLY, NOT registry (per crate README) | n/a (no defect) | ledger writer | VERIFIED-QUALIFIED (source only) |
 | EXTCONSUM-ABC | External proof: facade works from outside the repo | ledger | `/tmp/tuiscotti-extconsum` (path-dep on `crates/tuiscotti`, repo untouched — `git status` unchanged): (A) pure-view canonical state, (B) piped echo exit+output+env, (C) real-PTY menu journey — 3/3 PASS under BOTH `cargo test` and `cargo nextest run` | n/a (no defect) | ledger writer | VERIFIED |
+| C1-REGISTRY-SAFETY | Concurrency audit | ledger | registry concurrent access race-free | n/a (no defect) | ledger writer | VERIFIED |
+| C2-XPROC-LIFECYCLE | Concurrency audit | ledger | cross-process session/child lifecycle sound | n/a (no defect) | ledger writer | VERIFIED |
+| C3-IDENTITY-SEPARATION | Concurrency audit | ledger | baseline/attempt/session identities never conflated | n/a (no defect) | ledger writer | VERIFIED |
+| C4-ESCAPING | Concurrency audit | ledger | shell/arg/env escaping correct, no injection | n/a (no defect) | ledger writer | VERIFIED |
+| C5-RUNNER-NEUTRAL-CTX | Concurrency audit | ledger | contexts runner-neutral (nextest/cargo/standalone) | n/a (no defect) | ledger writer | VERIFIED |
+| C6-QUEUES | Concurrency audit | ledger | internal queues bounded + race-free | n/a (no defect) | ledger writer | VERIFIED |
+| C7-LOGS-DIMS | Concurrency audit | ledger | logs + terminal dims consistent under concurrency | n/a (no defect) | ledger writer | VERIFIED |
+| C8-FDS | Concurrency audit | ledger | FD ownership sound (see C-R2 macOS residual) | n/a (no defect) | ledger writer | VERIFIED |
+| C9-NO-SERIALIZATION | Concurrency audit | ledger | no hidden global serialization bottleneck | n/a (no defect) | ledger writer | VERIFIED |
+| C-R1-PID-REUSE | Residual: pid-reuse signaling on orphan path | TBD | documented residual: orphan-path kill may signal recycled pid | pending | ledger writer | VERIFIED-RESIDUAL |
+| C-R2-MACOS-FD-LEAK | Residual: macOS fd leak, SPAWN_LOCK mitigation | TBD | documented residual: leak contained by SPAWN_LOCK, not eliminated | pending | ledger writer | VERIFIED-RESIDUAL |
+| C-G1-RENDERCACHE-CAPS | GAP: RenderCache/glyph total caps + eviction | TBD (concurrency fixer in flight) | no total caps, no eviction policy | pending | ledger writer | GAP-OPEN |
+| C-G2-ADMISSION | GAP: session/child admission control | TBD (concurrency fixer in flight) | unbounded session/child spawn, no admission gate | pending | ledger writer | GAP-OPEN |
+| C-X1-NEXTEST-GROUP | FALSE: nextest terminal-e2e group mis-scoped + unmeasured max-threads | TBD (concurrency fixer in flight) | group scope claim wrong; max-threads effect unmeasured | pending | ledger writer | FALSE-OPEN |
+| S1-FINGERPRINTS | Snapshot audit: fingerprints incl underline color | ledger | fingerprint covers underline color + all tracked attrs | n/a (no defect) | ledger writer | VERIFIED |
+| S2-VALIDATION | Snapshot audit: validation | ledger | snapshot validation rejects malformed inputs | n/a (no defect) | ledger writer | VERIFIED |
+| S3-ATOMIC-PUBLISH | Snapshot audit: atomic publish | ledger | publish atomic, no torn snapshots | n/a (no defect) | ledger writer | VERIFIED |
+| S4-CORRUPT-APPROVAL-FAILS | Snapshot audit: corrupt approval fails | ledger | corrupt approval data fails closed | n/a (no defect) | ledger writer | VERIFIED |
+| S5-SUFFIX-IDENTITY | Snapshot audit: suffix identity | ledger | suffix scheme uniquely identifies variants | n/a (no defect) | ledger writer | VERIFIED |
+| S6-BUNDLE-BEFORE-FAILURE | Snapshot audit: bundle before failure | ledger | evidence bundle written before failure surfaces | n/a (no defect) | ledger writer | VERIFIED |
+| S7-STRICT-PIXEL-COMPARE | Snapshot audit: strict pixel compare | ledger | pixel compare strict, no silent tolerance | n/a (no defect) | ledger writer | VERIFIED |
+| SNAP-A3 | F09 gap: no positive key-move test for face-pin/fallback-sha/version | TBD (snapshot fixer in flight) | only refusal tests; needs 2nd font fixture, two valid profiles differing in face bytes → keys differ | pending | ledger writer | GAP-OPEN |
+| SNAP-B3 | F09 gap: huge/zero-dim IHDR path untested | TBD (snapshot fixer in flight) | code bounds pre-decode (entry.rs:31) but no test feeds 20000×20000 IHDR → put-err/get-miss+evict | pending | ledger writer | GAP-OPEN |
+| SNAP-C | F09 gap: symlink-plant exclusivity + non-exclusive write_atomic | TBD (snapshot fixer in flight) | cache symlink-plant test missing; snapshot write_atomic uses non-exclusive fs::write (types.rs:220); evidence failure cleanup untested | pending | ledger writer | GAP-OPEN |
+| SNAP-E | F09 gap: cache on/off verdict agreement unproven, cache unwired | TBD (snapshot fixer in flight) | RenderCache has zero production callers; no gate-verdict comparison no_cache on/off; RENDER_NO_CACHE path untested | pending | ledger writer | GAP-OPEN |
+| SNAP-F | F10 gap: no default-placement macro e2e | TBD (snapshot fixer in flight) | all macro tests use explicit EvolvingIn dirs; None-override caller snapshots/ landing unproven | pending | ledger writer | GAP-OPEN |
+| SNAP-G | F10 gap: Insta source: never asserted on real pendings | TBD (snapshot fixer in flight) | description tokens asserted; source:-names-caller missing | pending | ledger writer | GAP-OPEN |
+| SNAP-I | F10 gap: render_identity() is a constant, profile leg untested | TBD (snapshot fixer in flight) | face hashes/geometry/palette/fallbacks unrepresented; same screen scale-2-vs-1 strings identical; Insta path skips primary-hash verification | pending | ledger writer | GAP-OPEN |
+| SNAP-K | F10 gap: first-run accept path uses synthesized headers | TBD (snapshot fixer in flight) | pending headers/tags never parsed; rerun helpers hardcode approvals instead of rename-then-rerun | pending | ledger writer | GAP-OPEN |
+| SNAP-L | F10 gap: frozen tag checks v1 id, not v2 binding | TBD (snapshot fixer in flight) | frozen.rs:227 uses canonical-only generation_id; no profile/face pins; drift cause unnamed (pixels still catch) | pending | ledger writer | GAP-OPEN |
+| PERF-SEC7 | Perf audit: section-7 NOT ready | TBD (benchmark builder in flight) | 8/8 budgets GAP, 7 tooling gaps | pending | ledger writer | GAP-OPEN |
 
 ## Pending revalidation
 
@@ -36,9 +67,10 @@ HEAD: `aed37ebfaa65c2cc2a3e69f8cff121fef1cacad2` · base `main@9dc86da` · PR OP
 | F05 | TBD | TBD | PENDING revalidation | — | — | PENDING |
 | F06 | TBD | TBD | PENDING revalidation | — | — | PENDING |
 | F07 | TBD | TBD | PENDING revalidation | — | — | PENDING |
-| F08 | TBD | TBD | PENDING revalidation | — | — | PENDING |
-| F09 | TBD | TBD | PENDING revalidation | — | — | PENDING |
-| F10 | TBD | TBD | PENDING revalidation | — | — | PENDING |
+| F08 | Concurrency audit fallout (C-G1/G2 gaps, C-X1 false) | TBD (concurrency fixer in flight) | C1–C9 VERIFIED, C-R1/R2 residuals documented; C-G1/G2 + C-X1 open | pending | ledger writer | OPEN |
+| F09 | Cache fallout (SNAP-A3/B3/C/E) + caps gap (C-G1) | TBD (snapshot + concurrency fixers in flight) | fingerprints/validation/publish/fail-closed VERIFIED; A3/B3/C/E + total-caps/eviction open | pending | ledger writer | OPEN |
+| F10 | Insta fallout (SNAP-F/G/I/K/L) | TBD (snapshot fixer in flight) | suffix/bundle/compare VERIFIED; F/G/I/K/L open | pending | ledger writer | OPEN |
+| SEC7 | Benchmark suite + 8 budgets | TBD (benchmark builder in flight) | section-7 NOT ready; 8/8 budgets GAP; 7 tooling gaps (PERF-SEC7) | pending | ledger writer | OPEN |
 | F11 | TBD | TBD | PENDING revalidation | — | — | PENDING |
 | F12 | TBD | TBD | PENDING revalidation | — | — | PENDING |
 | F13 | TBD | TBD | PENDING revalidation | — | — | PENDING |
@@ -48,3 +80,4 @@ HEAD: `aed37ebfaa65c2cc2a3e69f8cff121fef1cacad2` · base `main@9dc86da` · PR OP
 
 - v1: seeded verified entries (1)–(7) at `f89d522`; F02–F13 + acceptance budgets PENDING. No commit.
 - v2: added L1–L8 synthesis seeds (dep boundary, direct-view, piped-CLI, real-PTY, CLI+proto, nextest ids+resolve, journal fail-closed, cargo-bin+fixtures), TERMPANE-SRCQUAL-6/6 (source-only), EXTCONSUM-ABC (cargo test + nextest, repo untouched); all verified at `b409d71`; HEAD advanced to `aed37eb` by a docs-only sibling commit (swap plan, no code impact). F02–F13 + acceptance budgets stay PENDING. No commit.
+- v3: concurrency audit — C1–C9 VERIFIED (registry safety, xproc lifecycle, identity separation, escaping, runner-neutral contexts, queues, logs+dims, FDs, no-serialization), C-R1/R2 residuals documented (pid-reuse orphan signal; macOS fd leak w/ SPAWN_LOCK), C-G1/G2 GAP (RenderCache/glyph caps+eviction; session/child admission), C-X1 FALSE (nextest terminal-e2e mis-scope + unmeasured max-threads) — fixer in flight. Snapshot audit — 16 checks, no FALSE; S1–S7 VERIFIED (fingerprints incl underline color, validation, atomic publish, corrupt-approval-fails, suffix identity, bundle-before-failure, strict pixel compare), SNAP-A3/B3/C/E/F/G/I/K/L gaps — fixer in flight. Perf audit — PERF-SEC7 NOT ready, 8/8 budgets GAP, 7 tooling gaps — benchmark builder in flight. F08/F09/F10 → OPEN with fixers assigned (not closed). No commit.
