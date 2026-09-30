@@ -134,8 +134,8 @@ quiet-ish) and run 2 (`5cfdd79`, heavily contended) follow the table.
 | g4b | 3-transition journey p95 ≤ 1 s | 78, p50 67, n=10, fail=0 (run 4, output-gated) | PASS, ~13x headroom |
 | g5 | cleanup max ≤ 2 s, all ok | 228, n=23, fail=0 (run 4) | PASS, ~9x headroom |
 | g6 | 4-worker medium full ≥ 2.5x single | 3.38x (wall1=899 ms, wall4=266 ms) | PASS |
-| g7 | edit→verdict ≤ 2 s (core/render/view) | 1622 / 1018 / 5701 ms, all green | FAIL (view; 3rd reproduction) |
-| g8 | full nextest wall ≤ 120 s, green | 61.9 s wall, 654/658 pass, 4 fail | FAIL (red suite; wall within budget) |
+| g7 | edit→verdict ≤ 2 s (core/render/view) | 0.74 / 0.39 / 0.56–1.41 s, green | PASS (profile fix `fc04640`; study §) |
+| g8 | full nextest wall ≤ 120 s, green | 48 s wall, 659/659 pass, 1 skip | PASS (green rerun `36bbe64`, 2026-10-01) |
 
 History (same budgets, older harness revisions — see footnotes):
 
@@ -275,19 +275,26 @@ docs churn outside this fix's scope). Steady-state floor (nothing dirty):
   canonical-200x60 p95 2.43 → 27.10 ms, full-80x24 p95 10.7 → 81.2 ms,
   with p50s drifting up to 2.6x. Primary-run numbers are the reference;
   contended numbers bound the noise.
-- Red suite: 4 `tuiscotti-runtime` PTY-test failures at the primary head
-  (`env_remove_drops_one_var`, `env_clear_starts_empty`,
-  `invalid_cwd_fails_spawn`, `close_input_eofs_raw_cat` — the sibling
-  runtime/spawn refactor area, F07). g8 needs a green rerun at the final
-  head; the 34–90 s walls show the 120 s budget has room, but a red run
-  cannot pass the gate by construction.
+- Red suite, resolved by green rerun: the primary-head red cause (4
+  `tuiscotti-runtime` PTY-test failures: `env_remove_drops_one_var`,
+  `env_clear_starts_empty`, `invalid_cwd_fails_spawn`,
+  `close_input_eofs_raw_cat` — the sibling runtime/spawn refactor area,
+  F07) is gone at `36bbe64`. The first three now pass; the fourth was
+  split by the lifecycle batch (6c5b559) into
+  `close_input_eofs_canonical_cat` + `close_input_raw_cat_is_data_not_eof`
+  (both pass). Green rerun 2026-10-01: 48 s wall (build+run; 16.7 s
+  test-time), 659/659 pass (1 leaky), 1 skip, on a quiet tree (load ~3
+  after a 3-min wait for a sibling velnor-new nextest job; load 4.6 at
+  end). Prior red walls (34–90 s) stay as history in the scoreboard.
 - g7-view-edit reproduces 3/3 on contended runs (4.9 s → 2.8 s → 5.7 s,
   all green verdicts): incremental `view_contracts` after a one-file view
   touch misses the 2 s budget. Not a harness artifact (same touch replays
   the developer flow; content unchanged; verdict green each time) — but a
   quiet-box study at HEAD `a24bba7` passes (1.51 / 1.35 / 1.30 s), so the
-  miss is contention-driven; see the optimization study above for the
-  dominant-cost profile and the `[profile.test]` fix.
+  miss is contention-driven; the `[profile.test]
+  debug=line-tables-only` fix (`fc04640`) closed it (0.56–1.41 s, 8 runs,
+  green 12/12 each) — see the optimization study above. Prior miss walls
+  stay as history.
 - Run-3 g4a pooled p95 (138 ms) is superseded by run 4 (18.6 ms): the
   earlier figure mixed 8-worker sweep contention into the latency gate.
   The sweep tail itself (max 185 ms at 8 workers) is reported above as a
@@ -312,5 +319,6 @@ docs churn outside this fix's scope). Steady-state floor (nothing dirty):
    back (without weakening rejection of corrupt entries).
 4. PTY concurrency barely scales (1.55x at 8 workers; 185 ms tail):
    spawn-bound. Expected, but it caps PTY-heavy suite parallelism.
-5. Re-prove g8 green at the final head on a quiet tree, then re-prove the
-   120 s budget on the qualified CI runner (local walls do not transfer).
+5. g8 green re-proven at `36bbe64` (2026-10-01, quiet tree, 48 s wall)
+   — DONE locally. Still open: re-prove the 120 s budget on the qualified
+   CI runner (local walls do not transfer).
