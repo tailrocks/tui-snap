@@ -3,8 +3,8 @@
 //! Two capture paths share one canonical screen:
 //! - **Pure view tests** ([`ratatui::render`]): production Ratatui view +
 //!   viewport → [`Screen`]. No PTY, no subprocess.
-//! - **Interactive tests** ([`Tui`], feature `pty`): the real executable in a
-//!   real PTY — [`Session`] drives input, locators, waits, [`Screen`] capture.
+//! - **Interactive tests** (`Tui`, feature `pty`): the real executable in a
+//!   real PTY — `Session` drives input, locators, waits, [`Screen`] capture.
 //! - **Piped tests** ([`Command`]): piped stdio runs → truthful
 //!   [`ProcessOutput`] (exit/signal/timeout/output-limit stay distinct).
 //!

@@ -53,7 +53,7 @@ pub struct ReplayRerunComparison {
 /// Compare replayed screens against a re-run screen.
 ///
 /// `replay_screens` is the per-output-prefix screens from
-/// [`Recording::replay_observations`](crate::tui_shell::Recording) (or any
+/// `Recording::replay_observations` (or any
 /// replay path); only the final screen is compared, the full prefix list is
 /// kept as the revision map. Equality is exact [`Screen`] equality.
 #[must_use]

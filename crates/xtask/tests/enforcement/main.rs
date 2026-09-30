@@ -9,8 +9,9 @@
 //!
 //! Fixture payloads live beside this harness with inert `.txt` extensions so
 //! the repo's own gates never trip over them; line-count payloads are
-//! generated programmatically for exact counts. `alint` must be on `PATH`
-//! (CI provisions it for the `xtask` unit; developers get it via `mise`).
+//! generated programmatically for exact counts. `alint` resolves from `PATH`,
+//! else the harness provisions it through the repo mise pin (CI crate jobs
+//! never install it before the test step).
 //!
 //! Style note: the workspace denies `expect_used` outside `#[test]` bodies,
 //! so helpers return `Result` and only the tests themselves call `expect`.
@@ -94,10 +95,15 @@ fn alint_command() -> Result<Command, String> {
     if command_exists("alint") {
         return Ok(Command::new("alint"));
     }
+    Ok(Command::new(mise_alint_path()?))
+}
+
+/// Real `alint` binary through the repo mise pin (version single-sourced
+/// in mise.toml; only the backend id is named here).
+fn mise_alint_path() -> Result<PathBuf, String> {
     // Nested mise must see the repo config: CI test steps export the
     // --no-config isolation as env (MISE_NO_CONFIG=1 etc.), which nested
-    // mise would inherit. Strip it (backend-qualified install keeps the
-    // version single-sourced in mise.toml; only the backend id is named).
+    // mise would inherit. Strip it.
     let unisolate = |command: &mut Command| {
         command
             .env_remove("MISE_NO_CONFIG")
@@ -119,24 +125,31 @@ fn alint_command() -> Result<Command, String> {
             String::from_utf8_lossy(&install.stderr)
         ));
     }
-    let mut which_cmd = Command::new("mise");
-    unisolate(&mut which_cmd);
-    let which = which_cmd
-        .args(["which", "alint"])
+    // Resolve the real binary via `mise where`, never `mise which`: `which`
+    // may return a shim path, and running a shim under the test step's
+    // inherited MISE_NO_CONFIG fails with "No version is set for shim".
+    let mut where_cmd = Command::new("mise");
+    unisolate(&mut where_cmd);
+    let resolved = where_cmd
+        .args(["where", "github:asamarts/alint"])
         .output()
-        .map_err(|error| format!("spawn mise which alint: {error}"))?;
-    if !which.status.success() {
+        .map_err(|error| format!("spawn mise where alint: {error}"))?;
+    if !resolved.status.success() {
         return Err(format!(
-            "mise which alint failed:\n{}",
-            String::from_utf8_lossy(&which.stderr)
+            "mise where alint failed:\n{}",
+            String::from_utf8_lossy(&resolved.stderr)
         ));
     }
-    let path = String::from_utf8_lossy(&which.stdout);
-    let path = path.lines().next().unwrap_or("").trim();
-    if path.is_empty() {
-        return Err("mise which alint printed no path".to_owned());
+    let dir = String::from_utf8_lossy(&resolved.stdout);
+    let dir = dir.lines().next().unwrap_or("").trim();
+    if dir.is_empty() {
+        return Err("mise where alint printed no path".to_owned());
     }
-    Ok(Command::new(path))
+    let path = Path::new(dir).join("alint");
+    if !path.is_file() {
+        return Err(format!("mise alint binary missing at {}", path.display()));
+    }
+    Ok(path)
 }
 
 /// Probe PATH for `tool` without depending on a `which` crate.
@@ -272,5 +285,23 @@ fn missing_lint_inheritance_fails_alint() {
     assert!(
         !log.contains("member-inherit-edition"),
         "no-inherit: inherited edition must pass:\n{log}"
+    );
+}
+
+#[test]
+fn mise_fallback_resolves_real_binary_never_shim() {
+    // `mise which` may answer a shim path; running it under the CI test
+    // step's inherited MISE_NO_CONFIG dies with "No version is set for
+    // shim". The fallback must resolve the real install binary instead.
+    let path = mise_alint_path().expect("resolve mise alint");
+    assert!(
+        path.is_file(),
+        "mise alint must be a file: {}",
+        path.display()
+    );
+    assert!(
+        !path.components().any(|c| c.as_os_str() == "shims"),
+        "mise alint must not resolve through a shim dir: {}",
+        path.display()
     );
 }
