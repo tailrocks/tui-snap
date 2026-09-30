@@ -125,7 +125,9 @@ watch = [
   "**/*.rs",
 ]
 ci_tasks = ["ci-no-default"]
-mise_tools = ["rust", "aqua:nextest-rs/nextest/cargo-nextest"]
+# alint: the full-suite phase runs xtask negative-enforcement tests, which
+# spawn `alint` (same precedent as rust-xtask above).
+mise_tools = ["rust", "aqua:nextest-rs/nextest/cargo-nextest", "cargo:alint"]
 
 # Policy walks the whole tree (foreign-script/shebang detection), so this
 # unit takes the broad repo-shape watch.
@@ -186,4 +188,6 @@ watch = [
   "**/*.rs",
 ]
 ci_tasks = ["ci-msrv"]
-mise_tools = ["rust", "aqua:nextest-rs/nextest/cargo-nextest"]
+# alint: the full-suite phase runs xtask negative-enforcement tests, which
+# spawn `alint` (same precedent as rust-xtask above).
+mise_tools = ["rust", "aqua:nextest-rs/nextest/cargo-nextest", "cargo:alint"]

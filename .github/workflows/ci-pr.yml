@@ -790,7 +790,7 @@ jobs:
       plan_digest: ${{ needs.plan.outputs.plan_digest }}
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
-      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest"
+      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest cargo:alint"
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
@@ -828,7 +828,7 @@ jobs:
       plan_digest: ${{ needs.plan.outputs.plan_digest }}
       base_sha: ${{ needs.plan.outputs.base_sha }}
       head_sha: ${{ needs.plan.outputs.head_sha }}
-      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest"
+      mise_tools: "rust aqua:nextest-rs/nextest/cargo-nextest cargo:alint"
       unit_platform: linux-x64
       unit_trust: untrusted-ok
       unit_admission: github-hosted
