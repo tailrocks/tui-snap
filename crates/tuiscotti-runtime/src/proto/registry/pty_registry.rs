@@ -1,7 +1,7 @@
 //! Process-local PTY session map (feature `pty`).
 //!
-//! `crate::tui::Session` has no cross-process reattach, and termpane
-//! (unreleased) offers no retained-session API either — its `PtySession` is
+//! `crate::tui::Session` has no cross-process reattach, and termpane =0.1.0
+//! (crates.io) offers no retained-session API either — its `PtySession` is
 //! spawn/write/snapshot/signal/close within one process. Named PTY sessions
 //! surviving across CLI invocations (F08-F2) live in this map inside the
 //! long-lived daemon (`super::daemon`), which is a thin IPC wrapper around
