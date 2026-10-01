@@ -115,7 +115,8 @@ static UID_PROBE_CTR: AtomicU64 = AtomicU64::new(0);
 /// Our own uid without `PATH` lookups, environment fallbacks, or a zero
 /// default: a freshly created file is necessarily owned by us, so its owner
 /// uid (via safe `MetadataExt`, no `unsafe`) is trusted OS identity. Final
-/// wiring is `termpane::process::current_uid` once termpane is released.
+/// wiring is `termpane::process::current_uid`; termpane =0.1.0 from crates.io
+/// is now the backend.
 #[cfg(unix)]
 pub(crate) fn current_uid() -> Result<u32, OpError> {
     use std::os::unix::fs::MetadataExt;

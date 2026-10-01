@@ -7,20 +7,14 @@
 // runtime dir, auto-started by the first `session start --pty`, serving
 // newline-delimited JSON over a `0600` Unix socket (`daemon.sock`).
 //
-// INTERIM SUBSTRATE (read before touching): the daemon holds
-// `tui::Session` (the crate's own portable-pty session), NOT
-// `termpane::PtySession` — termpane is unreleased and workspace policy
-// bars path/git imports, so no termpane import exists anywhere here. What
-// the daemon reuses from termpane is the OWNER SEMANTICS contract: an
-// owned handle per session, kill+reap through the handle (never raw pid
-// signaling while the handle lives), and never signal after reap
-// (`poll_exit()` is checked before every signal; `Session::signal`
-// itself refuses `ChildExited`). MECHANICAL MIGRATION when termpane
-// releases: swap the map value to `Mutex<termpane::PtySession>`
-// (termpane's `close` takes `&mut self`, tui's takes `&self`), map
-// `write_stdin`/`observe`/`signal`/`finish` onto the same registry
-// functions, and keep this file's IPC, autostart, and endpoint logic
-// untouched — none of it names the session type.
+// SUBSTRATE (read before touching): the daemon holds `tui::Session`,
+// whose backend is termpane =0.1.0 from crates.io. The daemon reuses
+// termpane's OWNER SEMANTICS contract: an owned handle per session,
+// kill+reap through the handle (never raw pid signaling while the
+// handle lives), and never signal after reap (`poll_exit()` is checked
+// before every signal; `Session::signal` itself refuses `ChildExited`).
+// This file's IPC, autostart, and endpoint logic never names the
+// session type.
 //
 // Trust shape: the socket lives in the 0o700 runtime dir, is itself 0600,
 // and serves only local same-uid clients (no TCP, ever — that would need

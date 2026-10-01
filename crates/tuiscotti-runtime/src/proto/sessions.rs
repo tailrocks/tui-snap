@@ -5,10 +5,9 @@
 //! validates the payload name against the requested entry, requires complete
 //! ownership/identity metadata, and rejects PID 0 and out-of-range PIDs. OS
 //! identity comes from filesystem ownership probes (`std` only, no `PATH`
-//! lookup, no environment fallback, no zero default). Final wiring waits for a
-//! released termpane (`termpane::process::{current_uid, pid_alive, signal}`);
-//! termpane is unreleased (crates.io 404) and path/git overrides are forbidden,
-//! so no termpane import exists yet.
+//! lookup, no environment fallback, no zero default). termpane =0.1.0 from
+//! crates.io is now the backend; these `std`-only identity helpers stay until
+//! final wiring lands (`termpane::process::{current_uid, pid_alive, signal}`).
 //!
 //! Split into one module per area so each file stays under the repo line
 //! gate; behavior is unchanged.
