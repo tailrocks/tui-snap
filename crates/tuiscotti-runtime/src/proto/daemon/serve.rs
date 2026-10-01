@@ -50,13 +50,19 @@ pub(super) fn serve_runtime_dir() -> Result<(), OpError> {
         .map_err(|e| OpError::new("io", format!("socket nonblocking: {e}")))?;
     write_pidfile(&dir)?;
     serve(&listener, &dir, daemon_idle_secs());
-    // Idle exit with an empty registry: sweep our files best-effort (a
-    // racing starter re-probes the socket either way).
-    if remove_unless_symlink(&sock).is_err() {
-        // Best-effort sweep of our own socket.
-    }
-    if std::fs::remove_file(checked_daemon_path(&dir, "pid")?).is_err() {
-        // Best-effort sweep of our own pidfile.
+    // Idle exit with an empty registry: sweep our files best-effort — but
+    // ONLY when the pidfile still names us. A racing starter may have swept
+    // and replaced us while we served; deleting the successor's socket
+    // would orphan its sessions. Residual: a replacement landing between
+    // this read and the unlink still loses its files (ns window, and the
+    // next starter reboots a fresh daemon either way).
+    if super::status::read_daemon_pid(&dir).ok().flatten() == Some(std::process::id()) {
+        if remove_unless_symlink(&sock).is_err() {
+            // Best-effort sweep of our own socket.
+        }
+        if std::fs::remove_file(checked_daemon_path(&dir, "pid")?).is_err() {
+            // Best-effort sweep of our own pidfile.
+        }
     }
     Ok(())
 }

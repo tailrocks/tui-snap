@@ -70,9 +70,13 @@ fn piped_start_refuses_at_cap_and_cleans_up_below_it() {
     let err = session_start_os("newbie", &argv, false).expect_err("full dir must refuse");
     assert_eq!(err.code, SESSION_LIMIT_CODE, "{err}");
     let after = std::fs::read_dir(&dir).expect("list dir").count();
-    assert_eq!(after, before, "refused start spawns nothing");
+    assert_eq!(after, before + 1, "only the freed tombstone is added");
     assert!(!dir.join("newbie.json").exists(), "nothing published");
-    assert!(!dir.join("newbie.lock").exists(), "reservation released");
+    // The refused start's reservation tombstone persists but freed: an
+    // immediate reacquire succeeds.
+    NameReservation::acquire(&dir, "newbie")
+        .expect("freed tombstone reacquires")
+        .release();
     // Dead records, foreign files, and poison entries occupy no slot;
     // the start below cleans up fully and preserves the poison records.
     std::fs::remove_file(dir.join("live-0.json")).expect("free a slot");

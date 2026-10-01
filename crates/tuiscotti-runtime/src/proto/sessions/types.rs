@@ -24,10 +24,6 @@ pub(super) const KILL_BINARIES: [&str; 2] = ["/bin/kill", "/usr/bin/kill"];
 /// taken over by a new starter.
 pub(super) const RESERVATION_TAKEOVER_SECS: u64 = 30;
 
-/// Unparsable reservation locks only go stale by age (a concurrent starter
-/// may not have finished writing yet).
-pub(super) const RESERVATION_CORRUPT_STALE_SECS: u64 = 120;
-
 /// Cap on concurrent live sessions (piped + PTY). Each retained PTY
 /// session pins a PTY pair, two threads, and a child; each piped session a
 /// child plus its endpoint record. 32 bounds the worst case (~100 fds, 64

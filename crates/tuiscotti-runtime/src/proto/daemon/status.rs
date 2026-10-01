@@ -110,7 +110,7 @@ pub(super) fn check_socket_owner(sock: &Path, meta: &std::fs::Metadata) -> Resul
 /// cleanup), while symlinks, foreign owners, and oversize files are hard
 /// errors. A zero pid is corrupt, never a signal target.
 #[cfg(unix)]
-fn read_daemon_pid(dir: &Path) -> Result<Option<u32>, OpError> {
+pub(super) fn read_daemon_pid(dir: &Path) -> Result<Option<u32>, OpError> {
     let path = checked_daemon_path(dir, "pid")?;
     let meta = match std::fs::symlink_metadata(&path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),

@@ -101,9 +101,16 @@ pub fn daemon_main() -> i32 {
 }
 
 /// Best-effort fatal-error record for autostart diagnostics: one capped
-/// line in `daemon.err`, never a panic, never a second failure mode.
+/// line in `daemon.err`, never a panic, never a second failure mode. A lost
+/// autostart race is NOT a boot error: `bind_or_conflict` is the sole
+/// `session-exists` producer at boot, and it fires only when another daemon
+/// already serves (the boot succeeded — this process is redundant), so
+/// recording it would leave a bogus failure for a healthy runtime dir.
 #[cfg(all(unix, feature = "pty"))]
 fn note_boot_error(e: &OpError) {
+    if e.code == "session-exists" {
+        return;
+    }
     let Ok(dir) = runtime_dir() else {
         return;
     };
