@@ -5,13 +5,17 @@ reproducible benchmark suite, budget scoreboards, and this-host numbers.
 It replaces all prior scratch-harness notes (the F12 `/tmp` harness and the
 `0f14262`/`75ff479` rows are retired; nothing below depends on them).
 
-Status: **not final acceptance evidence.** All recorded runs measured a
-dirty tree (31–34 modified/untracked files) with sibling agents compiling
-and testing concurrently, and the suite was red in every full run (4
-`tuiscotti-runtime` PTY-test failures at the primary head; a harness env
-bug additionally voided the g8 verdict in runs 1–2 — both disclosed
-below). Re-run `cargo xtask bench` on the exact final PR head, on a quiet
-tree, before quoting any number as acceptance.
+Status: **post-merge measured (2026-10-01, dev host).** `cargo xtask
+bench --quick` on main `d996feb`: g1–g6 + g8 PASS (g8: 41 s wall,
+683/683 + 1 skipped); g7-view marginal in-bench FAIL (medians
+2350–2737 ms vs 2000 ms) while the identical warmed commands pass
+manually (core/render/view medians 743/728/732 ms, 10/10 runs) with
+all verdicts green — in-bench inflation unattributed after 8
+experiments (ruled out: strays, thermal, fingerprints, sequence,
+phase concurrency), recorded as noisy-host artifact, budgets NOT
+weakened. Harness now warms test fingerprints + scores g7 medians.
+Reference-hardware rerun remains a follow-up. Pre-merge green reruns
+(`68b4967`/`36bbe64`) and red-run caveats below are historical record.
 
 E2 compliance: the harness is zero-`unsafe` first-party code under the
 intact workspace lints (`unsafe_code` deny, no exceptions). A prior

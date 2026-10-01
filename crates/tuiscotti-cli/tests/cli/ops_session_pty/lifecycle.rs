@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use super::super::{code, run_cli, stdout};
 use super::helpers::{
-    check_code, fresh_rt, list_until, observe_until, pty_env, started_pid, teardown,
+    check_code, daemon_pid_of, fresh_rt, list_until, observe_until, pid_dead, pty_env, started_pid,
+    teardown, wait_for,
 };
 use tuiscotti::proto::EXIT_OP_ERROR;
 
@@ -216,4 +217,54 @@ fn pty_daemon_name_reserved_and_piped_guards() {
     let out = run_cli(&["session", "stop", "--name", "piped"], &env, None).expect("stop");
     check_code(&out, 0).expect("piped stop");
     teardown(Path::new(&rt), &[child], true).expect("teardown");
+}
+
+#[test]
+fn pty_daemon_real_boot_failure_records_err() {
+    // A genuine boot failure (symlink socket path refused) still lands in
+    // daemon.err with exit 3 — only the lost-race bind conflict skips it.
+    let (_tmp, rt) = fresh_rt("booterr").expect("tempdir");
+    let env = pty_env(&rt);
+    let rt_path = PathBuf::from(&rt);
+    std::fs::create_dir_all(&rt_path).expect("mkdir rt");
+    std::os::unix::fs::symlink("/nonexistent-target", rt_path.join("daemon.sock"))
+        .expect("symlink");
+    let out = run_cli(&["__daemon"], &env, None).expect("daemon");
+    check_code(&out, EXIT_OP_ERROR).expect("boot failure exits 3");
+    let err = std::fs::read_to_string(rt_path.join("daemon.err")).expect("daemon.err recorded");
+    assert!(err.contains("symlink"), "{err:?}");
+}
+
+#[test]
+fn pty_replaced_daemon_keeps_successor_files() {
+    // A daemon that finds a foreign pid at idle exit was replaced: it must
+    // leave the successor's socket + pidfile alone.
+    let (_tmp, rt) = fresh_rt("replace").expect("tempdir");
+    let env = pty_env(&rt);
+    let rt_path = PathBuf::from(&rt);
+    let out = run_cli(
+        &[
+            "session", "start", "--pty", "--name", "r", "--", "sleep", "30",
+        ],
+        &env,
+        None,
+    )
+    .expect("start");
+    check_code(&out, 0).expect("start");
+    let daemon = daemon_pid_of(&rt_path).expect("daemon pid");
+    let out = run_cli(&["session", "stop", "--name", "r"], &env, None).expect("stop");
+    check_code(&out, 0).expect("stop");
+    // Registry empties; fake a successor before the 1 s idle exit lands.
+    std::fs::write(rt_path.join("daemon.pid"), format!("{}\n", u32::MAX)).expect("fake successor");
+    wait_for("daemon to idle out", 15, || pid_dead(daemon)).expect("idle exit");
+    assert!(
+        rt_path.join("daemon.sock").exists(),
+        "successor socket kept"
+    );
+    assert!(
+        rt_path.join("daemon.pid").exists(),
+        "successor pidfile kept"
+    );
+    // No teardown: the kept files are the assertion (tempdir cleans them),
+    // and no processes remain (child stopped, daemon exited).
 }

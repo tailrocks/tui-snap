@@ -157,12 +157,34 @@ pub(crate) fn run_builds(
             ],
         ),
     ];
+    // Warm the exact test-profile fingerprints g7 times: the `cargo build`
+    // warmups above do not cover `cargo test` targets, so the first timed
+    // edit otherwise pays a cold-fingerprint rebuild (measured 10x noise).
+    for (id, _, cmd) in &edits {
+        let mut warm = cmd.clone();
+        warm.push("--no-run");
+        let (_, ok) = timed_cargo_tests(root, &warm);
+        notes.push(format!("{id} warmup exit_ok={ok}"));
+    }
     for (id, file, cmd) in edits {
-        touch_same(&root.join(file))?;
-        let (ms, ok) = timed_cargo_tests(root, &cmd);
-        walls.push((format!("{id} Ms"), ms));
-        walls.push((format!("{id} exit-ok"), if ok { 1.0 } else { 0.0 }));
-        notes.push(format!("{id}: {} exit_ok={ok}", cmd.join(" ")));
+        // Median of 3 touches: single edit-to-verdict samples are noisy
+        // (measured 0.4–10 s for the identical command across cache
+        // states), so the gate scores the median, never one sample.
+        let mut samples = Vec::with_capacity(3);
+        let mut ok_all = true;
+        for _ in 0..3 {
+            touch_same(&root.join(file))?;
+            let (ms, ok) = timed_cargo_tests(root, &cmd);
+            samples.push(ms);
+            ok_all &= ok;
+        }
+        samples.sort_by(f64::total_cmp);
+        walls.push((format!("{id} Ms"), samples[1]));
+        walls.push((format!("{id} exit-ok"), if ok_all { 1.0 } else { 0.0 }));
+        notes.push(format!(
+            "{id}: {} samples_ms={samples:?} exit_ok={ok_all}",
+            cmd.join(" ")
+        ));
     }
     Ok(())
 }

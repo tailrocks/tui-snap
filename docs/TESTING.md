@@ -7,13 +7,13 @@
 | `crates/tuiscotti/tests/` | 20 suites: `cargo_bin_unified`, `cells`, `examples_lane`, `export`, `facade`, `g6_facade`, `grouped`, `import_compat`, `insta_spike`, `locate`, `p0_mutations`, `ratatui_views`, `render_qual`, `runner`, `screen`, `semant`, `snapshot`, `snapshot_lifecycle`, `snapshot_safety`, `tool_qualification` (269 tests) |
 | `crates/tuiscotti-cli/tests/` | `agent_if`, `cli`, `epipe`, `observe`, `piped`, `readme_lock`, `vertical_slice_cli_error` (85 tests) |
 | `crates/tuiscotti-runtime/tests/` | `tui`, `tui_shell` (PTY; need feature `pty`) |
-| `crates/tuiscotti-render/`, `-insta/`, `xtask` | unit tests in `src/` (6 + 5 + 16 tests) |
+| `crates/tuiscotti-render/`, `-insta/`, `xtask` | unit tests in `src/` (12 + 21 + 17 tests) |
 | `crates/tuiscotti-fixtures/` | `fixture_app` model/view + `tests/{format_contracts, interaction_contracts, journey, render, underline, vertical_slice, view_contracts, visual}` + committed approvals (86 tests) |
 | `crates/tuiscotti/examples/` | `01-pure-view` … `08-agent-workflow` (the learning lane) |
 
-519 tests via `cargo nextest list --locked --offline
---all-features` at head `75ff479`; full run green 519/519 in
-~21 s on 2026-09-29 (see [PERFORMANCE.md](PERFORMANCE.md)).
+683 tests via `cargo nextest list --locked --offline
+--all-features` on main `d996feb`; full run green 683/683 + 1 skipped
+(2026-10-01; see [PERFORMANCE.md](PERFORMANCE.md)).
 Doctest lane is separate (`cargo test --doc`).
 
 ## The fixture app
@@ -59,7 +59,7 @@ cargo test -p tuiscotti --test examples_lane    # runs all 8, asserts exit 0 + m
 ## Running the suite
 
 ```sh
-cargo nextest run --locked --offline --all-features   # preferred: parallel, ~21 s locally
+cargo nextest run --locked --offline --all-features   # preferred: parallel, ~33 s warm locally (32.7 s measured 2026-10-01)
 cargo test --locked --offline                         # serial fallback
 cargo test -p tuiscotti --no-default-features         # pure-view only, no PTY engine
 cargo test --locked --offline --doc                   # doctests
