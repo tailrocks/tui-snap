@@ -152,14 +152,19 @@ fn mise_alint_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Probe PATH for `tool` without depending on a `which` crate.
+/// Probe PATH for a WORKING `tool` without depending on a `which` crate.
+///
+/// Exit success is required, not just spawn success: a broken mise shim
+/// spawns fine but exits nonzero ("No version is set for shim"), and our
+/// own fallback `mise install` creates that shim mid-run — so a
+/// spawn-only check flips later tests onto the broken shim.
 fn command_exists(tool: &str) -> bool {
     Command::new(tool)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .is_ok()
+        .is_ok_and(|status| status.success())
 }
 
 /// Run `cargo clippy` in `dir`; cargo resolves through the build.
