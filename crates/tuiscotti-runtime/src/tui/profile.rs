@@ -34,16 +34,17 @@ pub struct TerminalProfile {
     pub term: String,
     /// Mouse protocols the application may use.
     pub mouse: MouseProfile,
-    /// Parse kitty progressive-enhancement flags (enables them in the
-    /// emulator config so applications can negotiate them).
+    /// Parse kitty progressive-enhancement flags so applications can
+    /// negotiate them. The backend parses unconditionally; this stays as
+    /// the advertised capability (retained for API stability).
     pub kitty_keyboard: bool,
     /// Application modes the backend tracks.
     pub modes: TrackedModes,
     /// Synchronized output (DEC 2026). **Backend lacks it**: `spawn()`
     /// fails when this is true, and `wait_frame` is unsupported.
     pub synchronized_output: bool,
-    /// Per-cell blink (SGR 5/6). **Backend drops it**: `spawn()` fails
-    /// when this is true rather than passing on a lossy grid.
+    /// Per-cell blink (SGR 5/6). Tracked by the backend and surfaced
+    /// as [`Mods::blink`](tuiscotti_core::frame::Mods::blink).
     pub cell_blink: bool,
 }
 
@@ -73,17 +74,12 @@ impl TerminalProfile {
     ///
     /// # Errors
     ///
-    /// Returns [`TuiError::Unsupported`] when the profile claims synchronized
-    /// output or per-cell blink.
+    /// Returns [`TuiError::Unsupported`] when the profile claims
+    /// synchronized output.
     pub(crate) fn check(&self) -> Result<(), TuiError> {
         if self.synchronized_output {
             return Err(TuiError::Unsupported(
                 "profile advertises synchronized-output (DEC 2026): backend cannot track it",
-            ));
-        }
-        if self.cell_blink {
-            return Err(TuiError::Unsupported(
-                "profile advertises per-cell blink: backend drops SGR 5/6",
             ));
         }
         Ok(())

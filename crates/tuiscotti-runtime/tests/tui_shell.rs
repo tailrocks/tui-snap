@@ -2,6 +2,7 @@
 //! PTY, real processes, bounded timeouts.
 
 #![cfg(feature = "pty")]
+#![cfg(unix)]
 
 use std::time::{Duration, Instant};
 

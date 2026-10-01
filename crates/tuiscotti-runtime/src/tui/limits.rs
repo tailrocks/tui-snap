@@ -1,14 +1,20 @@
 //! Backend grid limits, timing constants, and the process-global PTY guard.
 
+#[cfg(unix)]
 use std::sync::Mutex;
 use std::time::Duration;
 
-/// Serializes PTY open/spawn against kill/reap process-wide. This guards a
-/// kernel race, not an emulator bug; every `portable-pty` consumer needs it.
+/// Serializes our PTY spawn against kill/reap process-wide. This guards a
+/// kernel race, not an emulator bug. The spawn itself runs inside
+/// `termpane` (whose lifecycle lock is private), but our kill/reap side
+/// still needs the exclusion — so the adapter keeps its own guard and
+/// holds it across the spawn call too, preserving the old shape where
+/// every spawn/kill/reap in the process is mutually exclusive.
+#[cfg(unix)]
 pub(crate) static PTY_LIFECYCLE: Mutex<()> = Mutex::new(());
 
-/// Backend grid limits (alacritty minimum columns = 2; generous maximum).
-pub const MIN_COLS: u16 = 2;
+/// Backend grid limits (termpane minimum columns = 1; generous maximum).
+pub const MIN_COLS: u16 = 1;
 /// Minimum PTY rows.
 pub const MIN_ROWS: u16 = 1;
 /// Maximum PTY columns.

@@ -8,11 +8,11 @@ use std::sync::mpsc;
 use tuiscotti_core::locate::{LocateError, Locator, Span};
 use tuiscotti_core::screen::CaptureReason;
 
-use super::super::capture::drain_term_events;
+use super::super::capture::drain_grid_events;
 use super::super::error::TuiError;
 use super::super::frame::build_observation;
 use super::super::input_types::{MouseButton, MouseMods};
-use super::super::worker::{CtlOp, Input, MouseAction, Op, cols_of, rows_of};
+use super::super::worker::{CtlOp, Input, MouseAction, Op};
 use super::WorkerCtx;
 use crate::bound_locator::ActionError;
 
@@ -82,12 +82,7 @@ impl WorkerCtx {
                 return false;
             }
         }
-        drain_term_events(
-            &mut self.term,
-            &self.event_rx,
-            &mut self.events,
-            self.writer.as_ref(),
-        );
+        drain_grid_events(&mut self.grid, &mut self.events, self.writer.as_ref());
         if reply.send(Ok(span)).is_err() {
             // Requester gone; the delivered click stands.
         }
@@ -102,15 +97,10 @@ impl WorkerCtx {
         locator: &Locator,
         reply: &mpsc::Sender<Result<Span, ActionError>>,
     ) -> Option<(Span, u16, u16)> {
-        drain_term_events(
-            &mut self.term,
-            &self.event_rx,
-            &mut self.events,
-            self.writer.as_ref(),
-        );
-        let (cols, rows) = (cols_of(&self.term), rows_of(&self.term));
+        drain_grid_events(&mut self.grid, &mut self.events, self.writer.as_ref());
+        let (rows, cols) = self.grid.size();
         let obs = match build_observation(
-            &self.term,
+            &self.grid,
             &self.events,
             self.revision,
             CaptureReason::Manual,

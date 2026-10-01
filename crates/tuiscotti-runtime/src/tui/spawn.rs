@@ -8,8 +8,8 @@
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
-use alacritty_terminal::term::Config as TermConfig;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use termpane::process::SpawnParams;
+use termpane::pty::{Master, PtyChild, PtyReader, PtyWriter, spawn_pty};
 
 use super::capture::run_reader;
 use super::encode::spawn_writer_thread;
@@ -20,10 +20,10 @@ use super::worker::{CtlOp, Op, WorkerParams, run_worker};
 
 /// An opened PTY pair with the child spawned and I/O handles taken.
 pub(crate) struct SpawnedPty {
-    pub(crate) master: Box<dyn portable_pty::MasterPty + Send>,
-    pub(crate) child: Box<dyn portable_pty::Child + Send + Sync>,
-    pub(crate) reader: Box<dyn std::io::Read + Send>,
-    pub(crate) writer: Box<dyn std::io::Write + Send>,
+    pub(crate) master: Master,
+    pub(crate) child: PtyChild,
+    pub(crate) reader: PtyReader,
+    pub(crate) writer: PtyWriter,
     pub(crate) pid: Option<u32>,
 }
 
@@ -32,50 +32,42 @@ pub(crate) struct SpawnedPty {
 /// Any failure after the spawn rolls the child back (kill + bounded reap)
 /// and reports the original error.
 pub(crate) fn spawn_pty_child(
-    cmd: CommandBuilder,
+    params: &SpawnParams,
     cols: u16,
     rows: u16,
 ) -> Result<SpawnedPty, TuiError> {
     let guard = PTY_LIFECYCLE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| TuiError::Spawn(format!("openpty failed: {e:#}")))?;
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| TuiError::Spawn(format!("spawn failed: {e:#}")))?;
+    // One call: open + spawn + parent-slave-drop under the backend's own
+    // lifecycle lock (nested inside ours; the order never inverts, so no
+    // deadlock). Sizes are (cols, rows) here.
+    let (master, mut child) =
+        spawn_pty(params, cols, rows).map_err(|e| TuiError::Spawn(format!("spawn failed: {e}")))?;
     // Drain discipline: take I/O handles before any wait can run. Each
     // fallible step rolls back: kill + reap the child, then report.
-    let reader = match pair.master.try_clone_reader() {
+    let reader = match master.try_clone_reader() {
         Ok(r) => r,
         Err(e) => {
             let rb = rollback_child_inner(&mut child);
-            return Err(spawn_failed(format!("pty reader failed: {e:#}"), rb));
+            return Err(spawn_failed(format!("pty reader failed: {e}"), rb));
         }
     };
-    let writer = match pair.master.take_writer() {
+    let writer = match master.take_writer() {
         Ok(w) => w,
         Err(e) => {
             let rb = rollback_child_inner(&mut child);
-            return Err(spawn_failed(format!("pty writer failed: {e:#}"), rb));
+            return Err(spawn_failed(format!("pty writer failed: {e}"), rb));
         }
     };
     if let Err(e) = child.try_wait() {
         let rb = rollback_child_inner(&mut child);
-        return Err(spawn_failed(format!("child poll failed: {e:#}"), rb));
+        return Err(spawn_failed(format!("child poll failed: {e}"), rb));
     }
-    let pid = child.process_id();
+    let pid = child.pid();
     drop(guard);
     Ok(SpawnedPty {
-        master: pair.master,
+        master,
         child,
         reader,
         writer,
@@ -87,14 +79,12 @@ pub(crate) fn spawn_pty_child(
 /// the lifecycle guard (released while sleeping, as in teardown).
 /// Returns a diagnostic suffix when the child may still be alive; `None`
 /// when the rollback verifiably reaped or the child was already gone.
-pub(crate) fn rollback_child(
-    mut child: Box<dyn portable_pty::Child + Send + Sync>,
-) -> Option<String> {
+pub(crate) fn rollback_child(mut child: PtyChild) -> Option<String> {
     rollback_child_inner(&mut child)
 }
 
-fn rollback_child_inner(child: &mut Box<dyn portable_pty::Child + Send + Sync>) -> Option<String> {
-    let pid = child.process_id();
+fn rollback_child_inner(child: &mut PtyChild) -> Option<String> {
+    let pid = child.pid();
     {
         let _guard = PTY_LIFECYCLE
             .lock()
@@ -131,7 +121,7 @@ fn rollback_child_inner(child: &mut Box<dyn portable_pty::Child + Send + Sync>) 
 /// reader was never spawned; the channel ends drop with `params`.
 fn rollback_prespawn(
     params: WorkerParams,
-    reader: Box<dyn std::io::Read + Send>,
+    reader: PtyReader,
     writer_thread: std::thread::JoinHandle<()>,
 ) {
     let WorkerParams {
@@ -161,7 +151,6 @@ pub(crate) struct StartedThreads {
 /// either gets a complete running session or a clean error (LIFE-4).
 pub(crate) fn start_session_threads(
     spawned: SpawnedPty,
-    term_config: TermConfig,
     cols: u16,
     rows: u16,
     shared: Arc<Shared>,
@@ -181,7 +170,7 @@ pub(crate) fn start_session_threads(
 
     // The writer thread owns the raw PTY writer (LIFE-6); the worker
     // only holds a request handle, so it never blocks in `write_all`.
-    let (write_handle, writer_thread) = match spawn_writer_thread(writer) {
+    let (write_handle, writer_thread) = match spawn_writer_thread(Box::new(writer)) {
         Ok(pair) => pair,
         Err(msg) => {
             rollback_child(child);
@@ -195,7 +184,6 @@ pub(crate) fn start_session_threads(
         master,
         child,
         writer: write_handle,
-        term_config,
         cols,
         rows,
         pid,
@@ -233,7 +221,7 @@ pub(crate) fn start_session_threads(
     let feed_tx = op_tx.clone();
     let reader_thread = std::thread::Builder::new()
         .name("tuiscotti-tui-reader".to_string())
-        .spawn(move || run_reader(reader, &feed_tx));
+        .spawn(move || run_reader(Box::new(reader), &feed_tx));
     let reader_thread = match reader_thread {
         Ok(t) => t,
         Err(e) => {

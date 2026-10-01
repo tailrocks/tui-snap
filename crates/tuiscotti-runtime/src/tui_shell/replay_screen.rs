@@ -1,32 +1,25 @@
-use std::sync::mpsc;
+use base64::Engine;
+use termpane::DamageGrid;
+use termpane::PassthroughEvent;
+use termpane::cell::{Color as TermColor, UnderlineStyle as TermUnderline};
+use termpane::snapshot::{GridSnapshot, SnapCell};
 
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{ClipboardType, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color as VteColor, CursorShape, NamedColor};
-
-use super::{ClipboardItem, ClipboardTarget, ReplayError, ReplayEvents};
+use super::{ClipboardItem, ClipboardTarget, ReplayError, ReplayEvents, SandboxClipboard};
 use tuiscotti_core::frame::{Cell, Color, Cursor, CursorStyle, Mods, Rgb, UnderlineStyle};
 use tuiscotti_core::screen::Screen;
 
-pub(crate) fn drain_replay_events<T: EventListener>(
-    term: &mut Term<T>,
-    event_rx: &mpsc::Receiver<Event>,
-    events: &mut ReplayEvents,
-) {
-    let _ = term;
-    while let Ok(event) = event_rx.try_recv() {
+pub(crate) fn drain_replay_events(grid: &mut DamageGrid, events: &mut ReplayEvents) {
+    for event in grid.drain_passthrough() {
         match event {
-            Event::Title(t) => events.title = Some(t),
-            Event::ResetTitle => events.title = None,
-            Event::Bell => events.bells += 1,
-            Event::ClipboardStore(ty, text) => {
-                let target = match ty {
-                    ClipboardType::Clipboard => ClipboardTarget::Clipboard,
-                    ClipboardType::Selection => ClipboardTarget::Selection,
-                };
-                events.clipboard.store(ClipboardItem { target, text });
+            PassthroughEvent::TitleChanged(t) => {
+                events.title = if t.is_empty() { None } else { Some(t) };
+            }
+            PassthroughEvent::IconNameChanged(name) => {
+                events.title = if name.is_empty() { None } else { Some(name) };
+            }
+            PassthroughEvent::Bell => events.bells += 1,
+            PassthroughEvent::ClipboardWrite(payload) => {
+                store_clipboard(&payload, &mut events.clipboard);
             }
             // No PTY to answer: query replies are dropped, like the live
             // worker drops them once the writer is gone.
@@ -35,27 +28,51 @@ pub(crate) fn drain_replay_events<T: EventListener>(
     }
 }
 
+/// One OSC 52 store into the sandbox clipboard. Selection and validity
+/// rules match the old emulator exactly: first selection byte only
+/// (`c` clipboard, `p`/`s` selection, else ignored), `?` reads silent
+/// (the old backend denied them by policy), stores gated on valid
+/// base64 plus valid UTF-8.
+fn store_clipboard(payload: &str, clipboard: &mut SandboxClipboard) {
+    let Some((sel, b64)) = payload.split_once(';') else {
+        return;
+    };
+    let target = match sel.as_bytes().first() {
+        Some(b'c') => ClipboardTarget::Clipboard,
+        Some(b'p' | b's') => ClipboardTarget::Selection,
+        _ => return,
+    };
+    if b64 == "?" {
+        return;
+    }
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64) else {
+        return;
+    };
+    let Ok(text) = String::from_utf8(bytes) else {
+        return;
+    };
+    clipboard.store(ClipboardItem { target, text });
+}
+
 /// Viewport grid + cursor, mirroring the live observation builder's mapping
-/// rules (wide-char pairing, orphan spacers, color/cursor mapping).
-pub(crate) fn build_replay_screen<T: EventListener>(
-    term: &Term<T>,
+/// rules (wide-char pairing, orphan continuations, color/cursor mapping).
+pub(crate) fn build_replay_screen(
+    grid: &DamageGrid,
+    snapshot: &GridSnapshot,
     cols: u16,
     rows: u16,
 ) -> Result<Screen, ReplayError> {
-    let grid = term.grid();
     let mut cells = Vec::with_capacity(cols as usize * rows as usize);
     for y in 0..rows {
-        let line = Line(i32::from(y));
+        let row = &snapshot.cells[y as usize];
         let mut x: u16 = 0;
         while x < cols {
-            let cell = &grid[line][Column(x as usize)];
-            let flags = cell.flags;
-            if flags.contains(CellFlags::WIDE_CHAR)
+            let cell = &row[x as usize];
+            let paired = cell.is_wide
+                && !cell.is_wide_continuation
                 && x + 1 < cols
-                && grid[line][Column(x as usize + 1)]
-                    .flags
-                    .contains(CellFlags::WIDE_CHAR_SPACER)
-            {
+                && row[(x + 1) as usize].is_wide_continuation;
+            if paired {
                 cells.push(replay_cell(x, y, cell, 2, false));
                 cells.push(Cell {
                     x: x + 1,
@@ -69,9 +86,7 @@ pub(crate) fn build_replay_screen<T: EventListener>(
                     underline_color: Color::Default,
                 });
                 x += 2;
-            } else if flags
-                .intersects(CellFlags::WIDE_CHAR_SPACER | CellFlags::LEADING_WIDE_CHAR_SPACER)
-            {
+            } else if cell.is_wide_continuation {
                 cells.push(Cell::blank(x, y));
                 x += 1;
             } else {
@@ -80,25 +95,19 @@ pub(crate) fn build_replay_screen<T: EventListener>(
             }
         }
     }
-    let point = grid.cursor.point;
-    let cursor = replay_cursor(term, point.line.0, point.column.0, cols, rows);
+    let (cursor_row, cursor_col) = snapshot.cursor;
+    let cursor = replay_cursor(grid, cursor_row, cursor_col, cols, rows);
     Screen::validate(cols, rows, 0, 0, cells, cursor)
         .map_err(|e| ReplayError::ScreenBuild(e.to_string()))
 }
 
-fn replay_cell(
-    x: u16,
-    y: u16,
-    cell: &alacritty_terminal::term::cell::Cell,
-    width: u8,
-    cont: bool,
-) -> Cell {
-    let mut symbol = String::new();
-    symbol.push(cell.c);
-    if let Some(extra) = cell.zerowidth() {
-        symbol.extend(extra.iter());
-    }
-    let flags = cell.flags;
+fn replay_cell(x: u16, y: u16, cell: &SnapCell, width: u8, cont: bool) -> Cell {
+    let symbol = if cell.text.is_empty() {
+        " ".to_string()
+    } else {
+        cell.text.clone()
+    };
+    let attrs = cell.attributes;
     Cell {
         x,
         y,
@@ -108,105 +117,63 @@ fn replay_cell(
         fg: replay_color(cell.fg),
         bg: replay_color(cell.bg),
         mods: Mods {
-            hidden: flags.contains(CellFlags::HIDDEN),
-            blink: false,
-            bold: flags.contains(CellFlags::BOLD),
-            dim: flags.contains(CellFlags::DIM),
-            italic: flags.contains(CellFlags::ITALIC),
-            underline: flags.intersects(CellFlags::ALL_UNDERLINES),
-            underline_style: replay_underline_style(flags),
-            strikethrough: flags.contains(CellFlags::STRIKEOUT),
-            reverse: flags.contains(CellFlags::INVERSE),
+            hidden: attrs.conceal,
+            blink: attrs.slow_blink || attrs.rapid_blink,
+            bold: attrs.bold,
+            dim: attrs.dim,
+            italic: attrs.italic,
+            underline: attrs.underline,
+            underline_style: replay_underline_style(cell.underline_style),
+            strikethrough: attrs.strikethrough,
+            reverse: attrs.inverse,
         },
-        underline_color: cell.underline_color().map_or(Color::Default, replay_color),
+        underline_color: replay_color(cell.underline_color),
     }
 }
 
-/// Map alacritty underline flags (set from SGR 4 / 4:0..4:5 / 24) to the
-/// canonical style. The emulator holds at most one underline flag per cell
-/// (each SGR 4:x clears the rest); the order below is defensive only.
-fn replay_underline_style(flags: CellFlags) -> UnderlineStyle {
-    if flags.contains(CellFlags::DOUBLE_UNDERLINE) {
-        UnderlineStyle::Double
-    } else if flags.contains(CellFlags::UNDERCURL) {
-        UnderlineStyle::Curly
-    } else if flags.contains(CellFlags::DOTTED_UNDERLINE) {
-        UnderlineStyle::Dotted
-    } else if flags.contains(CellFlags::DASHED_UNDERLINE) {
-        UnderlineStyle::Dashed
-    } else if flags.contains(CellFlags::UNDERLINE) {
-        UnderlineStyle::Single
-    } else {
-        UnderlineStyle::None
+/// Map backend underline styles (set from SGR 4 / 4:1..4:5 / 24) to the
+/// canonical style; the names agree one to one.
+fn replay_underline_style(style: TermUnderline) -> UnderlineStyle {
+    match style {
+        TermUnderline::None => UnderlineStyle::None,
+        TermUnderline::Single => UnderlineStyle::Single,
+        TermUnderline::Double => UnderlineStyle::Double,
+        TermUnderline::Curly => UnderlineStyle::Curly,
+        TermUnderline::Dotted => UnderlineStyle::Dotted,
+        TermUnderline::Dashed => UnderlineStyle::Dashed,
     }
 }
 
-fn replay_color(c: VteColor) -> Color {
+fn replay_color(c: TermColor) -> Color {
     match c {
-        VteColor::Named(n) => match n {
-            NamedColor::Black | NamedColor::DimBlack => Color::Indexed(0),
-            NamedColor::Red | NamedColor::DimRed => Color::Indexed(1),
-            NamedColor::Green | NamedColor::DimGreen => Color::Indexed(2),
-            NamedColor::Yellow | NamedColor::DimYellow => Color::Indexed(3),
-            NamedColor::Blue | NamedColor::DimBlue => Color::Indexed(4),
-            NamedColor::Magenta | NamedColor::DimMagenta => Color::Indexed(5),
-            NamedColor::Cyan | NamedColor::DimCyan => Color::Indexed(6),
-            NamedColor::White | NamedColor::DimWhite => Color::Indexed(7),
-            NamedColor::BrightBlack => Color::Indexed(8),
-            NamedColor::BrightRed => Color::Indexed(9),
-            NamedColor::BrightGreen => Color::Indexed(10),
-            NamedColor::BrightYellow => Color::Indexed(11),
-            NamedColor::BrightBlue => Color::Indexed(12),
-            NamedColor::BrightMagenta => Color::Indexed(13),
-            NamedColor::BrightCyan => Color::Indexed(14),
-            NamedColor::BrightWhite => Color::Indexed(15),
-            NamedColor::Foreground
-            | NamedColor::Background
-            | NamedColor::Cursor
-            | NamedColor::BrightForeground
-            | NamedColor::DimForeground => Color::Default,
-        },
-        VteColor::Spec(rgb) => Color::Rgb(Rgb {
-            r: rgb.r,
-            g: rgb.g,
-            b: rgb.b,
-        }),
-        VteColor::Indexed(i) => Color::Indexed(i),
+        TermColor::Default => Color::Default,
+        TermColor::Idx(i) => Color::Indexed(i),
+        TermColor::Rgb(r, g, b) => Color::Rgb(Rgb { r, g, b }),
     }
 }
 
-fn replay_cursor<T: EventListener>(
-    term: &Term<T>,
-    line: i32,
-    column: usize,
-    cols: u16,
-    rows: u16,
-) -> Cursor {
-    let style = term.cursor_style();
-    let shape = match style.shape {
-        CursorShape::Block | CursorShape::HollowBlock | CursorShape::Hidden => CursorStyle::Block,
-        CursorShape::Underline => CursorStyle::Underline,
-        CursorShape::Beam => CursorStyle::Bar,
+fn replay_cursor(grid: &DamageGrid, row: u16, col: u16, cols: u16, rows: u16) -> Cursor {
+    let style = grid.cursor_style();
+    let shape = match style {
+        3 | 4 => CursorStyle::Underline,
+        5 | 6 => CursorStyle::Bar,
+        _ => CursorStyle::Block,
     };
-    let visible = term.mode().contains(TermMode::SHOW_CURSOR)
-        && !matches!(style.shape, CursorShape::Hidden)
-        && line >= 0
-        && line.cast_unsigned() < u32::from(rows)
-        && column < usize::from(cols);
+    let visible = !grid.hide_cursor() && row < rows && col < cols;
     if !visible {
         return Cursor {
             x: 0,
             y: 0,
             visible: false,
             style: shape,
-            blinking: style.blinking,
+            blinking: false,
         };
     }
     Cursor {
-        x: u16::try_from(column).unwrap_or(u16::MAX),
-        y: u16::try_from(line).unwrap_or(u16::MAX),
+        x: col,
+        y: row,
         visible: true,
         style: shape,
-        blinking: style.blinking,
+        blinking: matches!(style, 1 | 3 | 5),
     }
 }

@@ -50,7 +50,7 @@ impl WorkerCtx {
         let Some(handle) = self.writer.clone() else {
             return Err(TuiError::Closed("stdin is closed".to_string()));
         };
-        let bytes = match encode_input(&self.term, input)? {
+        let bytes = match encode_input(&self.grid, input)? {
             Some(b) if !b.is_empty() => b,
             _ => return Ok(false),
         };

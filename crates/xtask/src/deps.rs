@@ -14,16 +14,13 @@ usage: cargo xtask deps\n\
 \n\
 inspects manifests and Cargo.lock:\n\
   - removed-backend deps (portable-pty, alacritty_terminal, libc) fail\n\
-    everywhere except the documented temporary tuiscotti-runtime holder\n\
+    everywhere (G1 swap landed; no temporary holder remains)\n\
   - git sources, wildcard versions, and [patch] sections fail\n\
   - lockfile git sources fail; duplicate locked versions warn\n\
 ";
 
-/// Backend deps removed by G1; only the runtime holder is temporarily allowed.
+/// Backend deps removed by G1; no temporary holder remains after the swap.
 const BANNED: &[&str] = &["portable-pty", "alacritty_terminal", "libc"];
-
-/// Temporary holder while the G1 termpane swap lands.
-const TEMP_HOLDER: &str = "crates/tuiscotti-runtime/Cargo.toml";
 
 /// Run the dependency inspection.
 ///
@@ -150,10 +147,6 @@ fn is_dep_section(section: &str) -> bool {
 
 fn check_dep(rel: &str, name: &str) -> Status {
     if !BANNED.contains(&name) {
-        return Status::Pass;
-    }
-    if rel == TEMP_HOLDER {
-        println!("deps: TEMP-ALLOW {rel} still holds {name} (G1 swap pending)");
         return Status::Pass;
     }
     println!("deps: FAIL {rel} directly depends on banned {name}");

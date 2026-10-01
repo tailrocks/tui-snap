@@ -1,13 +1,11 @@
-use std::sync::mpsc;
+#[cfg(unix)]
+use termpane::DamageGrid;
 
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::term::{Config as TermConfig, Term};
-use alacritty_terminal::vte::ansi::Processor;
-
-use super::{
-    SandboxClipboard, TermSnapshot, build_replay_screen, build_replay_state, drain_replay_events,
-};
+#[cfg(unix)]
+use super::SandboxClipboard;
+use super::TermSnapshot;
+#[cfg(unix)]
+use super::{build_replay_screen, build_replay_state, drain_replay_events};
 use tuiscotti_core::screen::Screen;
 
 // ---------------------------------------------------------------------------
@@ -18,6 +16,7 @@ use tuiscotti_core::screen::Screen;
 pub const MAX_REPLAY_BYTES: usize = 1 << 20;
 
 /// Scrollback lines retained by the replay emulator.
+#[cfg(unix)]
 pub(crate) const REPLAY_HISTORY: usize = 1000;
 
 /// One recorded event. The direction tag is structural: [`replay_recording`]
@@ -56,6 +55,8 @@ pub enum ReplayError {
     InvalidChunks(String),
     /// Final screen failed validation.
     ScreenBuild(String),
+    /// Replay needs the Unix-only emulator backend.
+    Unsupported(String),
 }
 
 impl std::fmt::Display for ReplayError {
@@ -67,6 +68,7 @@ impl std::fmt::Display for ReplayError {
             Self::InvalidSize(m) => write!(f, "invalid replay size: {m}"),
             Self::InvalidChunks(m) => write!(f, "invalid chunking: {m}"),
             Self::ScreenBuild(m) => write!(f, "replay screen build failed: {m}"),
+            Self::Unsupported(m) => write!(f, "replay unsupported: {m}"),
         }
     }
 }
@@ -190,6 +192,7 @@ pub fn replay_bytes(output: &[u8], cols: u16, rows: u16) -> Result<Replayed, Rep
 /// # Errors
 ///
 /// Returns [`ReplayError`] on bad size, over-cap bytes, or screen build.
+#[cfg(unix)]
 pub fn replay_chunks<'a>(
     chunks: impl IntoIterator<Item = &'a [u8]>,
     cols: u16,
@@ -209,32 +212,36 @@ pub fn replay_chunks<'a>(
         });
     }
 
-    let (event_tx, event_rx) = mpsc::channel::<Event>();
-    let dims = ReplayDims {
-        cols: cols as usize,
-        rows: rows as usize,
-    };
-    let config = TermConfig {
-        scrolling_history: REPLAY_HISTORY,
-        kitty_keyboard: true,
-        ..TermConfig::default()
-    };
-    let mut term = Term::new(config, &dims, ReplayListener { tx: event_tx });
-    let mut processor: Processor = Processor::new();
+    // Sizes are (rows, cols) here — the opposite order of the PTY spawn.
+    let mut grid = DamageGrid::new(rows, cols, REPLAY_HISTORY);
     for chunk in &chunks {
-        processor.advance(&mut term, chunk);
+        grid.process(chunk);
     }
 
     let mut replayed = ReplayEvents::default();
-    drain_replay_events(&mut term, &event_rx, &mut replayed);
-    let screen = build_replay_screen(&term, cols, rows)?;
-    let state = build_replay_state(&term, &replayed, cols);
+    drain_replay_events(&mut grid, &mut replayed);
+    let snapshot = grid.dump();
+    let screen = build_replay_screen(&grid, &snapshot, cols, rows)?;
+    let state = build_replay_state(&grid, &snapshot, &replayed, cols);
     Ok(Replayed {
         screen,
         state,
         bytes_fed: total,
         chunks: chunks.len(),
     })
+}
+
+/// Non-Unix stub: the emulator backend is Unix-only.
+#[cfg(not(unix))]
+pub fn replay_chunks<'a>(
+    chunks: impl IntoIterator<Item = &'a [u8]>,
+    cols: u16,
+    rows: u16,
+) -> Result<Replayed, ReplayError> {
+    let _ = (chunks.into_iter().count(), cols, rows);
+    Err(ReplayError::Unsupported(
+        "replay requires a Unix platform".to_string(),
+    ))
 }
 
 /// Replay a recording through a fresh emulator: only [`RecEvent::Output`]
@@ -259,39 +266,8 @@ pub fn replay_recording(
     }
 }
 
-struct ReplayDims {
-    cols: usize,
-    rows: usize,
-}
-
-impl GridDims for ReplayDims {
-    fn total_lines(&self) -> usize {
-        self.rows
-    }
-    fn screen_lines(&self) -> usize {
-        self.rows
-    }
-    fn columns(&self) -> usize {
-        self.cols
-    }
-}
-
-#[derive(Clone)]
-struct ReplayListener {
-    tx: mpsc::Sender<Event>,
-}
-
-impl EventListener for ReplayListener {
-    fn send_event(&self, event: Event) {
-        // The drain runs after the feed, so the receiver is alive; a
-        // failure would only mean replay was abandoned mid-parse.
-        if self.tx.send(event).is_err() {
-            // Receiver gone; replay is abandoned anyway.
-        }
-    }
-}
-
 #[derive(Default)]
+#[cfg(unix)]
 pub(crate) struct ReplayEvents {
     pub(crate) title: Option<String>,
     pub(crate) bells: u64,

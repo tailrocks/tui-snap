@@ -2,6 +2,7 @@
 //! processes (`/bin/cat`, `/bin/sh`, `/bin/sleep`), bounded timeouts.
 
 #![cfg(feature = "pty")]
+#![cfg(unix)]
 
 use std::time::{Duration, Instant};
 
@@ -49,3 +50,6 @@ mod bound;
 
 #[path = "tui/concurrent.rs"]
 mod concurrent;
+
+#[path = "tui/swap_pins.rs"]
+mod swap_pins;

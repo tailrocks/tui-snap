@@ -1,4 +1,4 @@
-//! Input encoding, worker side: bytes derived from the live `TermMode`.
+//! Input encoding, worker side: bytes derived from the live grid modes.
 //!
 //! Writes never run on the worker (LIFE-6): a dedicated writer thread owns
 //! the raw PTY writer, so a child that stops reading wedges only that
@@ -7,16 +7,15 @@
 
 use std::sync::mpsc;
 
-use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::term::{Term, TermMode};
-use portable_pty::{MasterPty, PtySize};
+use termpane::DamageGrid;
+use termpane::grid::{MouseProtocolEncoding, MouseProtocolMode};
+use termpane::pty::Master;
 
 use super::encode_key::encode_key;
 use super::error::TuiError;
 use super::input_types::{MouseButton, MouseMods, Wheel};
 use super::limits::WRITE_QUEUE_LIMIT;
-use super::worker::{Input, MouseAction, WorkerDims};
+use super::worker::{Input, MouseAction};
 
 /// One writer-thread request. `Bytes` is acknowledged (the worker waits
 /// with a bound); `Reply` is best-effort (dropped when the queue is full,
@@ -122,44 +121,72 @@ fn run_writer(mut writer: Box<dyn std::io::Write + Send>, rx: &mpsc::Receiver<Wr
     }
 }
 
-/// Encode one input against the live `TermMode` (pure: no I/O). `None` or
-/// empty means a successful no-op (e.g. a release without kitty).
-pub(crate) fn encode_input<T: EventListener>(
-    term: &Term<T>,
-    input: &Input,
-) -> Result<Option<Vec<u8>>, TuiError> {
-    let mode = *term.mode();
-    match input {
-        Input::Bytes(b) => Ok(Some(b.clone())),
-        Input::Paste(text) => Ok(Some(encode_paste(text, mode)?)),
-        Input::Key { key, mods, kind } => encode_key(key, *mods, *kind, mode),
-        Input::Mouse { action, x, y, mods } => {
-            let (cols, rows) = (term.columns(), term.screen_lines());
-            Ok(Some(encode_mouse(action, *x, *y, *mods, mode, cols, rows)?))
+/// Live mode bits read from the grid for one encoding decision.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Four orthogonal emulator mode bits plus two small enums: the encoding decision surface is intrinsically a flag set, and named fields keep the gates readable."
+)]
+struct ModeView {
+    kitty: bool,
+    app_cursor: bool,
+    bracketed_paste: bool,
+    focus_events: bool,
+    mouse_mode: MouseProtocolMode,
+    mouse_encoding: MouseProtocolEncoding,
+}
+
+impl ModeView {
+    fn read(grid: &DamageGrid) -> Self {
+        Self {
+            kitty: grid.kitty_kb_flags() != 0,
+            app_cursor: grid.application_cursor(),
+            bracketed_paste: grid.bracketed_paste(),
+            focus_events: grid.focus_events(),
+            mouse_mode: grid.mouse_protocol_mode(),
+            mouse_encoding: grid.mouse_protocol_encoding(),
         }
-        Input::Focus(focused) => Ok(Some(encode_focus(*focused, mode)?)),
     }
 }
 
-pub(crate) fn apply_resize<T: EventListener>(
-    master: &dyn MasterPty,
-    term: &mut Term<T>,
+/// Encode one input against the live grid modes (pure: no I/O). `None` or
+/// empty means a successful no-op (e.g. a release without kitty).
+pub(crate) fn encode_input(grid: &DamageGrid, input: &Input) -> Result<Option<Vec<u8>>, TuiError> {
+    let mode = ModeView::read(grid);
+    match input {
+        Input::Bytes(b) => Ok(Some(b.clone())),
+        Input::Paste(text) => Ok(Some(encode_paste(text, mode.bracketed_paste)?)),
+        Input::Key { key, mods, kind } => {
+            encode_key(key, *mods, *kind, mode.kitty, mode.app_cursor)
+        }
+        Input::Mouse { action, x, y, mods } => {
+            let (rows, cols) = grid.size();
+            Ok(Some(encode_mouse(
+                action,
+                *x,
+                *y,
+                *mods,
+                &mode,
+                cols as usize,
+                rows as usize,
+            )?))
+        }
+        Input::Focus(focused) => Ok(Some(encode_focus(*focused, mode.focus_events)?)),
+    }
+}
+
+pub(crate) fn apply_resize(
+    master: &Master,
+    grid: &mut DamageGrid,
     cols: u16,
     rows: u16,
 ) -> Result<(), TuiError> {
     // PTY first: if the kernel refuses, the emulator stays consistent.
+    // Pitfall: `Master::resize` takes (cols, rows) but
+    // `DamageGrid::set_size` takes (rows, cols) — the orders differ.
     master
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
+        .resize(cols, rows)
         .map_err(|e| TuiError::Io(format!("pty resize failed: {e}")))?;
-    term.resize(WorkerDims {
-        cols: cols as usize,
-        rows: rows as usize,
-    });
+    grid.set_size(rows, cols);
     Ok(())
 }
 
@@ -168,13 +195,13 @@ pub(crate) fn apply_resize<T: EventListener>(
 const PASTE_START: &str = "\x1b[200~";
 const PASTE_END: &str = "\x1b[201~";
 
-fn encode_paste(text: &str, mode: TermMode) -> Result<Vec<u8>, TuiError> {
+fn encode_paste(text: &str, bracketed: bool) -> Result<Vec<u8>, TuiError> {
     if text.contains(PASTE_START) || text.contains(PASTE_END) {
         return Err(TuiError::PasteRejected(
             "content contains bracketed-paste delimiters".to_string(),
         ));
     }
-    if mode.contains(TermMode::BRACKETED_PASTE) {
+    if bracketed {
         Ok(format!("{PASTE_START}{text}{PASTE_END}").into_bytes())
     } else {
         Ok(text.as_bytes().to_vec())
@@ -183,8 +210,8 @@ fn encode_paste(text: &str, mode: TermMode) -> Result<Vec<u8>, TuiError> {
 
 // -- focus ---------------------------------------------------------------
 
-fn encode_focus(focused: bool, mode: TermMode) -> Result<Vec<u8>, TuiError> {
-    if !mode.contains(TermMode::FOCUS_IN_OUT) {
+fn encode_focus(focused: bool, focus_events: bool) -> Result<Vec<u8>, TuiError> {
+    if !focus_events {
         return Err(TuiError::ModeNotEnabled(
             "focus tracking (DEC 1004) not enabled by the application",
         ));
@@ -206,14 +233,34 @@ fn button_code(b: MouseButton) -> u8 {
     }
 }
 
-/// Required live mode bits for one mouse action, plus the error text when
-/// the application has not enabled them.
-fn mouse_mode_gate(action: &MouseAction) -> (TermMode, &'static str) {
-    let any = TermMode::MOUSE_REPORT_CLICK | TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION;
-    let required: TermMode = match action {
+/// Required live mouse mode for one action, plus the error text when the
+/// application has not enabled it.
+fn mouse_mode_gate(action: &MouseAction) -> (fn(MouseProtocolMode) -> bool, &'static str) {
+    /// Any reporting mode (1000/1002/1003) satisfies press/release/wheel.
+    fn any(mode: MouseProtocolMode) -> bool {
+        !matches!(mode, MouseProtocolMode::None)
+    }
+    /// Full motion (1003) satisfies hover.
+    fn motion(mode: MouseProtocolMode) -> bool {
+        matches!(
+            mode,
+            MouseProtocolMode::AnyEvent | MouseProtocolMode::AnyMotion
+        )
+    }
+    /// Drag (1002) or motion (1003) satisfies a held move.
+    fn drag_or_motion(mode: MouseProtocolMode) -> bool {
+        matches!(
+            mode,
+            MouseProtocolMode::PressRelease
+                | MouseProtocolMode::ButtonMotion
+                | MouseProtocolMode::AnyEvent
+                | MouseProtocolMode::AnyMotion
+        )
+    }
+    let gate: fn(MouseProtocolMode) -> bool = match action {
         MouseAction::Press(_) | MouseAction::Release | MouseAction::Wheel(_) => any,
-        MouseAction::Move { held: None } => TermMode::MOUSE_MOTION,
-        MouseAction::Move { held: Some(_) } => TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION,
+        MouseAction::Move { held: None } => motion,
+        MouseAction::Move { held: Some(_) } => drag_or_motion,
     };
     let what = match action {
         MouseAction::Press(_) | MouseAction::Release | MouseAction::Wheel(_) => {
@@ -226,7 +273,7 @@ fn mouse_mode_gate(action: &MouseAction) -> (TermMode, &'static str) {
             "mouse drag reporting (DEC 1002/1003) not enabled by the application"
         }
     };
-    (required, what)
+    (gate, what)
 }
 
 fn encode_mouse(
@@ -234,7 +281,7 @@ fn encode_mouse(
     x: u16,
     y: u16,
     mods: MouseMods,
-    term_mode: TermMode,
+    view: &ModeView,
     cols: usize,
     rows: usize,
 ) -> Result<Vec<u8>, TuiError> {
@@ -243,8 +290,8 @@ fn encode_mouse(
             "mouse ({x},{y}) outside {cols}x{rows} grid"
         )));
     }
-    let (required, what) = mouse_mode_gate(action);
-    if !term_mode.intersects(required) {
+    let (gate, what) = mouse_mode_gate(action);
+    if !gate(view.mouse_mode) {
         return Err(TuiError::ModeNotEnabled(what));
     }
 
@@ -270,7 +317,7 @@ fn encode_mouse(
     let cx = u32::from(x) + 1;
     let cy = u32::from(y) + 1;
 
-    if term_mode.contains(TermMode::SGR_MOUSE) {
+    if view.mouse_encoding == MouseProtocolEncoding::Sgr {
         let marker = if matches!(action, MouseAction::Release) {
             'm'
         } else {
@@ -278,7 +325,7 @@ fn encode_mouse(
         };
         return Ok(format!("\x1b[<{cb};{cx};{cy}{marker}").into_bytes());
     }
-    if term_mode.contains(TermMode::UTF8_MOUSE) {
+    if view.mouse_encoding == MouseProtocolEncoding::Utf8 {
         let mut out = b"\x1b[M".to_vec();
         for v in [cb + 32, cx + 32, cy + 32] {
             let ch = char::from_u32(v).ok_or_else(|| {
@@ -289,7 +336,8 @@ fn encode_mouse(
         }
         return Ok(out);
     }
-    // Legacy X10: single bytes, coordinates must fit.
+    // Legacy X10: single bytes, coordinates must fit. Urxvt (1015) maps
+    // here too: the canonical vocabulary has no urxvt encoding.
     for (v, name) in [(cb + 32, "button"), (cx + 32, "x"), (cy + 32, "y")] {
         if v > 255 {
             return Err(TuiError::InvalidInput(format!(

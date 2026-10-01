@@ -40,8 +40,9 @@ impl std::fmt::Display for ExitStatus {
     }
 }
 
-impl From<portable_pty::ExitStatus> for ExitStatus {
-    fn from(s: portable_pty::ExitStatus) -> Self {
+#[cfg(unix)]
+impl From<termpane::process::ExitStatus> for ExitStatus {
+    fn from(s: termpane::process::ExitStatus) -> Self {
         Self {
             code: s.exit_code(),
             signal: s.signal().map(str::to_string),
@@ -92,22 +93,15 @@ impl ExitWait {
     }
 }
 
-/// True when a process with `pid` exists (Unix: `kill -0` exit status).
-/// EPERM targets (a live process owned by another user) read as absent;
-/// callers only probe owned children, where EPERM cannot occur.
+/// True when a process with `pid` exists (Unix: `kill(pid, 0)` via the
+/// backend). EPERM targets (a live process owned by another user) read as
+/// alive; unreaped zombies count as alive; pid 0 reads as absent.
+/// Callers only probe owned children, where EPERM cannot occur.
 /// Used to assert teardown reaped the child.
 #[cfg(unix)]
 #[must_use]
 pub fn process_exists(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    // No libc: `kill -0` (the workspace forbids `unsafe`).
-    std::process::Command::new("kill")
-        .arg("-0")
-        .arg(pid.to_string())
-        .status()
-        .is_ok_and(|s| s.success())
+    termpane::process::pid_alive(pid)
 }
 
 /// Non-Unix stub.

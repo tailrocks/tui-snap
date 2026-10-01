@@ -1,12 +1,16 @@
-//! Worker thread: sole owner of `Term`, writer, and child.
+//! Worker thread: sole owner of the emulator grid, writer, and child.
 
+#[cfg(not(unix))]
+use std::sync::mpsc;
+#[cfg(unix)]
 use std::sync::{Arc, mpsc};
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
-use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::term::{Config as TermConfig, Term};
-use portable_pty::{Child as PtyChild, MasterPty};
+#[cfg(unix)]
+use termpane::process::ExitStatus as TermExitStatus;
+#[cfg(unix)]
+use termpane::pty::{Master, PtyChild};
 use tuiscotti_core::locate::{Locator, Span};
 use tuiscotti_core::screen::Observation;
 
@@ -14,8 +18,11 @@ use crate::bound_locator::ActionError;
 
 use super::error::TuiError;
 use super::input_types::{Key, KeyEventKind, KeyMods, MouseButton, MouseMods, Signal, Wheel};
+#[cfg(unix)]
 use super::limits::{COALESCE_BYTES, KILL_GRACE, PTY_LIFECYCLE, WORKER_TICK};
+#[cfg(unix)]
 use super::shared::Shared;
+#[cfg(unix)]
 use super::worker_ctx::WorkerCtx;
 
 #[derive(Debug)]
@@ -91,43 +98,13 @@ pub(crate) enum CtlOp {
     Shutdown,
 }
 
-pub(crate) struct WorkerDims {
-    pub(crate) cols: usize,
-    pub(crate) rows: usize,
-}
-
-impl GridDims for WorkerDims {
-    fn total_lines(&self) -> usize {
-        self.rows
-    }
-    fn screen_lines(&self) -> usize {
-        self.rows
-    }
-    fn columns(&self) -> usize {
-        self.cols
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct QueueListener {
-    tx: mpsc::Sender<Event>,
-}
-
-impl EventListener for QueueListener {
-    fn send_event(&self, event: Event) {
-        // The worker owns the receiver and outlives the emulator, so this
-        // only fails during teardown races; the event is then moot.
-        if self.tx.send(event).is_err() {
-            // Worker gone; the event has no consumer.
-        }
-    }
-}
-
+#[cfg(unix)]
 pub(crate) struct WorkerEventState {
     pub(crate) title: Option<String>,
     pub(crate) bells: u64,
 }
 
+#[cfg(unix)]
 impl WorkerEventState {
     pub(crate) fn new() -> Self {
         Self {
@@ -137,12 +114,12 @@ impl WorkerEventState {
     }
 }
 
-/// Owned worker inputs: PTY handles, emulator config, and channels.
+/// Owned worker inputs: PTY handles and channels.
+#[cfg(unix)]
 pub(crate) struct WorkerParams {
-    pub(crate) master: Box<dyn MasterPty + Send>,
-    pub(crate) child: Box<dyn PtyChild + Send + Sync>,
+    pub(crate) master: Master,
+    pub(crate) child: PtyChild,
     pub(crate) writer: super::encode::WriteHandle,
-    pub(crate) term_config: TermConfig,
     pub(crate) cols: u16,
     pub(crate) rows: u16,
     pub(crate) pid: Option<u32>,
@@ -151,12 +128,12 @@ pub(crate) struct WorkerParams {
     pub(crate) shared: Arc<Shared>,
 }
 
+#[cfg(unix)]
 pub(crate) fn run_worker(p: WorkerParams) {
     let WorkerParams {
         master,
         child,
         writer,
-        term_config,
         cols,
         rows,
         pid,
@@ -164,13 +141,8 @@ pub(crate) fn run_worker(p: WorkerParams) {
         ctl_rx,
         shared,
     } = p;
-    let (event_tx, event_rx) = mpsc::channel::<Event>();
-    let dims = WorkerDims {
-        cols: cols as usize,
-        rows: rows as usize,
-    };
-    let term = Term::new(term_config, &dims, QueueListener { tx: event_tx });
-    let mut ctx = WorkerCtx::new(term, event_rx, writer, pid, shared, master, child);
+    let grid = termpane::DamageGrid::new(rows, cols, LIVE_SCROLLBACK);
+    let mut ctx = WorkerCtx::new(grid, writer, pid, shared, master, child);
     ctx.publish_initial(cols, rows);
 
     loop {
@@ -198,7 +170,14 @@ pub(crate) fn run_worker(p: WorkerParams) {
     }
 }
 
+/// Scrollback rows retained by the live emulator. The live path never
+/// reads scrollback (snapshots report it as `Unsupported`); 10000
+/// preserves the old live backend's default.
+#[cfg(unix)]
+const LIVE_SCROLLBACK: usize = 10_000;
+
 /// Dispatch one op; returns true when the loop must exit.
+#[cfg(unix)]
 fn dispatch(
     ctx: &mut WorkerCtx,
     op: Op,
@@ -235,6 +214,7 @@ fn dispatch(
 }
 
 /// Dispatch one op without coalescing; true requests loop exit.
+#[cfg(unix)]
 fn dispatch_one(
     ctx: &mut WorkerCtx,
     op: Op,
@@ -272,18 +252,9 @@ fn dispatch_one(
     }
 }
 
-pub(crate) fn cols_of<T: EventListener>(term: &Term<T>) -> u16 {
-    u16::try_from(term.columns().min(usize::from(u16::MAX))).unwrap_or(u16::MAX)
-}
-
-pub(crate) fn rows_of<T: EventListener>(term: &Term<T>) -> u16 {
-    u16::try_from(term.screen_lines().min(usize::from(u16::MAX))).unwrap_or(u16::MAX)
-}
-
 /// Best-effort child poll under the lifecycle guard.
-pub(crate) fn poll_child(
-    child: &mut Box<dyn PtyChild + Send + Sync>,
-) -> Option<portable_pty::ExitStatus> {
+#[cfg(unix)]
+pub(crate) fn poll_child(child: &mut PtyChild) -> Option<TermExitStatus> {
     let _guard = PTY_LIFECYCLE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -293,7 +264,8 @@ pub(crate) fn poll_child(
 /// Bounded kill + reap. Each child operation runs under the lifecycle
 /// guard; the guard is released while sleeping so teardown never blocks an
 /// unrelated session's spawn. Records teardown errors instead of failing.
-pub(crate) fn shutdown_child(child: &mut Box<dyn PtyChild + Send + Sync>, shared: &Shared) {
+#[cfg(unix)]
+pub(crate) fn shutdown_child(child: &mut PtyChild, shared: &Shared) {
     {
         let _guard = PTY_LIFECYCLE
             .lock()

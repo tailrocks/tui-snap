@@ -6,7 +6,7 @@
 //! Readers use [`Mods::effective_underline_style`] so legacy `underline=true`
 //! cells and new styled cells agree.
 //!
-//! The emulator (vte/alacritty) already parses `4`, `4:0..4:5`, `24`, `58…`,
+//! The emulator (termpane) already parses `4`, `4:0..4:5`, `24`, `58…`,
 //! `59`; these tests pin that the replay adapters surface the style flags +
 //! underline color, that the ratatui adapter maps what upstream exposes
 //! (UNDERLINED bit → Single, `underline_color` field), that canonical

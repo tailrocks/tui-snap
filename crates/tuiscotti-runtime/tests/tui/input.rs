@@ -279,16 +279,6 @@ fn profile_beyond_backend_rejected() {
         .spawn()
         .expect_err("spawn must fail");
     assert!(matches!(err, TuiError::Unsupported(_)), "got {err}");
-
-    let profile = TerminalProfile {
-        cell_blink: true,
-        ..TerminalProfile::default()
-    };
-    let err = Tui::new(["/bin/cat"])
-        .profile(profile)
-        .spawn()
-        .expect_err("spawn must fail");
-    assert!(matches!(err, TuiError::Unsupported(_)), "got {err}");
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! Owned PTY session runtime (backlog R06, R07, R08, R10, R11-core).
 //!
-//! Backend: `portable-pty` 0.9 (PTY owner) + `alacritty_terminal` 0.26
-//! (emulator), per `docs/PTY-BACKENDS.md`. No vendored engine, no git-only
+//! Backend: released `termpane` from crates.io (PTY transport + process +
+//! damage-grid emulator, Unix only). No vendored engine, no git-only
 //! crates, no fallback backend.
 //!
 //! ## Thread model (R06, R07)
@@ -10,8 +10,8 @@
 //!
 //! - a **reader thread** that blocks on the PTY master and forwards byte
 //!   batches to the worker over the op channel;
-//! - a **worker thread** that owns the `alacritty_terminal::Term` and the
-//!   child handle. ALL `Term` access happens on this thread. The session
+//! - a **worker thread** that owns the emulator grid and the child
+//!   handle. ALL grid access happens on this thread. The session
 //!   handle only sends ops and receives replies over channels;
 //! - a **writer thread** that owns the raw PTY writer and serves the
 //!   worker's acknowledged write requests, so a child that stops reading
@@ -38,7 +38,7 @@
 //! Text, typed chords ([`parse_chord`] + [`Key`]), raw bytes,
 //! press/down/repeat/up ([`KeyEventKind`]), negotiated bracketed paste,
 //! mouse click/hover/drag/wheel, focus, resize, and signals. Encodings are
-//! derived from the live `TermMode`: mouse/focus input is refused when the
+//! derived from the live grid modes: mouse/focus input is refused when the
 //! application has not enabled the corresponding mode, and releases need the
 //! kitty keyboard protocol. Shell sessions and paste edge cases belong to a
 //! later agent.
@@ -51,10 +51,13 @@
 
 mod builder;
 mod capture;
+#[cfg(unix)]
 mod encode;
+#[cfg(unix)]
 mod encode_key;
 mod error;
 mod exit;
+#[cfg(unix)]
 mod frame;
 mod input_types;
 mod limits;
@@ -63,10 +66,12 @@ mod session;
 mod session_input;
 mod session_teardown;
 mod shared;
+#[cfg(unix)]
 mod spawn;
 #[cfg(test)]
 mod tests;
 mod worker;
+#[cfg(unix)]
 mod worker_ctx;
 
 pub use builder::Tui;

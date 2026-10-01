@@ -1,7 +1,7 @@
 //! M09: pure-view external consumer proof.
 //!
 //! Builds against `tuiscotti` with `default-features = false`, so the `pty`
-//! feature (portable-pty, alacritty_terminal, libc) must NOT be required.
+//! feature (termpane) must NOT be required.
 //! Exercises only the always-available API: [`tuiscotti::Frame`] canonical
 //! data plus the [`tuiscotti::ratatui`] pure-view adapter (no PTY, no spawn).
 

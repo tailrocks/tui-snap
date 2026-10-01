@@ -2,17 +2,18 @@
 
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::sync::atomic::AtomicBool;
+#[cfg(unix)]
 use std::sync::{Arc, Mutex};
-
-use alacritty_terminal::term::Config as TermConfig;
-use portable_pty::CommandBuilder;
 
 use super::error::TuiError;
 use super::limits::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 use super::profile::TerminalProfile;
 use super::session::Session;
+#[cfg(unix)]
 use super::shared::Shared;
+#[cfg(unix)]
 use super::spawn::{StartedThreads, spawn_pty_child, start_session_threads};
 
 #[derive(Debug, Clone)]
@@ -130,8 +131,8 @@ impl Tui {
         self
     }
 
-    /// Initial PTY/emulator size. Backend limits: 2..=1000 columns,
-    /// 1..=1000 rows (static 1x1 screens stay valid outside the PTY path).
+    /// Initial PTY/emulator size. Backend limits: 1..=1000 columns,
+    /// 1..=1000 rows.
     #[must_use]
     pub fn size(mut self, cols: u16, rows: u16) -> Self {
         self.size = (cols, rows);
@@ -231,35 +232,41 @@ impl Tui {
             )));
         }
 
-        let cmd = self.prepare_command(&argv);
-        let spawned = spawn_pty_child(cmd, cols, rows)?;
-        let pid = spawned.pid;
-        let shared = Arc::new(Shared::new());
-        let term_config = TermConfig {
-            kitty_keyboard: self.profile.kitty_keyboard,
-            ..TermConfig::default()
-        };
-        let StartedThreads {
-            op_tx,
-            ctl_tx,
-            worker,
-            reader_thread,
-            writer_thread,
-        } = start_session_threads(spawned, term_config, cols, rows, Arc::clone(&shared))?;
+        #[cfg(not(unix))]
+        {
+            let _ = (&argv, cols, rows);
+            return Err(TuiError::Unsupported(
+                "pty sessions require a Unix platform",
+            ));
+        }
 
-        let session = Session {
-            op_tx: Mutex::new(Some(op_tx)),
-            ctl_tx: Mutex::new(Some(ctl_tx)),
-            shared,
-            worker: Mutex::new(Some(worker)),
-            reader: Mutex::new(Some(reader_thread)),
-            writer: Mutex::new(Some(writer_thread)),
-            closed: AtomicBool::new(false),
-            pid,
-        };
-        // The session is usable only once the worker published revision 0.
-        session.await_initial()?;
-        Ok(session)
+        #[cfg(unix)]
+        {
+            let params = self.prepare_command(&argv);
+            let spawned = spawn_pty_child(&params, cols, rows)?;
+            let pid = spawned.pid;
+            let shared = Arc::new(Shared::new());
+            let StartedThreads {
+                op_tx,
+                ctl_tx,
+                worker,
+                reader_thread,
+                writer_thread,
+            } = start_session_threads(spawned, cols, rows, Arc::clone(&shared))?;
+            let session = Session {
+                op_tx: Mutex::new(Some(op_tx)),
+                ctl_tx: Mutex::new(Some(ctl_tx)),
+                shared,
+                worker: Mutex::new(Some(worker)),
+                reader: Mutex::new(Some(reader_thread)),
+                writer: Mutex::new(Some(writer_thread)),
+                closed: AtomicBool::new(false),
+                pid,
+            };
+            // The session is usable only once the worker published revision 0.
+            session.await_initial()?;
+            Ok(session)
+        }
     }
 
     fn resolve_argv(&self) -> Result<Vec<OsString>, TuiError> {
@@ -269,30 +276,48 @@ impl Tui {
         }
     }
 
-    /// Build the child command: program args, child-only env (with a
+    /// Build the child spawn params: program args, child-only env (with a
     /// default `TERM` unless overridden or the environment was cleared),
     /// and the child cwd.
-    fn prepare_command(&self, argv: &[OsString]) -> CommandBuilder {
-        let mut cmd = CommandBuilder::new(&argv[0]);
-        for a in argv.iter().skip(1).chain(self.extra_args.iter()) {
-            cmd.arg(a);
-        }
+    ///
+    /// The builder records env ops in order, but the backend applies
+    /// clear-then-removals-then-overrides; folding keeps last-op-per-key
+    /// (an environment is a map, so only the last op per key is
+    /// observable) and the outcome is identical either way.
+    #[cfg(unix)]
+    fn prepare_command(&self, argv: &[OsString]) -> termpane::process::SpawnParams {
+        use std::collections::HashMap;
+        let mut params = termpane::process::SpawnParams::new(argv[0].as_os_str());
+        params = params.args(argv.iter().skip(1).chain(self.extra_args.iter()));
         if self.env_clear {
-            cmd.env_clear();
+            params = params.env_clear();
         }
+        let mut folded: HashMap<&OsStr, Option<&OsStr>> = HashMap::new();
         for (k, v) in &self.env {
+            folded.insert(k.as_os_str(), v.as_deref());
+        }
+        // `HashMap` iteration order is unspecified, but entries are keyed
+        // and each key appears once, so the resulting environment is
+        // deterministic regardless of order.
+        let mut term_set = false;
+        for (k, v) in &folded {
             match v {
-                Some(value) => cmd.env(k, value),
-                None => cmd.env_remove(k),
+                Some(value) => {
+                    if *k == OsStr::new("TERM") {
+                        term_set = true;
+                    }
+                    params = params.env(k, value);
+                }
+                None => params = params.env_remove(k),
             }
         }
-        if cmd.get_env("TERM").is_none() && !self.env_clear {
-            cmd.env("TERM", self.profile.term.clone());
+        if !term_set && !self.env_clear {
+            params = params.env("TERM", self.profile.term.clone());
         }
         if let Some(cwd) = &self.cwd {
-            cmd.cwd(cwd);
+            params = params.current_dir(cwd);
         }
-        cmd
+        params
     }
 }
 

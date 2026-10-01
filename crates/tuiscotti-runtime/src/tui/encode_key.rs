@@ -1,7 +1,5 @@
 //! Key encoding: kitty `CSI u` when negotiated, legacy xterm otherwise.
 
-use alacritty_terminal::term::TermMode;
-
 use super::error::TuiError;
 use super::input_types::{Key, KeyEventKind, KeyMods};
 
@@ -22,9 +20,9 @@ pub(crate) fn encode_key(
     key: &Key,
     mods: KeyMods,
     kind: KeyEventKind,
-    term_mode: TermMode,
+    kitty: bool,
+    app_cursor: bool,
 ) -> Result<Option<Vec<u8>>, TuiError> {
-    let kitty = term_mode.intersects(TermMode::KITTY_KEYBOARD_PROTOCOL);
     if kitty && let Some(bytes) = encode_key_kitty(key, mods, kind)? {
         return Ok(Some(bytes));
     }
@@ -34,7 +32,7 @@ pub(crate) fn encode_key(
         // Legacy encodings cannot represent releases: successful no-op.
         return Ok(None);
     }
-    Ok(Some(encode_key_legacy(key, mods, term_mode)?))
+    Ok(Some(encode_key_legacy(key, mods, app_cursor)?))
 }
 
 /// Kitty `CSI u` encoding for text keys (`Enter`/`Tab`/`Backspace`/`Escape`
@@ -63,7 +61,7 @@ fn encode_key_kitty(
     Ok(Some(format!("\x1b[{codepoint};{m}u{event}").into_bytes()))
 }
 
-fn encode_key_legacy(key: &Key, mods: KeyMods, term_mode: TermMode) -> Result<Vec<u8>, TuiError> {
+fn encode_key_legacy(key: &Key, mods: KeyMods, app_cursor: bool) -> Result<Vec<u8>, TuiError> {
     // Alt-only chords prefix ESC; richer modifier mixes use CSI params or
     // CSI-u, which cannot combine with a bare ESC prefix.
     let alt_only = mods.alt && !mods.ctrl && !mods.shift && !mods.ext.sup;
@@ -72,7 +70,6 @@ fn encode_key_legacy(key: &Key, mods: KeyMods, term_mode: TermMode) -> Result<Ve
             "super modifier needs the kitty keyboard protocol",
         ));
     }
-    let app_cursor = term_mode.contains(TermMode::APP_CURSOR);
 
     match key {
         Key::Char(c) => legacy_char_key(*c, mods, alt_only),

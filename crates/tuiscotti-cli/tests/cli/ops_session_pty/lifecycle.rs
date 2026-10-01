@@ -154,10 +154,10 @@ fn pty_geometry_pairs_and_ranges() {
     )
     .expect("start");
     assert_eq!(code(&out), Some(2), "{}", stdout(&out));
-    // Out-of-range geometry never spawns.
+    // Out-of-range geometry never spawns (one column is valid now).
     let out = run_cli(
         &[
-            "session", "start", "--pty", "--name", "bad3", "--cols", "1", "--rows", "1", "--",
+            "session", "start", "--pty", "--name", "bad3", "--cols", "0", "--rows", "1", "--",
             "true",
         ],
         &env,

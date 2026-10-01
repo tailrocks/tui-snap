@@ -1,89 +1,85 @@
 use std::collections::HashSet;
 
-use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::Dimensions as GridDims;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::term::cell::Flags as CellFlags;
-use alacritty_terminal::term::{Term, TermMode};
-use alacritty_terminal::vte::ansi::{NamedColor, Rgb as VteRgb};
+use termpane::DamageGrid;
+use termpane::cell::Cell as TermCell;
+use termpane::grid::{MouseProtocolEncoding, MouseProtocolMode};
+use termpane::snapshot::{GridSnapshot, SnapCell};
 
-use super::{DefaultColors, Hyperlink, REPLAY_HISTORY, ReplayEvents, TermSnapshot};
+use super::{DefaultColors, Hyperlink, ReplayEvents, TermSnapshot};
 use tuiscotti_core::frame::Rgb;
 use tuiscotti_core::screen::Maybe;
 
 /// Cap on hyperlinks collected from one replay.
 const MAX_REPLAY_LINKS: usize = 1024;
 
-fn replay_modes(mode: TermMode) -> Vec<u16> {
+fn replay_modes(grid: &DamageGrid) -> Vec<u16> {
     let mut out = Vec::new();
-    let mut push = |flag: TermMode, n: u16| {
-        if mode.contains(flag) {
-            out.push(n);
-        }
-    };
-    push(TermMode::APP_CURSOR, 1);
-    push(TermMode::INSERT, 4);
-    push(TermMode::ORIGIN, 6);
-    push(TermMode::LINE_WRAP, 7);
-    push(TermMode::LINE_FEED_NEW_LINE, 20);
-    push(TermMode::APP_KEYPAD, 66);
-    push(TermMode::MOUSE_REPORT_CLICK, 1000);
-    push(TermMode::MOUSE_DRAG, 1002);
-    push(TermMode::MOUSE_MOTION, 1003);
-    push(TermMode::FOCUS_IN_OUT, 1004);
-    push(TermMode::UTF8_MOUSE, 1005);
-    push(TermMode::SGR_MOUSE, 1006);
-    push(TermMode::ALT_SCREEN, 1049);
-    push(TermMode::BRACKETED_PASTE, 2004);
-    if mode.intersects(TermMode::KITTY_KEYBOARD_PROTOCOL) {
+    if grid.application_cursor() {
+        out.push(1);
+    }
+    // Backend gap (O5): modes 4 (IRM), 6 (DECOM), and 20 (LNM) are
+    // absorbed untracked, so they never appear here.
+    if grid.autowrap() {
+        out.push(7);
+    }
+    if grid.application_keypad() {
+        out.push(66);
+    }
+    match grid.mouse_protocol_mode() {
+        MouseProtocolMode::None => {}
+        MouseProtocolMode::Press => out.push(1000),
+        MouseProtocolMode::PressRelease | MouseProtocolMode::ButtonMotion => out.push(1002),
+        MouseProtocolMode::AnyEvent | MouseProtocolMode::AnyMotion => out.push(1003),
+    }
+    if grid.focus_events() {
+        out.push(1004);
+    }
+    match grid.mouse_protocol_encoding() {
+        // Urxvt (1015) is absorbed for parity: the old backend never
+        // reported it, so reporting it now would be a new observable.
+        MouseProtocolEncoding::Default | MouseProtocolEncoding::Urxvt => {}
+        MouseProtocolEncoding::Utf8 => out.push(1005),
+        MouseProtocolEncoding::Sgr => out.push(1006),
+    }
+    if grid.alternate_screen() {
+        out.push(1049);
+    }
+    if grid.bracketed_paste() {
+        out.push(2004);
+    }
+    if grid.kitty_kb_flags() != 0 {
         out.push(57399);
     }
     out
 }
 
-fn vte_to_rgb(c: VteRgb) -> Rgb {
-    Rgb {
-        r: c.r,
-        g: c.g,
-        b: c.b,
-    }
-}
-
 /// Full terminal state from a replayed emulator: everything is `Known`.
-pub(crate) fn build_replay_state<T: EventListener>(
-    term: &Term<T>,
+pub(crate) fn build_replay_state(
+    grid: &DamageGrid,
+    snapshot: &GridSnapshot,
     events: &ReplayEvents,
     cols: u16,
 ) -> TermSnapshot {
-    let palette: Vec<(u8, Rgb)> = (0..256u16)
-        .filter_map(|i| {
-            term.colors()[usize::from(i)]
-                .map(|c| (u8::try_from(i).unwrap_or(u8::MAX), vte_to_rgb(c)))
-        })
-        .collect();
-    let defaults = DefaultColors {
-        fg: term.colors()[NamedColor::Foreground].map(vte_to_rgb),
-        bg: term.colors()[NamedColor::Background].map(vte_to_rgb),
-    };
-    let history = term
-        .total_lines()
-        .saturating_sub(term.screen_lines())
-        .min(REPLAY_HISTORY);
-    let grid = term.grid();
-    let mut scrollback = Vec::with_capacity(history);
-    for h in (0..history).rev() {
-        let back = i32::try_from(h).unwrap_or(i32::MAX);
-        scrollback.push(replay_line_text(grid, Line(-back - 1), cols));
+    // Backend gap (O6): the emulator drops OSC 4, so no palette overrides
+    // are ever observed; assertion helpers resolve every index to the
+    // nominal xterm default.
+    let palette: Vec<(u8, Rgb)> = Vec::new();
+    // Backend gap (O7): OSC 10/11 set forms are dropped, so program-set
+    // defaults are unobservable; `None` = terminal default.
+    let defaults = DefaultColors { fg: None, bg: None };
+    let sb_len = grid.scrollback_len();
+    let sb_rows = grid.scrollback_rows_at_offset(sb_len, sb_len);
+    let mut scrollback = Vec::with_capacity(sb_rows.len());
+    for row in &sb_rows {
+        scrollback.push(replay_line_text(row, cols));
     }
     let mut seen = HashSet::new();
     let mut hyperlinks = Vec::new();
-    for h in (0..history).rev() {
-        let back = i32::try_from(h).unwrap_or(i32::MAX);
-        collect_links(grid, Line(-back - 1), cols, &mut seen, &mut hyperlinks);
+    for row in &sb_rows {
+        collect_links_cells(row, &mut seen, &mut hyperlinks);
     }
-    for y in 0..term.screen_lines() {
-        let row = i32::try_from(y).unwrap_or(i32::MAX);
-        collect_links(grid, Line(row), cols, &mut seen, &mut hyperlinks);
+    for row in &snapshot.cells {
+        collect_links_snap(row, &mut seen, &mut hyperlinks);
     }
     TermSnapshot {
         title: match &events.title {
@@ -91,7 +87,7 @@ pub(crate) fn build_replay_state<T: EventListener>(
             None => Maybe::Unknown,
         },
         bells: Maybe::Known(events.bells),
-        modes: Maybe::Known(replay_modes(*term.mode())),
+        modes: Maybe::Known(replay_modes(grid)),
         palette: Maybe::Known(palette),
         defaults: Maybe::Known(defaults),
         clipboard: Maybe::Known(events.clipboard.clone()),
@@ -100,48 +96,54 @@ pub(crate) fn build_replay_state<T: EventListener>(
     }
 }
 
-fn replay_line_text(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
-    line: Line,
-    cols: u16,
-) -> String {
+fn replay_line_text(row: &[TermCell], cols: u16) -> String {
     let mut s = String::new();
-    for x in 0..cols {
-        let cell = &grid[line][Column(x as usize)];
-        if cell
-            .flags
-            .intersects(CellFlags::WIDE_CHAR_SPACER | CellFlags::LEADING_WIDE_CHAR_SPACER)
-        {
+    for cell in row.iter().take(cols as usize) {
+        if cell.is_wide_continuation {
             continue;
         }
-        s.push(cell.c);
-        if let Some(extra) = cell.zerowidth() {
-            s.extend(extra.iter());
+        if cell.contents().is_empty() {
+            s.push(' ');
+        } else {
+            s.push_str(cell.contents());
         }
     }
     s.trim_end().to_string()
 }
 
-fn collect_links(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
-    line: Line,
-    cols: u16,
-    seen: &mut HashSet<String>,
-    out: &mut Vec<Hyperlink>,
-) {
+fn collect_links_cells(row: &[TermCell], seen: &mut HashSet<String>, out: &mut Vec<Hyperlink>) {
     if out.len() >= MAX_REPLAY_LINKS {
         return;
     }
-    for x in 0..cols {
+    for cell in row {
         if out.len() >= MAX_REPLAY_LINKS {
             return;
         }
-        let cell = &grid[line][Column(x as usize)];
-        if let Some(link) = cell.hyperlink() {
-            let uri = link.uri().to_string();
-            if seen.insert(uri.clone()) {
-                out.push(Hyperlink { uri });
-            }
+        if let Some(link) = cell.hyperlink.as_ref() {
+            push_link_uri(&link.uri, seen, out);
         }
+    }
+}
+
+fn collect_links_snap(row: &[SnapCell], seen: &mut HashSet<String>, out: &mut Vec<Hyperlink>) {
+    if out.len() >= MAX_REPLAY_LINKS {
+        return;
+    }
+    for cell in row {
+        if out.len() >= MAX_REPLAY_LINKS {
+            return;
+        }
+        if let Some(uri) = cell.hyperlink_uri.as_deref() {
+            push_link_uri(uri, seen, out);
+        }
+    }
+}
+
+/// One hyperlink URI, deduplicated by URI with the replay cap.
+fn push_link_uri(uri: &str, seen: &mut HashSet<String>, out: &mut Vec<Hyperlink>) {
+    if !uri.is_empty() && seen.insert(uri.to_string()) {
+        out.push(Hyperlink {
+            uri: uri.to_string(),
+        });
     }
 }

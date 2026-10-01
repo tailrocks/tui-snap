@@ -36,7 +36,9 @@
 
 mod guardian;
 mod replay_api;
+#[cfg(unix)]
 mod replay_screen;
+#[cfg(unix)]
 mod replay_state;
 mod shell;
 mod state;
@@ -44,7 +46,9 @@ mod unix;
 
 pub use guardian::*;
 pub use replay_api::*;
+#[cfg(unix)]
 pub(crate) use replay_screen::*;
+#[cfg(unix)]
 pub(crate) use replay_state::*;
 pub use shell::*;
 pub use state::*;

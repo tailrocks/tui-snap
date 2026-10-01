@@ -85,9 +85,18 @@ fn resize_changes_grid() {
     s.resize(40, 10).expect("resize succeeds");
     let snap = s.snapshot().expect("snapshot succeeds");
     assert_eq!((snap.cols(), snap.rows()), (40, 10));
-    assert!(s.resize(1, 10).is_err());
+    // E3: one column is a valid backend size now.
+    s.resize(1, 10).expect("single-column resize succeeds");
+    let snap = s.snapshot().expect("snapshot succeeds");
+    assert_eq!((snap.cols(), snap.rows()), (1, 10));
     assert!(s.resize(40, 0).is_err());
     s.close().expect("close succeeds");
+}
+
+#[test]
+fn process_exists_pid_zero_is_absent() {
+    // T9 pin: pid 0 never addresses a process (it would address a group).
+    assert!(!process_exists(0));
 }
 
 #[test]

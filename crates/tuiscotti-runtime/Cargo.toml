@@ -11,7 +11,7 @@ repository.workspace = true
 default = ["pty"]
 # PTY runtime (`tui` module). Pure view tests build and run with
 # `--no-default-features`.
-pty = ["dep:portable-pty", "dep:alacritty_terminal", "dep:libc"]
+pty = ["dep:termpane"]
 # Test-only process-global overrides (F12): `set_runtime_dir_override`
 # exists only with this feature (or `cfg(test)`). Production builds must
 # never enable it; production code resolves the runtime dir from the
@@ -25,9 +25,10 @@ base64.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-portable-pty = { workspace = true, optional = true }
-alacritty_terminal = { workspace = true, optional = true }
-libc = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+# termpane process/pty are Unix-only; non-Unix builds keep the stubs (E2).
+termpane = { workspace = true, optional = true }
 
 [lints]
 workspace = true

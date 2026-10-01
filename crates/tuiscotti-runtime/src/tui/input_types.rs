@@ -242,11 +242,11 @@ pub enum Signal {
 impl Signal {
     pub(crate) fn number(self) -> i32 {
         match self {
-            Signal::Int => libc::SIGINT,
-            Signal::Term => libc::SIGTERM,
-            Signal::Kill => libc::SIGKILL,
-            Signal::Quit => libc::SIGQUIT,
-            Signal::Hup => libc::SIGHUP,
+            Signal::Int => termpane::process::SIGINT,
+            Signal::Term => termpane::process::SIGTERM,
+            Signal::Kill => termpane::process::SIGKILL,
+            Signal::Quit => termpane::process::SIGQUIT,
+            Signal::Hup => termpane::process::SIGHUP,
             Signal::Custom(n) => n,
         }
     }

@@ -42,32 +42,17 @@ fn replay_chunk_invariance_all_split_points() {
 
 /// Capture real PTY output bytes (own minimal reader, bounded).
 fn capture_raw(argv0: &str, args: &[&str]) -> Result<Vec<u8>, String> {
-    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::Read;
-    let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows: 24,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("openpty failed: {e}"))?;
-    let mut cmd = CommandBuilder::new(argv0);
-    for a in args {
-        cmd.arg(a);
-    }
-    cmd.env("ENV", "/dev/null");
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("spawn_command failed: {e}"))?;
-    // Drop our slave handle before reading: a parent-held slave fd
-    // suppresses master EOF/EIO on Linux, blocking the reader forever
-    // after child exit (macOS returns regardless; Linux hung CI here).
-    drop(pair.slave);
-    let mut reader = pair
-        .master
+    let params = termpane::process::SpawnParams::new(argv0)
+        .args(args.iter())
+        .env("ENV", "/dev/null");
+    // One call: open + spawn + parent-slave-drop. Dropping our slave
+    // handle before reading matters: a parent-held slave fd suppresses
+    // master EOF/EIO on Linux, blocking the reader forever after child
+    // exit (macOS returns regardless; Linux hung CI here).
+    let (master, mut child) =
+        termpane::pty::spawn_pty(&params, 80, 24).map_err(|e| format!("spawn_pty failed: {e}"))?;
+    let mut reader = master
         .try_clone_reader()
         .map_err(|e| format!("try_clone_reader failed: {e}"))?;
     // Drain on a thread: a blocking PTY read cannot be preempted, so the

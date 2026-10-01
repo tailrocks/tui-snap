@@ -12,6 +12,7 @@
 
 #![cfg(feature = "pty")]
 #![cfg(debug_assertions)]
+#![cfg(unix)]
 
 use std::time::{Duration, Instant};
 
@@ -44,10 +45,14 @@ const REVISION_BOUND: u64 = FLOOD_BYTES.div_ceil(COALESCE_BYTES) * SLACK + 2 * O
 /// nothing.
 const PREFIX_REVISIONS: u64 = 31_000;
 
-/// Bounded drain deadline: the post-fix 248 MB flood drained in 0.22 s, so
-/// 16 MiB gets a 60 s ceiling — orders of magnitude of slack, still a real
-/// bound (a hung drain fails instead of hanging the suite).
-const DRAIN_DEADLINE: Duration = Duration::from_secs(60);
+/// Bounded drain deadline: the old-backend calibration (a 248 MB flood
+/// draining in 0.22 s) died with the termpane swap — the new emulator parses
+/// ~5x slower in debug (measured ~59 s alone / ~63 s loaded for this 16 MiB
+/// flood on a dev mac; the parse path, not the adapter, dominates). The
+/// ceiling is recalibrated to 300 s: still a real bound (a hung drain fails
+/// instead of hanging the suite) with headroom for loaded CI. The revision
+/// bound above is the structural pin and is unchanged.
+const DRAIN_DEADLINE: Duration = Duration::from_secs(300);
 
 #[test]
 fn saturating_flood_stays_revision_bounded_and_drains() {
