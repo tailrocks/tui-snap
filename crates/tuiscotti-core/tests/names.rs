@@ -31,9 +31,23 @@ fn rejects_escape_and_malformed_names() {
         "/",
         "a\\b",
         "\\server\\share",
+        "a\0b",
+        "\0",
+        "a\nb",
+        "a\tb",
+        "a\x07b",
+        "a\u{7f}b",
     ] {
         assert!(validate_name(name).is_err(), "must reject {name:?}");
     }
+    assert!(
+        validate_name(&"a".repeat(1025)).is_err(),
+        "must reject names over 1024 bytes"
+    );
+    assert!(
+        validate_name(&"a".repeat(1024)).is_ok(),
+        "must accept names of exactly 1024 bytes"
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! `bench_pty`: live-PTY fixture bench (JSONL, fixed 80x24).
 
-use tuiscotti_bench::driver::{parse_args, wants};
+use tuiscotti_bench::driver::{HelpText, parse_args, wants};
 use tuiscotti_bench::emit::Sink;
 use tuiscotti_bench::pty;
 
@@ -33,6 +33,10 @@ fn run() -> anyhow::Result<()> {
 
 fn main() {
     if let Err(e) = run() {
+        if let Some(help) = e.downcast_ref::<HelpText>() {
+            println!("{help}");
+            return;
+        }
         eprintln!("bench_pty: {e:?}");
         std::process::exit(1);
     }

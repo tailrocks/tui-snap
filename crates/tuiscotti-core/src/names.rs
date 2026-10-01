@@ -15,18 +15,29 @@ impl std::fmt::Display for InvalidName {
 impl std::error::Error for InvalidName {}
 
 /// Names are relative `/`-separated paths: no absolute paths, no `..` or
-/// `.` segments, no empty segments, no backslashes. Anything else would
-/// escape the store roots or fail to round-trip through recursive listing.
+/// `.` segments, no empty segments, no backslashes, no NUL or control
+/// characters, at most 1024 bytes total. Anything else would escape the
+/// store roots or fail to round-trip through recursive listing.
 ///
 /// # Errors
 ///
 /// Returns [`InvalidName`] when the name is empty, absolute, contains
-/// backslashes, or has an empty/`.`/`..` segment.
+/// backslashes, NUL, or control characters, exceeds 1024 bytes, or has
+/// an empty/`.`/`..` segment.
 pub fn validate_name(name: &str) -> Result<(), InvalidName> {
     use std::path::Path;
     let bad = |m: &str| InvalidName(format!("{name:?}: {m}"));
     if name.is_empty() {
         return Err(bad("empty name"));
+    }
+    if name.len() > 1024 {
+        return Err(bad("name exceeds 1024 bytes"));
+    }
+    if name.contains('\0') {
+        return Err(bad("NUL bytes are not allowed"));
+    }
+    if name.chars().any(char::is_control) {
+        return Err(bad("control characters are not allowed"));
     }
     if name.starts_with('/') || Path::new(name).is_absolute() {
         return Err(bad("absolute paths are not allowed"));

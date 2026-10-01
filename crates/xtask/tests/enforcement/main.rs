@@ -27,14 +27,26 @@ const FORBIDDEN_PY: &str = include_str!("forbidden.py.txt");
 /// Member manifest inheriting everything except `[lints]`.
 const MEMBER_NO_INHERIT: &str = include_str!("member_no_inherit.toml.txt");
 
-/// Fresh miniature-repo root for `case`, namespaced by process id.
+/// Per-process nonce (start-time nanos, captured once) so fixture dirs are
+/// unpredictable to other local users sharing `/tmp`.
+fn process_nonce() -> u128 {
+    static NONCE: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
+    *NONCE.get_or_init(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos())
+    })
+}
+
+/// Fresh miniature-repo root for `case`, namespaced by process id + nonce.
+///
+/// Exclusive leaf creation: a pre-planted path fails the test instead of
+/// being removed or followed (no `remove_dir_all`, no `create_dir_all`).
 fn fixture_root(case: &str) -> Result<PathBuf, String> {
     let pid = std::process::id();
-    let root = std::env::temp_dir().join(format!("tuiscotti-enforcement-{case}-{pid}"));
-    if root.exists() {
-        fs::remove_dir_all(&root).map_err(|error| format!("clean stale fixture: {error}"))?;
-    }
-    fs::create_dir_all(&root).map_err(|error| format!("create fixture root: {error}"))?;
+    let nonce = process_nonce();
+    let root = std::env::temp_dir().join(format!("tuiscotti-enforcement-{case}-{pid}-{nonce}"));
+    fs::create_dir(&root).map_err(|error| format!("create fixture root: {error}"))?;
     Ok(root)
 }
 
@@ -145,7 +157,11 @@ fn mise_alint_path() -> Result<PathBuf, String> {
     if dir.is_empty() {
         return Err("mise where alint printed no path".to_owned());
     }
-    let path = Path::new(dir).join("alint");
+    let dir_path = Path::new(dir);
+    if !dir_path.is_absolute() {
+        return Err(format!("mise where alint printed non-absolute path: {dir}"));
+    }
+    let path = dir_path.join("alint");
     if !path.is_file() {
         return Err(format!("mise alint binary missing at {}", path.display()));
     }

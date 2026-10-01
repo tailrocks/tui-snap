@@ -2,7 +2,7 @@
 //! both harness binaries parse through here, so malformed flags and
 //! missing `--out` must fail loudly instead of running a silent default.
 
-use tuiscotti_bench::driver::{parse_args, wants};
+use tuiscotti_bench::driver::{HelpText, parse_args, wants};
 
 fn argv(words: &[&str]) -> Vec<String> {
     words.iter().copied().map(str::to_string).collect()
@@ -46,6 +46,18 @@ fn defaults_select_all_scenarios_and_sizes() {
     assert_eq!(args.sizes, vec![0, 1, 2]);
     assert_eq!(args.samples, 100);
     assert!(wants(&args, "anything"));
+}
+
+#[test]
+fn help_returns_help_text_error_without_exiting() {
+    for flag in ["--help", "-h"] {
+        let err = parse_args(&argv(&["bench", flag]), "help", 100)
+            .expect_err("help must return, never process-exit");
+        let help = err
+            .downcast_ref::<HelpText>()
+            .expect("help error must downcast to HelpText");
+        assert_eq!(help.0, "help");
+    }
 }
 
 #[test]

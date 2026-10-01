@@ -26,11 +26,26 @@ pub struct Args {
     pub out: PathBuf,
 }
 
+/// `--help`/`-h` request: returned as an error so the library never
+/// process-exits; binaries downcast to [`HelpText`] to print + exit(0).
+#[derive(Debug)]
+pub struct HelpText(pub String);
+
+impl std::fmt::Display for HelpText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for HelpText {}
+
 /// Parse harness arguments.
 ///
 /// # Errors
 ///
 /// Returns an error when flags are malformed or `--out` is missing.
+/// `--help`/`-h` returns a [`HelpText`] error (downcast at the binary
+/// boundary to print the text and exit 0) instead of process-exiting.
 pub fn parse_args(argv: &[String], help: &str, samples: u32) -> anyhow::Result<Args> {
     let mut scenarios = vec!["all".to_string()];
     let mut sizes = vec!["all".to_string()];
@@ -49,8 +64,7 @@ pub fn parse_args(argv: &[String], help: &str, samples: u32) -> anyhow::Result<A
     while i < argv.len() {
         let key = argv[i].as_str();
         if key == "--help" || key == "-h" {
-            println!("{help}");
-            std::process::exit(0);
+            return Err(anyhow::Error::new(HelpText(help.to_string())));
         }
         if key == "--quick" {
             parsed.samples = samples / 4;

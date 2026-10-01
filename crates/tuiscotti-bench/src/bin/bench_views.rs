@@ -1,6 +1,6 @@
 //! `bench_views`: in-process capture/render/compare micro-bench (JSONL).
 
-use tuiscotti_bench::driver::{parse_args, wants};
+use tuiscotti_bench::driver::{HelpText, parse_args, wants};
 use tuiscotti_bench::emit::Sink;
 use tuiscotti_bench::{views, views_cache};
 
@@ -36,6 +36,10 @@ fn run() -> anyhow::Result<()> {
 
 fn main() {
     if let Err(e) = run() {
+        if let Some(help) = e.downcast_ref::<HelpText>() {
+            println!("{help}");
+            return;
+        }
         eprintln!("bench_views: {e:?}");
         std::process::exit(1);
     }
