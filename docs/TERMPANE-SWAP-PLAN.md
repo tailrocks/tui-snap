@@ -21,7 +21,7 @@ see §2. Transitive is permitted; direct is banned.)
 > `alacritty_terminal` / `libc` deps; `cargo xtask deps` enforces).
 > The rest of this document is the pre-swap evidence record.
 
-## 0. External blocker — the swap cannot land yet
+## 0. External blocker — the swap cannot land yet (PRE-SWAP RECORD; cleared by F01 — termpane 0.1.0 released and integrated, merge `d996feb`)
 
 Two stacked facts, re-verified 2026-09-30:
 

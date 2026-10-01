@@ -31,12 +31,9 @@ Source of API truth: [TERMPANE-SWAP-PLAN.md](TERMPANE-SWAP-PLAN.md) (pinned to
 
 ## 3. Package version
 
-- **TBD-UNPUBLISHED** — `curl -A tui-snap-ci-check/1.0
-  https://crates.io/api/v1/crates/termpane` returns HTTP 404
-  `{"errors":[{"detail":"crate \`termpane\` does not exist"}]}`;
-  sparse index `https://index.crates.io/te/rm/termpane` also 404.
-- `Cargo.toml` on main says `0.1.0` (swap plan D10) — watch value
-  only, not a pin.
+- **RELEASED 0.1.0** — crates.io API HTTP 200, `max_version: 0.1.0`,
+  not yanked (verified 2026-10-01); consumer pins `=0.1.0` from the
+  registry (root `Cargo.toml:33`). Pre-release 404 record superseded.
 
 ## 4. Supported targets
 
@@ -55,9 +52,9 @@ Source of API truth: [TERMPANE-SWAP-PLAN.md](TERMPANE-SWAP-PLAN.md) (pinned to
 - Owned by the Velnor parallel team (upstream `tailrocks` owners
   hold publish rights; this project cannot self-publish — §0).
 - Velnor PR #1 "Velnor Actions V1 implementation (under
-  qualification)" (`docs/velnor-actions-spec` → `main`): head
-  `b2a0c56`, state OPEN/MERGEABLE, mergeStateStatus UNSTABLE
-  (`Plan` check FAILURE, rest SUCCESS/SKIPPED) — NOT qualified.
+  qualification)": head `d260e3f`, state OPEN (pointer refreshed
+  2026-10-01; prior `b2a0c56` UNSTABLE record superseded). The registry
+  release this handoff gated on has since shipped (see §3).
 - Tag / dry-run / CI-green ≠ registry proof. Proof is ONLY: HTTP 200
   from both URLs in §3 for the released version.
 
@@ -70,4 +67,4 @@ observe-revision, finish-kills-sleep, close-idempotent. Must re-run
 
 ## Gate status
 
-**BLOCKED ON REGISTRY RELEASE** (fresh curl 2026-09-30: crates.io 404).
+**RELEASED + LANDED** (2026-10-01: termpane 0.1.0 on crates.io; consumer integrated at `=0.1.0`, merged `d996feb`).
