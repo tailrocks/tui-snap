@@ -1,0 +1,44 @@
+[package]
+name = "tuiscotti-cli"
+version = "0.2.0"
+description = "Capture, inspect, sessions, render, diff, review, and report CLI for TUI snapshots"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tuiscotti"
+path = "src/main.rs"
+# The bin shares its name with the `tuiscotti` facade lib; documenting both
+# collides at target/doc/tuiscotti/index.html (cargo#6313). The bin carries no
+# library API, so only the lib is documented.
+doc = false
+
+# No required-features: the binary always builds. Offline commands (inspect,
+# render, diff, review, accept, report, import, trace) work without `pty`;
+# PTY-backed machine ops report `unsupported` instead.
+[features]
+default = ["pty"]
+pty = ["tuiscotti/pty"]
+
+[dependencies]
+# default-features = false: without the CLI `pty` feature this must not
+# compile the terminal runtime (offline render/diff/report/import only).
+tuiscotti = { version = "0.2.0", path = "../tuiscotti", default-features = false }
+clap.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+# Test-only: enables `tuiscotti::proto::set_runtime_dir_override` for the
+# in-process session tests (F12 `test-overrides`). Production builds never
+# see it. `default-features = false` mirrors the main dependency so the
+# `--no-default-features` lane stays PTY-free.
+tuiscotti = { version = "0.2.0", path = "../tuiscotti", default-features = false, features = ["test-overrides"] }
+
+[lints]
+workspace = true

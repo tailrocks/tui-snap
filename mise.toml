@@ -1,0 +1,82 @@
+# Tuiscotti mise tool pins. Target: <repo-root>/mise.toml
+# (root `mise.toml` matches both the Renovate `mise` manager file patterns and
+# the Velnor Rust-unit watch list `mise.toml`/`mise.lock`.)
+#
+# mr-boxington 1.20.0 = latest stable verified 2026-09-29 via
+# `mise ls-remote mr-boxington` (trailing entries ...1.18.0, 1.19.0, 1.20.0).
+# Pinned exact, never floating `latest` (G7).
+# rust 1.98.1 keeps the Mise pin consistent with rust-toolchain.toml
+# (`mise ls-remote rust` lists 1.98.1; `rust` is a mise core backend).
+# github:asamarts/alint 0.15.2 provisions the repo shape/line gate
+# (`mise run alint`, wired into CI via .velnor/config.toml custom_tasks).
+# github: (upstream release binaries) for alint/cargo-deny: exact same pinned
+# versions as the old cargo: source builds, but CI-fresh-runner installs
+# download binaries instead of compiling from source in every crate job.
+[tools]
+mr-boxington = "1.20.0"
+rust = "1.98.1"
+"github:asamarts/alint" = "0.15.2"
+"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.146"
+"github:EmbarkStudios/cargo-deny" = "0.20.2"
+
+[tasks.alint]
+description = "Repo shape and line gates: alint check at the repo root"
+run = "alint check"
+
+# CI gates. Tasks named in .velnor/config.toml [stacks.rust] custom_tasks run
+# as `mise run <name>` steps in every generated crate job (velnor-actions);
+# the rest remain locally runnable gates (ci-no-default and ci-msrv predate
+# native no-default configurations; velnor-actions cannot express per-PR
+# MSRV, so ci-msrv is the only MSRV vehicle — run it before release).
+# Tasks run online (no --offline): fresh CI runners have no cargo cache.
+# Every command below is verified locally.
+
+[tasks.ci-rustdoc]
+description = "Rustdoc gate: workspace docs build with warnings denied"
+run = 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked'
+
+[tasks.ci-no-default]
+description = "No-default gate: pure-view builds, lints, tests, and pty-free graph"
+run = [
+  "rustup component add clippy",
+  "cargo check --workspace --no-default-features --locked --all-targets",
+  "cargo clippy --workspace --no-default-features --locked --all-targets -- -D warnings",
+  "cargo nextest run --workspace --no-default-features --locked",
+  'out=$(cargo tree -p tuiscotti --no-default-features --locked --prefix none) || exit 1; printf "%s\n" "$out" | grep -q -E "portable-pty|alacritty_terminal|termpane" && exit 1 || true',
+]
+
+[tasks.ci-xtask-policy]
+description = "xtask umbrella: source policies (crates-only, scripts, line limits)"
+run = "cargo run -p xtask -- policy"
+
+[tasks.ci-xtask-deps]
+description = "xtask umbrella: dependency inspection (bans, git sources, lockfile)"
+run = "cargo run -p xtask -- deps"
+
+[tasks.ci-no-default-graph]
+description = "Pty-free negative guard: tuiscotti no-default graph must not contain portable-pty/alacritty_terminal/termpane (a green no-default build alone cannot catch a silently reintroduced pty dep)"
+run = 'out=$(cargo tree -p tuiscotti --no-default-features --locked --prefix none) || exit 1; printf "%s\\n" "$out" | grep -q -E "portable-pty|alacritty_terminal|termpane" && exit 1 || true'
+
+[tasks.ci-deny]
+description = "Dependency policy gate: cargo-deny advisories/bans/licenses/sources (pinned github:EmbarkStudios/cargo-deny)"
+run = "cargo deny check"
+
+[tasks.ci-check-all-features]
+description = "Feature-combination gate: workspace check+clippy under --all-features (covers the test-overrides combo, which is additive test-only API — test execution is identical under default features)"
+run = [
+  "cargo check --workspace --locked --all-targets --all-features",
+  "cargo clippy --workspace --locked --all-targets --all-features -- -D warnings",
+]
+
+[tasks.ci-package]
+description = "xtask umbrella: packaging dry-run for publishable members"
+run = "cargo run -p xtask -- package"
+
+[tasks.ci-msrv]
+description = "MSRV gate: 1.98.0 (the declared rust-version floor) builds and tests all"
+run = [
+  "rustup toolchain install 1.98.0 --profile minimal",
+  "rustup component add --toolchain 1.98.0 clippy",
+  "rustup run 1.98.0 cargo check --workspace --locked --all-targets --all-features",
+  "rustup run 1.98.0 cargo nextest run --workspace --locked --all-features",
+]

@@ -1,0 +1,22 @@
+[package]
+name = "tuiscotti-insta"
+version = "0.2.0"
+description = "Snapshot/screenshot assertion facade over Insta for TUI visual-regression testing"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+image.workspace = true
+insta.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

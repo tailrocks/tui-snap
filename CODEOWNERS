@@ -1,0 +1,10 @@
+# Tuiscotti CODEOWNERS. Target: <repo-root>/CODEOWNERS
+# (repo root, as required by the `required-files` alint rule; GitHub also
+# accepts docs/CODEOWNERS and .github/CODEOWNERS).
+#
+# Owner: @donbeave — verified 2026-09-29 via `gh api users/donbeave`
+# (login donbeave, name "Alexey Zhokhov", email alexey@zhokhov.com), sole
+# committer of all 82 commits on tailrocks/tui-snap
+# (`git log --format='%an <%ae>'`), matching local git identity.
+# No teams invented: a second owner may be added only with human confirmation.
+* @donbeave

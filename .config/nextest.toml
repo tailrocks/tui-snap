@@ -1,0 +1,32 @@
+# tuiscotti nextest configuration (N02-N10).
+# Default profile: plain `cargo nextest run` fast lane.
+# CI profile: no retries (failures stay visible), JUnit for evidence
+# correlation, leaky PTY tests fail instead of passing silently.
+
+[profile.default]
+fail-fast = false
+retries = 0
+
+[profile.ci]
+fail-fast = false
+retries = 0
+flaky-result = "fail"
+leak-timeout = { period = "500ms", result = "fail" }
+
+[profile.ci.junit]
+path = "junit.xml"
+
+[test-groups]
+# Genuinely scarce resource: concurrent PTY sessions. Only heavy PTY
+# binaries join this group (`runner` is env-map/context tests with no PTY
+# and must stay on the default lane). max-threads = 4 is a placeholder
+# pending measurement; the PTY benchmark suite (planned) will qualify it.
+terminal-e2e = { max-threads = 4 }
+
+[[profile.default.overrides]]
+filter = 'binary(tui) | binary(journey) | binary(flood) | binary(tui_shell) | binary(interaction_contracts)'
+test-group = 'terminal-e2e'
+
+[[profile.ci.overrides]]
+filter = 'binary(tui) | binary(journey) | binary(flood) | binary(tui_shell) | binary(interaction_contracts)'
+test-group = 'terminal-e2e'

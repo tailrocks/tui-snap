@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Tuiscotti external Renovate config (G7): Cargo + Mise + Rust-toolchain only, dashboard on, bounded concurrency, weekly lockfile maintenance, no automerge.",
+  "extends": ["config:recommended", ":maintainLockFilesWeekly"],
+  "enabledManagers": ["cargo", "mise", "rust-toolchain"],
+  "dependencyDashboard": true,
+  "automerge": false,
+  "prConcurrentLimit": 5,
+  "branchConcurrentLimit": 5,
+  "osvVulnerabilityAlerts": true,
+  "separateMajorMinor": true,
+  "packageRules": [
+    {
+      "description": "Terminal backend boundary: termpane updates always land alone for focused review.",
+      "matchManagers": ["cargo"],
+      "matchDepNames": ["termpane"],
+      "groupName": "termpane backend",
+      "automerge": false
+    },
+    {
+      "description": "Renderer/font/codec stack: pixel-sensitive, review together but apart from low-risk batches.",
+      "matchManagers": ["cargo"],
+      "matchDepNames": ["image", "image-compare", "fontdue"],
+      "groupName": "render-font-codec",
+      "automerge": false
+    },
+    {
+      "description": "Rust toolchain and Mise tool pins stay consistent; MSRV (rust-version) bumps remain manual and ride review on these PRs.",
+      "matchManagers": ["rust-toolchain", "mise"],
+      "groupName": "toolchain",
+      "automerge": false
+    },
+    {
+      "description": "Pre-1.0 crates can break on minor bumps; keep them out of the low-risk batch.",
+      "matchManagers": ["cargo"],
+      "matchCurrentVersion": "<1.0.0",
+      "groupName": "pre-1.0 crates",
+      "automerge": false
+    },
+    {
+      "description": "Major bumps for stable crates get their own PRs, never batched silently.",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "cargo major",
+      "automerge": false
+    }
+  ]
+}

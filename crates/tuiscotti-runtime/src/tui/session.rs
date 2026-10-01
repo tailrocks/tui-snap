@@ -1,0 +1,390 @@
+//! [`Session`] handle: observation and waits (R06, R07, R10).
+//!
+//! Input methods live in [`super::session_input`], teardown in
+//! [`super::session_teardown`].
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant};
+
+use tuiscotti_core::screen::{Observation, Screen};
+
+use super::error::{CancelToken, TuiError, WaitError};
+use super::exit::{ExitStatus, ExitWait};
+use super::limits::{DEFAULT_STABLE_QUIET, OP_SEND_TIMEOUT};
+use super::session_teardown::recv_reply;
+use super::shared::{SessionMeta, Shared};
+use super::worker::{CtlOp, Input, Op};
+
+/// Owned PTY session: the child, its emulator, and the I/O threads.
+/// `Send + Sync`; concurrent sessions are fully independent (R07).
+pub struct Session {
+    pub(crate) op_tx: Mutex<Option<mpsc::SyncSender<Op>>>,
+    pub(crate) ctl_tx: Mutex<Option<mpsc::SyncSender<CtlOp>>>,
+    pub(crate) shared: Arc<Shared>,
+    pub(crate) worker: Mutex<Option<std::thread::JoinHandle<()>>>,
+    pub(crate) reader: Mutex<Option<std::thread::JoinHandle<()>>>,
+    pub(crate) writer: Mutex<Option<std::thread::JoinHandle<()>>>,
+    pub(crate) closed: AtomicBool,
+    pub(crate) pid: Option<u32>,
+}
+
+// No unsafe impls: every field is Send + Sync by construction, while the
+// `Term` itself never leaves the worker thread.
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("pid", &self.pid)
+            .field("revision", &self.revision())
+            .field("closed", &self.closed.load(Ordering::SeqCst))
+            .field("exited", &self.poll_exit().is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+// The handle must stay shareable without any unsafe impl (R07).
+const _: fn() = || {
+    fn share<T: Send + Sync>() {}
+    share::<Session>();
+    share::<CancelToken>();
+};
+
+impl Session {
+    /// Direct child PID, when the platform reports one.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.pid
+    }
+
+    /// Latest published revision (a short critical section; never blocks on
+    /// the worker).
+    #[must_use]
+    pub fn revision(&self) -> u64 {
+        self.shared.revision()
+    }
+
+    /// Cheap metadata of the latest published observation (F12): revision
+    /// plus grid geometry under one short lock — no worker round trip, no
+    /// screen clone. `None` only before revision 0 is published, which a
+    /// spawned session never observes (spawn blocks for it).
+    #[must_use]
+    pub fn meta(&self) -> Option<SessionMeta> {
+        self.shared.meta()
+    }
+
+    /// Non-blocking exit poll. `Some` once the worker reaped the child.
+    #[must_use]
+    pub fn poll_exit(&self) -> Option<ExitStatus> {
+        self.shared.exit()
+    }
+
+    /// First PTY read error observed by the reader thread, if any (LIFE-3).
+    /// Reported distinctly from EOF: a post-exit EIO is routine evidence,
+    /// never a teardown failure, and never changes the exit status.
+    #[must_use]
+    pub fn read_error(&self) -> Option<String> {
+        self.shared.read_error()
+    }
+
+    // -- observation ------------------------------------------------------
+
+    /// Fresh atomic capture at the worker's current revision (R06).
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the session is closed or the worker stalls.
+    pub fn observe_now(&self) -> Result<Observation, TuiError> {
+        let (tx, rx) = mpsc::channel();
+        self.send(Op::Observe { reply: tx })?;
+        rx.recv_timeout(Duration::from_secs(10))
+            .map_err(|_| TuiError::Timeout("observe_now: worker unresponsive".to_string()))?
+    }
+
+    /// Fresh grid snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TuiError` if the session is closed or the worker stalls.
+    pub fn snapshot(&self) -> Result<Screen, TuiError> {
+        Ok(self.observe_now()?.screen)
+    }
+
+    /// Wait until `predicate` holds, the deadline passes, or `cancel` fires.
+    /// Timeout/cancel yield evidence; they never report success.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
+    pub fn wait_predicate<F>(
+        &self,
+        predicate: F,
+        deadline: Instant,
+        cancel: &CancelToken,
+    ) -> Result<Observation, WaitError>
+    where
+        F: Fn(&Observation) -> bool,
+    {
+        self.wait_loop(deadline, cancel, |latest| {
+            latest.filter(|o| predicate(o)).cloned()
+        })
+    }
+
+    /// Wait until no new revision arrives for `quiet` (default
+    /// [`DEFAULT_STABLE_QUIET`]): output settled, not business completion.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
+    pub fn wait_stable(
+        &self,
+        deadline: Instant,
+        cancel: &CancelToken,
+    ) -> Result<Observation, WaitError> {
+        self.wait_stable_quiet(deadline, DEFAULT_STABLE_QUIET, cancel)
+    }
+
+    /// [`Session::wait_stable`] with an explicit quiet period.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
+    pub fn wait_stable_quiet(
+        &self,
+        deadline: Instant,
+        quiet: Duration,
+        cancel: &CancelToken,
+    ) -> Result<Observation, WaitError> {
+        let start = Instant::now();
+        // Seed from the latest revision; a settled session returns quickly.
+        let mut seen = self.latest_or_closed()?.revision;
+        let mut quiet_since = Instant::now();
+        loop {
+            if cancel.is_cancelled() {
+                return Err(WaitError::Cancelled {
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            if Instant::now() >= deadline {
+                return Err(WaitError::Timeout {
+                    waited: start.elapsed(),
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            if let Some(obs) = self.shared.wait_for_newer_than(seen, deadline, cancel) {
+                seen = obs.revision;
+                quiet_since = Instant::now();
+            } else {
+                if cancel.is_cancelled() {
+                    return Err(WaitError::Cancelled {
+                        evidence: Box::new(self.latest_or_closed()?),
+                    });
+                }
+                if Instant::now() >= deadline {
+                    return Err(WaitError::Timeout {
+                        waited: start.elapsed(),
+                        evidence: Box::new(self.latest_or_closed()?),
+                    });
+                }
+                // No newer revision within the slice: check quiet.
+                if quiet_since.elapsed() >= quiet {
+                    return self.latest_or_closed();
+                }
+            }
+        }
+    }
+
+    /// Wait for the next synchronized frame (DEC 2026). The backend does
+    /// not track synchronized output, so this always fails closed with
+    /// [`WaitError::Unsupported`] plus an evidence snapshot (R10).
+    ///
+    /// # Errors
+    ///
+    /// Always fails: `Unsupported`, or `Cancelled`/`Closed` if raced.
+    pub fn wait_frame(
+        &self,
+        _deadline: Instant,
+        cancel: &CancelToken,
+    ) -> Result<Observation, WaitError> {
+        let evidence = Box::new(self.latest_or_closed()?);
+        if cancel.is_cancelled() {
+            return Err(WaitError::Cancelled { evidence });
+        }
+        Err(WaitError::Unsupported {
+            capability: "synchronized-output (DEC 2026)",
+            evidence,
+        })
+    }
+
+    /// Wait until the direct child exits and is reaped. The returned
+    /// observation is the published exit revision itself — never a later
+    /// manual observation (LIFE-8).
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
+    pub fn wait_exit(
+        &self,
+        deadline: Instant,
+        cancel: &CancelToken,
+    ) -> Result<ExitWait, WaitError> {
+        let start = Instant::now();
+        loop {
+            if cancel.is_cancelled() {
+                return Err(WaitError::Cancelled {
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            if let Some(status) = self.shared.exit() {
+                // Exit status and exit observation publish together; fall
+                // back to latest only if the store disagrees (unreachable).
+                let observation = self
+                    .shared
+                    .exit_observation()
+                    .map_or_else(|| self.latest_or_closed(), Ok)?;
+                return Ok(ExitWait {
+                    status,
+                    observation,
+                });
+            }
+            if Instant::now() >= deadline {
+                return Err(WaitError::Timeout {
+                    waited: start.elapsed(),
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            self.shared.wait_changed(deadline, cancel);
+        }
+    }
+
+    /// [`Session::wait_exit`] as an assertion entry point; the returned
+    /// [`ExitWait`] offers `.success()` / `.code(n)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WaitError` on timeout, cancel, or a closed session.
+    pub fn expect_exit(
+        &self,
+        deadline: Instant,
+        cancel: &CancelToken,
+    ) -> Result<ExitWait, WaitError> {
+        self.wait_exit(deadline, cancel)
+    }
+
+    // -- internals ---------------------------------------------------------
+
+    pub(crate) fn send(&self, op: Op) -> Result<(), TuiError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(TuiError::Closed("session is closed".to_string()));
+        }
+        // Clone under the lock, send outside it: the op channel is bounded
+        // (F12 backpressure), so a send may wait for the worker to drain,
+        // and that wait must never hold the sender lock.
+        let tx = self
+            .op_tx
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        match tx {
+            Some(tx) => send_bounded(&tx, op, OP_SEND_TIMEOUT),
+            None => Err(TuiError::Closed("session is closed".to_string())),
+        }
+    }
+
+    pub(crate) fn send_input(&self, input: Input) -> Result<(), TuiError> {
+        let (tx, rx) = mpsc::channel();
+        self.send(Op::Input { input, reply: tx })?;
+        recv_reply(&rx, "input")
+    }
+
+    pub(crate) fn await_initial(&self) -> Result<(), TuiError> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let cancel = CancelToken::new();
+        loop {
+            if self.shared.latest().is_some() {
+                return Ok(());
+            }
+            if self.shared.is_closed() {
+                return Err(TuiError::Spawn(
+                    "worker exited before publishing revision 0".to_string(),
+                ));
+            }
+            if Instant::now() >= deadline {
+                return Err(TuiError::Spawn(
+                    "worker did not publish revision 0 in time".to_string(),
+                ));
+            }
+            self.shared.wait_changed(deadline, &cancel);
+        }
+    }
+
+    pub(crate) fn latest_or_closed(&self) -> Result<Observation, WaitError> {
+        match self.shared.latest() {
+            Some(o) => Ok(o),
+            None if self.shared.is_closed() => Err(WaitError::Closed { evidence: None }),
+            None => Err(WaitError::Closed { evidence: None }),
+        }
+    }
+
+    pub(crate) fn wait_loop<F>(
+        &self,
+        deadline: Instant,
+        cancel: &CancelToken,
+        mut done: F,
+    ) -> Result<Observation, WaitError>
+    where
+        F: FnMut(Option<&Observation>) -> Option<Observation>,
+    {
+        let start = Instant::now();
+        loop {
+            if cancel.is_cancelled() {
+                return Err(WaitError::Cancelled {
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            let latest = self.shared.latest();
+            if let Some(obs) = done(latest.as_ref()) {
+                return Ok(obs);
+            }
+            if Instant::now() >= deadline {
+                return Err(WaitError::Timeout {
+                    waited: start.elapsed(),
+                    evidence: Box::new(self.latest_or_closed()?),
+                });
+            }
+            self.shared.wait_changed(deadline, cancel);
+        }
+    }
+}
+
+/// Send one message on a bounded channel, waiting at most `bound` for
+/// the worker to drain (`SyncSender::send_timeout` is still unstable, so
+/// this spins on the stable `try_send`). A full queue past the bound means
+/// the worker is genuinely stuck — draining a flood is fast — so the send
+/// fails instead of blocking forever. Serves both the op queue (`Op`) and
+/// the priority control channel (`CtlOp`).
+pub(crate) fn send_bounded<T>(
+    tx: &mpsc::SyncSender<T>,
+    op: T,
+    bound: Duration,
+) -> Result<(), TuiError> {
+    let deadline = Instant::now() + bound;
+    let mut op = op;
+    loop {
+        match tx.try_send(op) {
+            Ok(()) => return Ok(()),
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                return Err(TuiError::Closed("worker is gone".to_string()));
+            }
+            Err(mpsc::TrySendError::Full(returned)) => {
+                op = returned;
+                if Instant::now() >= deadline {
+                    return Err(TuiError::Timeout(
+                        "worker overloaded: queue stayed full past the send bound".to_string(),
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+}

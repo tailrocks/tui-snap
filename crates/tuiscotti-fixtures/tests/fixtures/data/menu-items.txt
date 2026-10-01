@@ -1,0 +1,7 @@
+# menu-items.txt: deterministic labels the menu demo model mirrors.
+# Format: <name>;<toggled 0/1>;<disabled 0/1>. Comments (#) and blank lines ignored.
+autosave;0;0
+line_numbers;0;0
+word_wrap;0;0
+日本語モード;0;0
+legacy_mode;0;1

@@ -1,0 +1,319 @@
+{
+  "tools": [
+    {
+      "description": "Spawn a child in a PTY session (needs `pty` feature).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "cols": {
+            "type": "integer"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "argv"
+        ],
+        "type": "object"
+      },
+      "name": "spawn"
+    },
+    {
+      "description": "Send exactly one of text|chord|bytes_b64 to a PTY session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_b64": {
+            "type": "string"
+          },
+          "chord": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "name": "stdin"
+    },
+    {
+      "description": "Current observation (revision + screen) of a PTY session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "name": "observe"
+    },
+    {
+      "description": "Current screen text projection of a PTY session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "name": "snapshot"
+    },
+    {
+      "description": "Screen + canonical string + PNG of a PTY session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "name": "screenshot"
+    },
+    {
+      "description": "Wait for text|stable|exit on a PTY session (fails on timeout).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "text",
+              "stable",
+              "exit"
+            ],
+            "type": "string"
+          },
+          "needle": {
+            "type": "string"
+          },
+          "quiet_ms": {
+            "type": "integer"
+          },
+          "session": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "name": "wait"
+    },
+    {
+      "description": "Wait for natural exit, reap, drop the PTY session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session"
+        ],
+        "type": "object"
+      },
+      "name": "exit"
+    },
+    {
+      "description": "Run a shared-engine check (text-contains|text-equals).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "actual": {
+            "type": "string"
+          },
+          "check": {
+            "enum": [
+              "text-contains",
+              "text-equals"
+            ],
+            "type": "string"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "needle": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "check"
+        ],
+        "type": "object"
+      },
+      "name": "assert"
+    },
+    {
+      "description": "Render a frame JSON to png|ansi|txt|svg|html.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "enum": [
+              "png",
+              "ansi",
+              "txt",
+              "svg",
+              "html"
+            ],
+            "type": "string"
+          },
+          "frame_json": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "frame_json",
+          "format"
+        ],
+        "type": "object"
+      },
+      "name": "render"
+    },
+    {
+      "description": "Compare two base64 PNGs; report equality + score.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_png_b64": {
+            "type": "string"
+          },
+          "expected_png_b64": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_png_b64",
+          "actual_png_b64"
+        ],
+        "type": "object"
+      },
+      "name": "diff"
+    },
+    {
+      "description": "Start a named (piped, detached) session; force replaces a live one.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "argv"
+        ],
+        "type": "object"
+      },
+      "name": "session-start"
+    },
+    {
+      "description": "Stop a named session; returns last-known info.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "session-stop"
+    },
+    {
+      "description": "List named sessions with liveness.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "session-list"
+    },
+    {
+      "description": "Protocol + tuiscotti versions.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "version"
+    },
+    {
+      "description": "What this build can do (pty/render/record/platform).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "capabilities"
+    }
+  ]
+}

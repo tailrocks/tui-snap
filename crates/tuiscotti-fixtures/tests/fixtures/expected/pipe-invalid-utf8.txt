@@ -1,0 +1,4 @@
+pipe-ok line
+�� bad-bytes
+日 valid-cjk
+�lone-continuation

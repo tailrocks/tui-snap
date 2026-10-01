@@ -1,0 +1,11 @@
+{
+  "title": "Settings",
+  "selected": 1,
+  "rows": [
+    { "key": "theme", "value": "dark", "enabled": true },
+    { "key": "autosave", "value": "on", "enabled": true },
+    { "key": "tab_width", "value": "4", "enabled": false },
+    { "key": "word_wrap", "value": "off", "enabled": true }
+  ],
+  "hint": "up/down move · enter toggle · q quit"
+}

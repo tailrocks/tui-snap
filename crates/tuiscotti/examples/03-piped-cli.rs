@@ -1,0 +1,44 @@
+//! 03: piped CLI — Command error cases are data, not panics.
+//!
+//! Run: `cargo run --example 03-piped-cli`
+//!
+//! Spawn failure and nonzero exit are distinct `Termination` variants with the
+//! raw stdout/stderr bytes preserved separately.
+
+use tuiscotti::command::{Command, Termination};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Missing binary: SpawnError carries the OS detail, no exception thrown.
+    let missing = Command::new("/nonexistent-tuiscotti-binary-xyz").run();
+    assert_eq!(missing.status, Termination::SpawnError);
+    assert!(!missing.success());
+    assert!(
+        missing
+            .error
+            .as_ref()
+            .map(|e| e.detail().len())
+            .unwrap_or_default()
+            > 5
+    );
+
+    // Failing child: exit code + split streams, byte-exact.
+    let failed = Command::new("/bin/sh")
+        .args([
+            "-c",
+            "printf 'out-line\\n'; printf 'err-line\\n' >&2; exit 3",
+        ])
+        .run();
+    assert_eq!(failed.status, Termination::Exit(3));
+    assert_eq!(failed.code(), Some(3));
+    assert_eq!(failed.stdout_lossy(), "out-line\n");
+    assert_eq!(failed.stderr_lossy(), "err-line\n");
+    assert!(!failed.truncated);
+
+    println!(
+        "EXAMPLE-03-OK spawn_error={:?} exit={} stdout={:?}",
+        missing.status,
+        failed.code().ok_or("exit code missing")?,
+        failed.stdout_lossy().trim(),
+    );
+    Ok(())
+}

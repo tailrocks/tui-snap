@@ -1,0 +1,167 @@
+# Tuiscotti .alint.yml (G7 appendix rules, verbatim; plus `version: 1`, which alint
+# requires: "Only `version: 1` is strictly required" —
+# https://alint.org/docs/concepts/start-here/the-config-model/).
+# Target: <repo-root>/.alint.yml
+#
+# Adapted to the new brand and ALL workspace crates, including facade, CLI, and xtask.
+# Validate against the selected alint release and run negative fixtures for every rule.
+version: 1
+rules:
+  # NOTE (structural fix, proven in VALIDATION.md probe `alint-missing-file`):
+  # alint 0.15.2 `file_exists` treats a `paths` array as ANY-of (one missing
+  # entry still passes), so the appendix's single 9-path `required-files` rule
+  # cannot enforce "all present". One rule per file below, same 9 paths, same
+  # severity, plus `root_only: true` so a nested same-name file cannot satisfy
+  # a repo-root requirement. 13 rules total (9 existence + 4 unchanged).
+  - id: required-file-cargo-toml
+    kind: file_exists
+    paths: ["Cargo.toml"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: Cargo.toml"
+
+  - id: required-file-cargo-lock
+    kind: file_exists
+    paths: ["Cargo.lock"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: Cargo.lock"
+
+  - id: required-file-clippy-toml
+    kind: file_exists
+    paths: ["clippy.toml"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: clippy.toml"
+
+  - id: required-file-deny-toml
+    kind: file_exists
+    paths: ["deny.toml"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: deny.toml"
+
+  - id: required-file-rustfmt-toml
+    kind: file_exists
+    paths: ["rustfmt.toml"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: rustfmt.toml"
+
+  - id: required-file-codeowners
+    kind: file_exists
+    paths: ["CODEOWNERS"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: CODEOWNERS"
+
+  - id: required-file-alint-yml
+    kind: file_exists
+    paths: [".alint.yml"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: .alint.yml"
+
+  - id: required-file-nextest-toml
+    kind: file_exists
+    paths: [".config/nextest.toml"]
+    level: error
+    message: "Repo-shape file is missing: .config/nextest.toml"
+
+  - id: required-file-agents-md
+    kind: file_exists
+    paths: ["AGENTS.md"]
+    root_only: true
+    level: error
+    message: "Repo-shape file is missing: AGENTS.md"
+
+  - id: crates-only
+    kind: file_absent
+    paths:
+      include: ["**/*.rs"]
+      exclude: ["crates/**"]
+    level: error
+    message: "First-party Rust sources MUST live under crates/"
+
+  - id: rust-max-lines
+    kind: file_max_lines
+    paths:
+      include: ["crates/**/*.rs"]
+      exclude:
+        - "**/fixtures/**"
+        - "**/testdata/**"
+    max_lines: 400
+    level: error
+    message: "Rust source exceeds 400 physical lines"
+
+  - id: lib-main-max-lines
+    kind: file_max_lines
+    paths:
+      include:
+        - "crates/**/src/lib.rs"
+        - "crates/**/src/main.rs"
+    max_lines: 150
+    level: error
+    message: "src/lib.rs and src/main.rs MUST stay under 150 physical lines"
+
+  # G7 inheritance gate (goal probe: "missing lint inheritance" must fail).
+  # The appendix .alint.yml carries no inheritance rule, so these four
+  # toml_path_equals rules enforce it: every member manifest inherits
+  # edition/rust-version/license/lints from the workspace. Zero JSONPath
+  # matches and unparseable TOML both count as violations (no silent skip).
+  - id: member-inherit-edition
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.package.edition.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit edition.workspace = true"
+
+  - id: member-inherit-rust-version
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$['package']['rust-version']['workspace']"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit rust-version.workspace = true"
+
+  - id: member-inherit-license
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.package.license.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit license.workspace = true"
+
+  - id: member-inherit-lints
+    kind: toml_path_equals
+    paths: ["crates/*/Cargo.toml"]
+    path: "$.lints.workspace"
+    equals: true
+    level: error
+    message: "Member Cargo.toml MUST inherit lints.workspace = true"
+
+  - id: no-python-javascript-typescript
+    kind: file_absent
+    paths:
+      include:
+        - "**/*.py"
+        - "**/*.pyi"
+        - "**/*.pyc"
+        - "**/*.ipynb"
+        - "**/*.js"
+        - "**/*.mjs"
+        - "**/*.cjs"
+        - "**/*.jsx"
+        - "**/*.ts"
+        - "**/*.tsx"
+        - "**/package.json"
+        - "**/package-lock.json"
+        - "**/pnpm-lock.yaml"
+        - "**/yarn.lock"
+        - "**/bun.lock"
+        - "**/bun.lockb"
+        - "**/pyproject.toml"
+        - "**/uv.lock"
+    level: error
+    message: "First-party executable code and clients are Rust-only"

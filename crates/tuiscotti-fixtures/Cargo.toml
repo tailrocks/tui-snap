@@ -1,0 +1,40 @@
+[package]
+name = "tuiscotti-fixtures"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = ["pty"]
+pty = ["tuiscotti/pty"]
+
+[[bin]]
+name = "menu_fixture"
+path = "tests/fixtures/apps/menu.rs"
+
+[[bin]]
+name = "streams_fixture"
+path = "tests/fixtures/apps/streams.rs"
+
+[[bin]]
+name = "protocol_fixture"
+path = "tests/fixtures/apps/protocol.rs"
+
+[dependencies]
+anyhow.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+
+[dev-dependencies]
+tuiscotti = { version = "0.2.0", path = "../tuiscotti" }
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+image.workspace = true
+insta.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

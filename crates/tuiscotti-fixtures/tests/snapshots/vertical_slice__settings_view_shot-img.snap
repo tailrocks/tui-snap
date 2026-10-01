@@ -1,0 +1,7 @@
+---
+source: crates/tuiscotti-fixtures/tests/vertical_slice.rs
+description: "tuiscotti generation f9dd6751b33c5930b86bf0e761194a3fa8064e1f1f77ad0242e8dc49c35d81c3 render tuiscotti-default/rv1/straight-rgba at crates/tuiscotti-fixtures/tests/vertical_slice.rs:213"
+expression: screenshot png
+extension: png
+snapshot_kind: binary
+---

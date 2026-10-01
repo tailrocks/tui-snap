@@ -1,0 +1,12 @@
+# streams-log.txt: deterministic log lines the streams demo model mirrors.
+# Format: <LEVEL>:<text>. Comments (#) and blank lines ignored.
+TRACE:trace: plain default color
+INFO:info: indexed palette line
+WARN:warn: direct RGB line
+ERROR:error: bold reversed alert
+INFO:wide: 日本語 한국어 中文
+INFO:icons: → ✓ ✗ ★ ⠋
+TRACE:combining: é ä õ
+WARN:spaced: padded   cells   here
+INFO:box: ╔═╗║╚═╝ ┌─┐│└─┘
+TRACE:tail: end of deterministic log

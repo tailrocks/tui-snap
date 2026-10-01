@@ -1,0 +1,34 @@
+[package]
+name = "tuiscotti"
+version = "0.2.0"
+description = "Rust TUI visual-regression toolkit (facade)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["pty"]
+pty = ["tuiscotti-runtime/pty"]
+# Forwards the runtime's test-only overrides (F12). Test builds only.
+test-overrides = ["tuiscotti-runtime/test-overrides"]
+
+[dependencies]
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+# default-features = false: the facade `pty` feature (default on) re-adds the
+# terminal runtime explicitly, so `--no-default-features` builds pure-view use
+# without PTY dependencies.
+tuiscotti-runtime = { version = "0.2.0", path = "../tuiscotti-runtime", default-features = false }
+tuiscotti-insta = { version = "0.2.0", path = "../tuiscotti-insta" }
+
+[dev-dependencies]
+base64.workspace = true
+image.workspace = true
+insta.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

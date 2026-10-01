@@ -1,0 +1,12 @@
+┌Log───────────────────────────────────────────────────────┐
+│Streams trace=3 info=4 warn=2 error=1                     │
+└──────────────────────────────────────────────────────────┘
+┌Lines─────────────────────────────────────────────────────┐
+│wide: 日本語 한국어 中文                                  │
+│icons: → ✓ ✗ ★ ⠋                                          │
+│combining: é ä õ                                          │
+│spaced: padded   cells   here                             │
+│box: ╔═╗║╚═╝ ┌─┐│└─┘                                      │
+│tail: end of deterministic log                            │
+└──────────────────────────────────────────────────────────┘
+scroll=0 follow=true selected=Some(3) (End follows, q quits)

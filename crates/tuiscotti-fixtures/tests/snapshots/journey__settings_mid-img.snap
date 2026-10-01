@@ -1,0 +1,7 @@
+---
+source: crates/tuiscotti-fixtures/tests/journey.rs
+description: "tuiscotti generation 6d6617da99df7a48ef79b417ef4602eb1bf9f478b2d66fb82a24a488a03340e5 render tuiscotti-default/rv1/straight-rgba at crates/tuiscotti-fixtures/tests/journey.rs:132"
+expression: screenshot png
+extension: png
+snapshot_kind: binary
+---

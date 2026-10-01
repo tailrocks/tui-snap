@@ -1,0 +1,5 @@
+# protocol-pastes.txt: paste payloads for the protocol PTY journey.
+# One payload per line; decoded literally (no escapes).
+hello-paste
+pasted CJK: 日本語
+bracketed; payload, with "quotes" and <angles>

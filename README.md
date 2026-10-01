@@ -1,7 +1,8 @@
-# tuisnap — Rust TUI visual-regression toolkit
+# tuiscotti — Rust TUI visual-regression toolkit
 
-Two capture paths share one canonical frame; both produce full approved
-frames, readable PNGs, and portable HTML expected/actual/diff reports.
+Two capture paths share one canonical frame (`tuiscotti::Frame`,
+schema v3). Both produce approved frames, readable PNGs, and
+portable HTML expected/actual/diff reports.
 
 ```text
 Fixture model + view state + viewport + theme
@@ -10,216 +11,174 @@ Fixture model + view state + viewport + theme
 Real executable ──▶ PTY + terminal-state engine ──▶ frame   (keyboard/mouse/resize)
 ```
 
-A changed snapshot requires explicit review (`tuisnap accept`). Equality only
-validates the fixtures covered — never every app state.
+A changed snapshot requires explicit review (`Store::accept` /
+`GroupedStore::accept_all`, or `cargo insta review` for the macro
+gates). There is deliberately **no** `BLESS=1` / auto-accept: CI must
+never approve snapshots by itself. Equality only validates the
+fixtures covered — never every app state.
 
-## Quick start: pure view tests
+Names: facade `tuiscotti`, binary `tuiscotti` (from
+`tuiscotti-cli`), config `tuiscotti.toml`.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Workflow 1: pure view + `assert_screenshot!`
+
+Render the ACTUAL production view from fixture data, gate it with
+the compound macro (canonical text + generation-tagged PNG as one
+sample). Approvals are explicit: seed the reviewed sample first, as
+below — a first run with no approval fails closed.
 
 ```rust
-use tuisnap::{Profile, Provenance, VENDORED_FACES};
-use tuisnap::snapshot::Store;
+use ratatui::widgets::Paragraph;
+use tuiscotti::assert::{Policy, generation_id, png_tag_generation, render_sample};
+use tuiscotti::ratatui::{EdgePolicy, render_screen};
 
 #[test]
-fn home_screen() {
-    let store = Store::new(std::path::Path::new("tests/visual"));
-    let profile = Profile::default_profile();
-    // Render the ACTUAL production view from fixture data:
-    let frame = tuisnap::ratatui::draw_frame(120, 40, prov(), |f| {
-        myapp::render_home(f, &fixture_model())
-    });
-    // Actual artifacts are written BEFORE the assertion, so a failure still
-    // leaves reviewable evidence (actual/*.frame.json + *.png + report.html).
-    let outcome = store.check("home", &frame, &profile, &VENDORED_FACES, 1.0).unwrap();
-    outcome.ensure_matched().unwrap();
+fn styled_shot() {
+    let screen = render_screen(
+        24,
+        4,
+        |f| f.render_widget(Paragraph::new("styled shot"), f.area()),
+        EdgePolicy::default(),
+    )
+    .unwrap()
+    .into_screen();
+    let tmp = tempfile::tempdir().unwrap();
+    let snaps = tmp.path().join("snaps");
+    std::fs::create_dir(&snaps).unwrap();
+    let policy = Policy::EvolvingIn {
+        snapshots: snaps.clone(),
+        evidence: tmp.path().join("evidence"),
+    };
+    // Review-then-accept, made explicit: seed the approved sample first.
+    let sample = render_sample(&screen).unwrap();
+    let generation = generation_id(&sample.canonical);
+    std::fs::write(
+        snaps.join("styled-shot.snap"),
+        format!(
+            "---\nsource: readme\ndescription: tuiscotti generation {generation}\n\
+             expression: canonical\n---\n{}",
+            sample.canonical
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        snaps.join("styled-shot-img.snap"),
+        format!(
+            "---\nsource: readme\ndescription: tuiscotti generation {generation}\n\
+             expression: png_bytes\nextension: png\nsnapshot_kind: binary\n---\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        snaps.join("styled-shot-img.snap.png"),
+        png_tag_generation(&sample.png, &generation),
+    )
+    .unwrap();
+    tuiscotti::assert_screenshot!("styled-shot", &screen, &policy);
 }
 ```
 
-Bulk suites reuse one cached renderer per thread and can rebuild the HTML
-report without the CLI:
+Runnable end to end: `cargo run -p tuiscotti --example 02-styled-shot`
+(exit 0, prints `EXAMPLE-02-OK`). Pure view tests build without the
+PTY engine: `cargo test -p tuiscotti --no-default-features`.
+
+## Workflow 2: live spawn + locators + snapshot (feature `pty`, on by default)
 
 ```rust
-let mut renderer = profile.renderer(&VENDORED_FACES)?;      // fonts parsed once
-let outcome = store.check_with(&mut renderer, "home", &frame, 1.0)?;
-let report = store.report_with(&mut renderer, 1.0, "my suite")?; // re-verify + report.html
+use std::time::{Duration, Instant};
+use tuiscotti::tui::{CancelToken, Tui};
+
+#[test]
+fn live_menu() {
+    let mut s = Tui::new([
+        "/bin/sh",
+        "-c",
+        "printf 'menu: alpha\\nmenu: beta\\n'; sleep 30",
+    ])
+    .size(40, 8)
+    .spawn()
+    .unwrap();
+    let cancel = CancelToken::new();
+    s.wait_predicate(
+        |o| {
+            tuiscotti::proto::screen_text(&o.screen).contains("menu: beta")
+        },
+        Instant::now() + Duration::from_secs(5),
+        &cancel,
+    )
+    .unwrap();
+    let span = s.get_by_text("menu: beta").expect_visible().unwrap();
+    assert_eq!(span.text, "menu: beta");
+    let screen = s.snapshot().unwrap();
+    assert!(
+        tuiscotti::observe::screen_text(&screen).contains("menu: alpha")
+    );
+    s.close().unwrap();
+}
 ```
 
-First run fails with `missing-approval` (fail-closed). Inspect
-`actual/*.png` + `report.html`, then accept explicitly:
+Timeouts fail WITH the last screen, never a bare deadline error.
+Mouse input without app-enabled reporting fails closed
+(`ModeNotEnabled`), never silently drops.
 
-```text
-cargo run -q -- accept --store tests/visual --name home   # one snapshot
-cargo run -q -- accept --store tests/visual --all         # everything reviewed
+Runnable end to end: `cargo run -p tuiscotti --example 04-interactive-tui`
+(exit 0, prints `EXAMPLE-04-OK`).
+
+## Workflow 3: CLI capture + frozen review
+
+```sh
+tuiscotti capture --out /tmp/shots/demo -- echo hello
+# captured Exit(0) -> /tmp/shots/demo
+tuiscotti inspect --dir /tmp/shots/demo
+# artifacts in /tmp/shots/demo (3 files, offline view): manifest + stdout/stderr
+tuiscotti render --input crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.frame.json --format png --out /tmp/shots/shot
+# wrote /tmp/shots/shot.png
+tuiscotti diff --expected crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.png --actual /tmp/shots/shot.png
+# pixels_equal=true dims_equal=true score=1 (exit 0: offline re-render is byte-identical)
+tuiscotti render --input crates/tuiscotti-fixtures/tests/visual/approved/dialog-dark-80x24.frame.json --format ansi --format txt --format png --format html --out /tmp/frozen/shot
+tuiscotti import --dir /tmp/frozen
+# scenarios: 1 (shot); read-only — frozen trees never accept
+# (also reports "unsupported: 1" for shot.png.fidelity.json: extras are listed, never fatal)
+echo '{"type":"capabilities"}' | tuiscotti machine
+# {"ok":true,"result":{"type":"capabilities","capabilities":{"protocol":"2.0.0",…}}}
 ```
 
-There is deliberately **no** `BLESS=1` / auto-accept: CI must never approve
-snapshots by itself (see `docs/CI.md`).
+Run the binary via `cargo run -q -p tuiscotti-cli -- <args>` (or
+`cargo build -p tuiscotti-cli`, then `./target/debug/tuiscotti`).
+Frozen roots are read-only by construction (`frozen_accept` always
+errors); the Rust side is `cargo run -p tuiscotti --example
+06-artifacts-review` (exit 0, prints `EXAMPLE-06-OK`).
 
-## Interactive tests (feature `pty`, on by default)
-
-```rust
-let opts = tuisnap::pty::PtyOptions::default()
-    .without_env("NO_COLOR")                    // strip inherited vars from the child
-    .with_env("HOLLA_NO_HISTORY", "1");         // set app-specific ones
-let mut s = tuisnap::pty::Session::spawn(&["./my-tui".into()], &opts)?;
-s.wait_for_text("Ready")?;                 // timeout fails WITH the screen
-s.wait_until(|sc| sc.cursor() == (0, 4, true))?;  // any predicate on the live screen
-s.send_key("ctrl-up")?;                    // ctrl/alt/shift + special keys, too
-s.scroll(10, 5, tuisnap::pty::Scroll::Down)?;     // wheel + non-left clicks: click_with
-let frame = s.wait_stable(Duration::from_millis(300))?;  // style-aware settle
-```
-
-Pure view tests build without the PTY engine: `cargo test --no-default-features`.
-
-## CLI
-
-```text
-tuisnap render --input shot.frame.json --format png --format svg --out shot
-tuisnap check  --store tests/visual --name home --input actual.frame.json
-tuisnap accept --store tests/visual --name home        # or --all
-tuisnap report --store tests/visual                    # re-verify + rewrite report.html
-tuisnap run --cols 120 --rows 40 --send enter --wait-for Ready \
-  --store shots --name home -- ./my-tui                # capture + gate
-```
-
-`render` also accepts `--font-file` (hash recorded); all gates accept it too
-(the fallback chain below still applies on top of an override).
-Offline `frame.json` re-renders byte-identical PNGs (proven by tests).
-
-Git/path library dependencies include the pinned PTY engine (termpane v0.1.0
-via termlens) and need no Cargo patches. Use `tuisnap::termlens` when
-constructing engine types for `frame_from_screen`. See `docs/MIGRATION.md`
-for schema 3, the vt100 → termpane engine swap, and fixture migration.
-
-MSRV: 1.97 (termpane floor). Schema v3 unchanged: blink is frozen-visible
-with slow/rapid combined, hidden is conceal, overline/underline-styles stay
-dropped.
-
-Consumer and migration gates:
-
-```text
-cargo run --locked --manifest-path tests/fixtures/consumer/Cargo.toml
-python3 tools/test_migration.py
-```
-
-## Layout of a store
-
-```text
-<store>/approved/<name>.frame.json   # the only committed artifact (compact JSON)
-<store>/actual/<name>.frame.json     # local evidence (gitignored)
-<store>/actual/<name>.png            # + <name>.png.fidelity.json (missing/fallback glyphs)
-<store>/diff/<name>.png              # red-overlay diff, on mismatch
-<store>/report.html                  # portable: embedded PNGs + frame JSON
-```
-
-Approved PNGs regenerate deterministically and are not committed.
-
-## Grouped multi-artifact store
-
-`tuisnap::grouped::GroupedStore` is an alternative store for suites that
-want nested scenario names and committed, human-reviewable artifacts. A
-scenario `<group>/<sub_group>/<name>` commits EXACTLY four files under the
-approved root — no `.frame.json`, no sidecars:
-
-```text
-snapshots/showcase/pages/overview_120x40_truecolor.ansi   # normalized SGR dump (cell-exact gate)
-snapshots/showcase/pages/overview_120x40_truecolor.txt    # plain black-and-white text
-snapshots/showcase/pages/overview_120x40_truecolor.png    # colored image (pixel gate)
-snapshots/showcase/pages/overview_120x40_truecolor.html   # standalone colored HTML render
-```
-
-```rust
-let store = tuisnap::grouped::GroupedStore::new(std::path::Path::new("tests/snapshots"));
-let mut renderer = profile.renderer(&VENDORED_FACES)?;
-let outcome = store.check_with(&mut renderer, "pages/overview", &frame, 1.0)?;
-outcome.ensure_matched()?;
-store.report_with(&mut renderer, 1.0, "my suite")?;   // HTML report, outside approved/
-```
-
-Actuals (`snapshots.actual/`), diff PNGs (`snapshots.diff/`) and the report
-(`snapshots.actual/report.html` by default) live OUTSIDE the approved tree
-— override with `with_actual_root` / `with_diff_root` / `with_report_path`
-(e.g. under `target/`). Gates: `.ansi`/`.txt`/`.html` byte-compares (the
-ansi dump is the cell-exact gate; html catches renderer changes) plus the
-same decoded-pixel PNG gate as the classic store. Missing approvals fail
-closed; names with absolute paths, `..`, empty segments or backslashes are
-rejected. Bless recursively from the CLI:
-
-```text
-tuisnap accept --grouped --store snapshots --all
-tuisnap report --grouped --store snapshots --report-path target/report.html
-```
-
-The classic `Store` above is fully unaffected; both share statuses, the
-report machinery and the renderer. See `docs/USAGE.md` for gate semantics
-in detail.
-
-
-## Fidelity contract
-
-- Layout from frame widths (CJK keeps 2 cells even as tofu); real glyphs via
-  `fontdue` from a pinned vendored font — never placeholder blocks. Glyphs
-  rasterize at the final scale (`font_px × scale`), HiDPI-crisp with no
-  post upscale.
-- Profile pins font bytes (SHA-256), 10×21 cells at 16px (JetBrains Mono
-  metrics), palette, scale ×2, cursor policy. `verify_geometry` fails loudly
-  on drift.
-- Bold / italic / bold-italic render with the REAL faces of the vendored
-  JetBrainsMono Nerd Font Mono family; the faux double-strike / shear survive
-  only when a face fails to load or `--font-file` overrides with one face.
-- Covered by the primary family: box drawing, blocks, Braille, Nerd icons,
-  combining marks. What it lacks is served per-glyph by the vendored fallback
-  chain (below). Codepoints NO face covers (color emoji, Hangul, JIS level-2
-  kanji) render as deterministic tofu with correct advance AND are reported
-  in `<name>.png.fidelity.json` next to every PNG output (documented in
-  `assets/fonts/FONTS.md`).
-
-## Font fallback
-
-The PNG path never uses system fonts (determinism across machines). Per
-glyph the renderer tries: styled primary face → regular primary face →
-pinned fallback faces in order → tofu + fidelity record. The default chain
-([`VENDORED_FALLBACK_FACES`]) is three vendored Noto subsets, sha256-pinned
-and verified at load (SIL OFL 1.1, `assets/fonts/LICENSE-Noto.txt`):
-
-| Face | Covers | Size |
-|---|---|---|
-| Noto Sans Symbols 2 subset | ◐ ★ ☕ ❤ ✔ ⬤ — Geometric Shapes, Misc Symbols, Dingbats, Misc Symbols & Arrows | 87 KB |
-| Noto Sans Symbols subset | ⚷ ⚙ ♻ — misc symbols unique to v1 (U+2600–U+26FF) | 27 KB |
-| Noto Sans CJK JP subset | 東京 — kana, JIS X 0208 level-1 kanji, fullwidth forms | 679 KB |
-
-`Renderer::new` loads this chain; primary-covered frames render
-BYTE-IDENTICAL with or without it (pinned by
-`tests/render.rs::primary_covered_fixtures_match_pre_fallback_render_bytes`).
-Fallback glyphs draw centered and clipped inside the primary cell box; the
-cell grid never moves. Cells served by a fallback face are listed in the
-sidecar's `fallback_glyphs` (omitted when empty, so existing sidecars stay
-byte-stable). Register your own faces (or render primary-only) with
-[`Renderer::with_fallbacks`]; each face carries its own sha256 pin:
-
-```rust
-let chain = [tuisnap::FallbackFace {
-    bytes: MY_FONT,
-    sha256: MY_FONT_SHA256,   // verified at load; mismatch refuses to render
-    desc: "my extra symbols",
-}];
-let mut r = tuisnap::render::Renderer::with_fallbacks(&profile, &faces, &chain)?;
-```
-
-The subsets are reproducible and extensible (JIS level-2, Hangul, more
-blocks): `python3 tools/subset_fonts.py` re-downloads commit-pinned upstreams,
-re-subsets, and prints the new hashes to pin — see `assets/fonts/FONTS.md`.
-- Terminal-like, measured fidelity — NOT pixel-identity with any terminal
-  emulator; cell data stays authoritative for styles.
+Exit statuses: 0 ok; 2 CLI usage error; 3 op error; 4 verification
+disagreement. `capture`/`record` preserve the child's exit code.
+Full grammar: [docs/CLI.md](docs/CLI.md) (transcribed from `--help`).
 
 ## Docs
 
-- `docs/USAGE.md` — patterns, CLI reference, approval workflow
-- `docs/MIGRATION.md` — v0.1 → v0.2 (breaking), BLESS removal
-- `docs/CI.md` — CI wiring that cannot auto-accept
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — crates, dependency graph, data flow
+- [docs/API.md](docs/API.md) — public Rust API design and status labels
+- [docs/CLI.md](docs/CLI.md) — CLI reference (from the implemented Clap grammar)
+- [crates/tuiscotti-cli/SYNTAX.md](crates/tuiscotti-cli/SYNTAX.md) — Rust + CLI syntax matrix (every surface, one table)
+- [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) — snapshot/approval semantics
+- [docs/TESTING.md](docs/TESTING.md) — tests, fixtures, examples lane, CI wiring
+- [docs/COMPARISON.md](docs/COMPARISON.md) — vs tui-test, terminal-control, termlens
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — measured build/test/render numbers
+- [docs/MIGRATION.md](docs/MIGRATION.md) — schema and layout migrations
+- [docs/LIMITATIONS.md](docs/LIMITATIONS.md) — platform matrix, known gaps
+- [docs/DECISIONS.md](docs/DECISIONS.md) — durable decisions and rationale
+- [CONTRIBUTING.md](CONTRIBUTING.md) — tooling, gates, workflow
 - `assets/fonts/FONTS.md` — font licensing and coverage
-- `RESEARCH.md` — architecture analysis this implements
-- `ALTERNATIVES-REVIEW.md`, `SIMILAR-PROJECTS.md` — competitor landscape
+
+## Status labels
+
+Docs use five truthful labels, reconciled from code + tests at the
+current head: **implemented** (shipped, tested), **partial** (works
+with documented gaps), **unsupported** (explicitly rejected, fails
+closed), **future** (planned, not present), and per-platform
+**tested / compiles-only / not run**. No legacy shims: removed APIs
+stay removed.
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+MIT OR Apache-2.0 — see [LICENSE](LICENSE).

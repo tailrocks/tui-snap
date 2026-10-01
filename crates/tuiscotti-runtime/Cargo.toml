@@ -1,0 +1,34 @@
+[package]
+name = "tuiscotti-runtime"
+version = "0.2.0"
+description = "Execution backends and artifact stores for TUI visual-regression testing"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["pty"]
+# PTY runtime (`tui` module). Pure view tests build and run with
+# `--no-default-features`.
+pty = ["dep:termpane"]
+# Test-only process-global overrides (F12): `set_runtime_dir_override`
+# exists only with this feature (or `cfg(test)`). Production builds must
+# never enable it; production code resolves the runtime dir from the
+# process environment (`TUISCOTTI_RUNTIME_DIR` / `XDG_RUNTIME_DIR`).
+test-overrides = []
+
+[dependencies]
+tuiscotti-core = { version = "0.2.0", path = "../tuiscotti-core" }
+tuiscotti-render = { version = "0.2.0", path = "../tuiscotti-render" }
+base64.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# termpane process/pty are Unix-only; non-Unix builds keep the stubs (E2).
+termpane = { workspace = true, optional = true }
+
+[lints]
+workspace = true
