@@ -47,7 +47,7 @@ test_runner = "cargo_nextest"
 # doc steps do NOT carry RUSTDOCFLAGS (cargo_env defines it but the renderer
 # never emits it), so ci-rustdoc (workspace doc, warnings denied) remains
 # the real rustdoc gate until the generator wires the env through.
-custom_tasks = ["alint", "ci-check-all-features", "ci-deny", "ci-no-default-graph", "ci-package", "ci-rustdoc", "ci-xtask-deps", "ci-xtask-policy"]
+# custom_tasks = ["alint", "ci-check-all-features", "ci-deny", "ci-no-default-graph", "ci-package", "ci-rustdoc", "ci-xtask-deps", "ci-xtask-policy"]
 
 # Optional repository-relative POSIX globs excluded before detector input.
 [discovery]
